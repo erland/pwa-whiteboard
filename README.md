@@ -1,43 +1,194 @@
-# PWA Whiteboard – Step 1 (Bootstrap & PWA Skeleton)
+# PWA Whiteboard – Version 1 (Local Single–User)
 
-This is the initial project skeleton for the **PWA Whiteboard** application.
+This repository contains a **Progressive Web App (PWA) whiteboard** built with React + TypeScript.
+Version 1 is focused on a **single local user** with a clean architecture that can be extended to
+multi–user collaboration in later versions.
 
-## What is included
+---
 
-- React + TypeScript app bootstrapped with Vite
-- Basic routing with a board list page and a board editor placeholder
-- PWA setup:
-  - `manifest.webmanifest`
-  - Simple service worker (`public/sw.js`) for basic offline caching
-- Jest + Testing Library configured for unit and component tests
-- GitHub Pages–ready configuration (`vite.config.ts` with `base: '/pwa-whiteboard/'` and a `deploy` script)
+## Features in Version 1
 
-## Scripts
+- **Board list page**
+  - Lists locally stored boards (via `localStorage`)
+  - Create new boards with generated IDs
+  - Navigate into an individual board editor
 
-- `npm install` – install dependencies
-- `npm run dev` – start development server
-- `npm run build` – build for production
-- `npm run preview` – preview the production build
-- `npm test` – run Jest test suite
-- `npm run deploy` – deploy the `dist` folder to GitHub Pages using the `gh-pages` branch
+- **Board editor**
+  - Freehand drawing
+  - Basic shapes: rectangles & ellipses
+  - Text labels
+  - Sticky notes
+  - Selection tool for:
+    - Selecting shapes/notes
+    - Dragging them around
+    - Deleting selection
+    - Applying stroke (color + width) to selection
+  - Basic object model and event history per board
 
-## GitHub Pages
+- **View navigation & history**
+  - Pan the board by dragging empty space (with Select tool)
+  - Zoom in/out via slider
+  - Reset view button
+  - Undo/redo stack based on event history (create/update/delete/selection)
 
-1. Create a repository named `pwa-whiteboard` on GitHub.
-2. Push this project to that repository.
-3. Run:
+- **Export / Import**
+  - Export board as **JSON** (`*.whiteboard.json`) including:
+    - metadata
+    - objects
+    - viewport
+  - Import board from JSON into the current board
+  - Export the current **view as PNG**
 
-   ```bash
-   npm install
-   npm run build
-   npm run deploy
-   ```
+- **PWA features**
+  - Web app manifest
+  - Basic service worker for offline caching
+  - Installable on supporting browsers/devices
 
-4. In the GitHub repository settings, configure GitHub Pages to serve from the `gh-pages` branch.
-5. The app will be available at:
+- **Architecture**
+  - Domain model for whiteboard objects & events
+  - `WhiteboardStore` React context for state + history
+  - `localStorageBoardsRepository` for a simple local index of boards
+  - Designed to be extended with a real backend and multi–user sync later
 
-   ```text
-   https://<your-username>.github.io/pwa-whiteboard/
-   ```
+---
 
-Replace the placeholder icons in `public/icons/` with real PNG files before going live.
+## Getting started (local development)
+
+Requirements:
+
+- Node.js 18+ (20 recommended)
+- npm
+
+Install dependencies and start the dev server:
+
+```bash
+npm install
+npm run dev
+```
+
+By default Vite runs on `http://localhost:5173/`. The app assumes it will eventually
+be served under `/pwa-whiteboard/` in production (see `vite.config.ts`).
+
+---
+
+## Testing
+
+This project uses **Jest** + **React Testing Library** for unit and UI tests.
+
+Run the full test suite:
+
+```bash
+npm test
+```
+
+The most relevant tests are:
+
+- `src/App.test.tsx` – verifies that the main app loads and the board list heading appears.
+- `src/domain/__tests__/whiteboardState.test.ts` – unit tests for the domain state and reducer logic.
+- `src/infrastructure/__tests__/localStorageBoardsRepository.test.ts` – tests the localStorage-backed boards index.
+
+When adding new features, prefer to:
+
+1. Add/extend **domain tests** in `src/domain/__tests__/` for pure logic.
+2. Add **component tests** in `src/` or `src/pages/__tests__/` for UI behavior that is important to keep stable.
+
+---
+
+## Build
+
+To produce a production build:
+
+```bash
+npm run build
+```
+
+The compiled static site is output to the `dist/` directory. The `vite.config.ts` file
+sets `base: '/pwa-whiteboard/'` so that the app works when served at:
+
+```text
+https://<your-username>.github.io/pwa-whiteboard/
+```
+
+---
+
+## Deployment to GitHub Pages
+
+You have two options for deploying to GitHub Pages:
+
+### 1. Local manual deploy (using `gh-pages`)
+
+A local deployment script is configured in `package.json`:
+
+```jsonc
+{
+  "scripts": {
+    "deploy": "gh-pages -d dist"
+  }
+}
+```
+
+You can manually deploy from your machine like this:
+
+```bash
+npm install
+npm run build
+npm run deploy
+```
+
+Then in your GitHub repository settings, configure **GitHub Pages** to serve from
+the `gh-pages` branch. The app will be available at:
+
+```text
+https://<your-username>.github.io/pwa-whiteboard/
+```
+
+This is useful if you prefer to keep CI simple and only publish when you decide to.
+
+### 2. GitHub Actions workflow (manual or on release)
+
+A workflow is provided in:
+
+```text
+.github/workflows/deploy.yml
+```
+
+It is configured to:
+
+- Run on **manual trigger** (`workflow_dispatch`), and
+- Automatically run when a **GitHub Release is published** (`release: published`).
+- Install dependencies, run tests, build the app.
+- Upload the `dist/` folder as a Pages artifact.
+- Deploy that artifact to GitHub Pages using `actions/deploy-pages`.
+
+To use this approach:
+
+1. In your GitHub repository, go to **Settings → Pages**.
+2. Under **Build and deployment**, choose **GitHub Actions** as the source.
+3. Push this workflow file to the default branch.
+4. Trigger the workflow:
+   - Manually from the **Actions** tab (select “Deploy PWA Whiteboard to GitHub Pages” → “Run workflow”), or
+   - Create/publish a GitHub Release.
+
+GitHub Pages will then serve the site at:
+
+```text
+https://<your-username>.github.io/pwa-whiteboard/
+```
+
+(For a user named `erland`, that would be `https://erland.github.io/pwa-whiteboard/`.)
+
+---
+
+## Future directions
+
+Version 1 is intentionally single–user and local only, but the structure is designed
+so that later versions can add:
+
+- Real backend (e.g. REST/WebSocket) for multi–user boards.
+- Authentication & authorization.
+- Real–time collaboration and presence.
+- Server–side persistence of boards and events.
+- Per–board sharing/permissions.
+
+Those later steps can reuse the event model and most of the UI, while replacing
+the local repository with one that talks to a backend and syncs events between clients.

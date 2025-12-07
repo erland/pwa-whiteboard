@@ -48,6 +48,7 @@ export interface WhiteboardObject {
   // Text content (for text / sticky notes)
   text?: string;
   fontSize?: number;
+  textColor?: string;
 
   // Freehand path (board coordinates)
   points?: Point[];

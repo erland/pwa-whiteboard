@@ -232,7 +232,8 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           ctx.font = `${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
           ctx.textBaseline = 'top';
           ctx.textAlign = 'left';
-          ctx.fillStyle = '#020617';
+          const textColor = obj.textColor ?? strokeColor ?? '#e5e7eb';
+          ctx.fillStyle = textColor;
           const padding = 8;
           const textPos = worldToCanvas(x + padding, y + padding);
           ctx.fillText(obj.text, textPos.x, textPos.y, drawW - padding * 2);
@@ -247,7 +248,8 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
         ctx.font = `${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
         ctx.textBaseline = 'top';
         ctx.textAlign = 'left';
-        ctx.fillStyle = stroke;
+        const textColor = obj.textColor ?? strokeColor ?? '#e5e7eb';
+        ctx.fillStyle = textColor;
         ctx.fillText(obj.text, pos.x, pos.y);
         return;
       }
@@ -379,6 +381,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
         width: 200,
         height: 40,
         strokeColor,
+        textColor: strokeColor,
         strokeWidth,
         fontSize: 18,
         text: 'Text'
@@ -401,6 +404,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
         strokeWidth,
         fillColor: '#facc15',
         fontSize: 16,
+        textColor: strokeColor,
         text: 'Sticky note'
       };
       onCreateObject(obj);

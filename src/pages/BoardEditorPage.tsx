@@ -47,12 +47,91 @@ export const BoardEditorPage: React.FC = () => {
     dispatchEvent(event);
   };
 
+  const handleSelectionChange = (selectedIds: string[]) => {
+    if (!state) return;
+    const now = new Date().toISOString();
+    const event: BoardEvent = {
+      id: generateEventId(),
+      boardId: state.meta.id,
+      type: 'selectionChanged',
+      timestamp: now,
+      payload: { selectedIds }
+    } as BoardEvent;
+    dispatchEvent(event);
+  };
+
+  const handleUpdateObject = (objectId: string, patch: Partial<WhiteboardObject>) => {
+    if (!state) return;
+    const now = new Date().toISOString();
+    const event: BoardEvent = {
+      id: generateEventId(),
+      boardId: state.meta.id,
+      type: 'objectUpdated',
+      timestamp: now,
+      payload: { objectId, patch }
+    } as BoardEvent;
+    dispatchEvent(event);
+  };
+
+  const handleDeleteSelection = () => {
+    if (!state || state.selectedObjectIds.length === 0) return;
+    const count = state.selectedObjectIds.length;
+    const confirmed = window.confirm(
+      `Delete ${count} selected object${count === 1 ? '' : 's'}? This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    const now = new Date().toISOString();
+    state.selectedObjectIds.forEach((objectId) => {
+      const event: BoardEvent = {
+        id: generateEventId(),
+        boardId: state.meta.id,
+        type: 'objectDeleted',
+        timestamp: now,
+        payload: { objectId }
+      } as BoardEvent;
+      dispatchEvent(event);
+    });
+
+    const clearEvent: BoardEvent = {
+      id: generateEventId(),
+      boardId: state.meta.id,
+      type: 'selectionChanged',
+      timestamp: new Date().toISOString(),
+      payload: { selectedIds: [] }
+    } as BoardEvent;
+    dispatchEvent(clearEvent);
+  };
+
+  const handleApplyStrokeToSelection = () => {
+    if (!state || state.selectedObjectIds.length === 0) return;
+    const now = new Date().toISOString();
+    state.selectedObjectIds.forEach((objectId) => {
+      const event: BoardEvent = {
+        id: generateEventId(),
+        boardId: state.meta.id,
+        type: 'objectUpdated',
+        timestamp: now,
+        payload: {
+          objectId,
+          patch: {
+            strokeColor,
+            strokeWidth
+          }
+        }
+      } as BoardEvent;
+      dispatchEvent(event);
+    });
+  };
+
   const handleStrokeWidthChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     const value = Number(e.target.value);
     if (!Number.isNaN(value) && value > 0 && value <= 20) {
       setStrokeWidth(value);
     }
   };
+
+  const selectedCount = state?.selectedObjectIds.length ?? 0;
 
   return (
     <section className="page page-board-editor">
@@ -95,7 +174,7 @@ export const BoardEditorPage: React.FC = () => {
                 className={`tool-button ${activeTool === 'select' ? 'active' : ''}`}
                 onClick={() => setActiveTool('select')}
               >
-                🖱 Select (preview)
+                🖱 Select
               </button>
             </div>
           </div>
@@ -141,6 +220,36 @@ export const BoardEditorPage: React.FC = () => {
               </div>
             </div>
           )}
+
+          {state && (
+            <div className="panel">
+              <h2 className="panel-title">Selection</h2>
+              <div className="panel-row">
+                <span className="field-label-inline">Selected</span>
+                <span className="field-value">{selectedCount}</span>
+              </div>
+              <div className="panel-row">
+                <button
+                  type="button"
+                  className="tool-button"
+                  disabled={selectedCount === 0}
+                  onClick={handleApplyStrokeToSelection}
+                >
+                  Apply stroke to selection
+                </button>
+              </div>
+              <div className="panel-row">
+                <button
+                  type="button"
+                  className="tool-button"
+                  disabled={selectedCount === 0}
+                  onClick={handleDeleteSelection}
+                >
+                  Delete selection
+                </button>
+              </div>
+            </div>
+          )}
         </aside>
 
         <div className="board-editor-main">
@@ -149,11 +258,14 @@ export const BoardEditorPage: React.FC = () => {
               width={CANVAS_WIDTH}
               height={CANVAS_HEIGHT}
               objects={state.objects}
+              selectedObjectIds={state.selectedObjectIds}
               viewport={state.viewport}
               activeTool={activeTool}
               strokeColor={strokeColor}
               strokeWidth={strokeWidth}
               onCreateObject={handleCreateObject}
+              onSelectionChange={handleSelectionChange}
+              onUpdateObject={handleUpdateObject}
             />
           ) : (
             <div className="board-editor-placeholder">

@@ -7,11 +7,14 @@ interface WhiteboardCanvasProps {
   width: number;
   height: number;
   objects: WhiteboardObject[];
+  selectedObjectIds: ObjectId[];
   viewport: Viewport;
   activeTool: DrawingTool;
   strokeColor: string;
   strokeWidth: number;
   onCreateObject: (object: WhiteboardObject) => void;
+  onSelectionChange: (selectedIds: ObjectId[]) => void;
+  onUpdateObject: (objectId: ObjectId, patch: Partial<WhiteboardObject>) => void;
 }
 
 type DraftShape =
@@ -33,18 +36,77 @@ type DraftShape =
       currentY: number;
     };
 
+type DragState = {
+  kind: 'move';
+  objectId: ObjectId;
+  lastX: number;
+  lastY: number;
+};
+
+function isSelected(id: ObjectId, selectedIds: ObjectId[]): boolean {
+  return selectedIds.includes(id);
+}
+
+function getBoundingBox(obj: WhiteboardObject): { x: number; y: number; width: number; height: number } | null {
+  if (typeof obj.x !== 'number' || typeof obj.y !== 'number') {
+    return null;
+  }
+  const width = obj.width ?? 0;
+  const height = obj.height ?? 0;
+  // If width/height are zero but we have points (freehand), compute from points as a fallback.
+  if (width === 0 && height === 0 && obj.points && obj.points.length > 1) {
+    const xs = obj.points.map((p) => p.x);
+    const ys = obj.points.map((p) => p.y);
+    const minX = Math.min(...xs);
+    const minY = Math.min(...ys);
+    const maxX = Math.max(...xs);
+    const maxY = Math.max(...ys);
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY
+    };
+  }
+  return {
+    x: obj.x,
+    y: obj.y,
+    width,
+    height
+  };
+}
+
+function hitTest(objects: WhiteboardObject[], x: number, y: number): WhiteboardObject | null {
+  // Iterate from topmost (end of array) to bottom
+  for (let i = objects.length - 1; i >= 0; i--) {
+    const obj = objects[i];
+    const box = getBoundingBox(obj);
+    if (!box) continue;
+    const x2 = box.x + box.width;
+    const y2 = box.y + box.height;
+    if (x >= box.x && x <= x2 && y >= box.y && y <= y2) {
+      return obj;
+    }
+  }
+  return null;
+}
+
 export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   width,
   height,
   objects,
+  selectedObjectIds,
   viewport,
   activeTool,
   strokeColor,
   strokeWidth,
-  onCreateObject
+  onCreateObject,
+  onSelectionChange,
+  onUpdateObject
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [draft, setDraft] = useState<DraftShape | null>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
 
   // Simple id generator used only within canvas for new objects
   const generateObjectId = () =>
@@ -60,6 +122,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     const dpr = window.devicePixelRatio || 1;
     canvas.width = width * dpr;
     canvas.height = height * dpr;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.scale(dpr, dpr);
 
     // Clear
@@ -70,7 +133,6 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     ctx.fillRect(0, 0, width, height);
 
     // Helper to go from board coords to canvas coords.
-    // For now we use a 1:1 mapping and ignore viewport offsets/zoom.
     const worldToCanvas = (x: number, y: number) => {
       const zoom = viewport.zoom ?? 1;
       const offsetX = viewport.offsetX ?? 0;
@@ -99,10 +161,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           ctx.lineTo(p.x, p.y);
         }
         ctx.stroke();
-        return;
-      }
-
-      if (obj.type === 'rectangle') {
+      } else if (obj.type === 'rectangle') {
         const { x, y, width: w = 0, height: h = 0 } = obj;
         const topLeft = worldToCanvas(x, y);
         const bottomRight = worldToCanvas(x + w, y + h);
@@ -114,10 +173,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           ctx.fillRect(topLeft.x, topLeft.y, drawW, drawH);
         }
         ctx.strokeRect(topLeft.x, topLeft.y, drawW, drawH);
-        return;
-      }
-
-      if (obj.type === 'ellipse') {
+      } else if (obj.type === 'ellipse') {
         const { x, y, width: w = 0, height: h = 0 } = obj;
         const center = worldToCanvas(x + w / 2, y + h / 2);
         const radiusX = (w / 2) * (viewport.zoom ?? 1);
@@ -125,11 +181,31 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
         ctx.beginPath();
         ctx.ellipse(center.x, center.y, Math.abs(radiusX), Math.abs(radiusY), 0, 0, Math.PI * 2);
         ctx.stroke();
-        return;
       }
     };
 
-    objects.forEach(drawObject);
+    objects.forEach((obj) => {
+      drawObject(obj);
+
+      // Selection overlay
+      if (isSelected(obj.id, selectedObjectIds)) {
+        const box = getBoundingBox(obj);
+        if (box) {
+          const margin = 4;
+          const tl = worldToCanvas(box.x - margin, box.y - margin);
+          const br = worldToCanvas(box.x + box.width + margin, box.y + box.height + margin);
+          const wDraw = br.x - tl.x;
+          const hDraw = br.y - tl.y;
+
+          ctx.save();
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 3]);
+          ctx.strokeRect(tl.x, tl.y, wDraw, hDraw);
+          ctx.restore();
+        }
+      }
+    });
 
     // Draw draft shape on top
     if (draft) {
@@ -178,7 +254,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       }
       ctx.restore();
     }
-  }, [objects, draft, viewport, width, height]);
+  }, [objects, selectedObjectIds, draft, viewport, width, height]);
 
   const getCanvasPos = (evt: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = (evt.target as HTMLCanvasElement).getBoundingClientRect();
@@ -198,6 +274,24 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   const handlePointerDown = (evt: React.PointerEvent<HTMLCanvasElement>) => {
     if (evt.button !== 0) return; // left only
     const pos = getCanvasPos(evt);
+
+    if (activeTool === 'select') {
+      const hit = hitTest(objects, pos.x, pos.y);
+      if (hit) {
+        onSelectionChange([hit.id]);
+        setDrag({
+          kind: 'move',
+          objectId: hit.id,
+          lastX: pos.x,
+          lastY: pos.y
+        });
+      } else {
+        onSelectionChange([]);
+        setDrag(null);
+      }
+      (evt.target as HTMLCanvasElement).setPointerCapture(evt.pointerId);
+      return;
+    }
 
     if (activeTool === 'freehand') {
       setDraft({
@@ -225,28 +319,49 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       (evt.target as HTMLCanvasElement).setPointerCapture(evt.pointerId);
       return;
     }
-
-    // 'select' – not implemented in Step 4
   };
 
   const handlePointerMove = (evt: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!draft) return;
     const pos = getCanvasPos(evt);
 
-    setDraft((current) => {
-      if (!current) return current;
-      if (current.kind === 'freehand') {
+    if (draft) {
+      setDraft((current) => {
+        if (!current) return current;
+        if (current.kind === 'freehand') {
+          return {
+            ...current,
+            points: [...current.points, pos]
+          };
+        }
         return {
           ...current,
-          points: [...current.points, pos]
+          currentX: pos.x,
+          currentY: pos.y
         };
+      });
+      return;
+    }
+
+    if (drag && activeTool === 'select') {
+      const dx = pos.x - drag.lastX;
+      const dy = pos.y - drag.lastY;
+      if (dx === 0 && dy === 0) {
+        return;
       }
-      return {
-        ...current,
-        currentX: pos.x,
-        currentY: pos.y
-      };
-    });
+      const obj = objects.find((o) => o.id === drag.objectId);
+      if (!obj) {
+        return;
+      }
+      onUpdateObject(obj.id, {
+        x: obj.x + dx,
+        y: obj.y + dy
+      });
+      setDrag({
+        ...drag,
+        lastX: pos.x,
+        lastY: pos.y
+      });
+    }
   };
 
   const commitDraft = () => {
@@ -305,10 +420,12 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     setDraft(null);
   };
 
-  const handlePointerUp = (evt: React.PointerEvent<HTMLCanvasElement>) => {
+  const finishInteraction = (evt: React.PointerEvent<HTMLCanvasElement>) => {
     if (draft) {
       commitDraft();
     }
+    setDraft(null);
+    setDrag(null);
     try {
       (evt.target as HTMLCanvasElement).releasePointerCapture(evt.pointerId);
     } catch {
@@ -316,15 +433,12 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     }
   };
 
+  const handlePointerUp = (evt: React.PointerEvent<HTMLCanvasElement>) => {
+    finishInteraction(evt);
+  };
+
   const handlePointerLeave = (evt: React.PointerEvent<HTMLCanvasElement>) => {
-    if (draft) {
-      commitDraft();
-    }
-    try {
-      (evt.target as HTMLCanvasElement).releasePointerCapture(evt.pointerId);
-    } catch {
-      // ignore
-    }
+    finishInteraction(evt);
   };
 
   return (

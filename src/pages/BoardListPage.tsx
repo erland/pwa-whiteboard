@@ -12,8 +12,7 @@ export const BoardListPage: React.FC = () => {
       </header>
       <p>This is a placeholder for the board list. In future steps this will show your saved boards.</p>
       <p>
-        For now, you can try the editor placeholder:{' '}
-        <Link to="/board/demo">Open demo board</Link>
+        For now, you can try the editor placeholder: <Link to="/board/demo">Open demo board</Link>
       </p>
     </section>
   );

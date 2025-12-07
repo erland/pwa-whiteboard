@@ -24,13 +24,12 @@ function whiteboardReducer(state: WhiteboardState | null, action: WhiteboardActi
         // No board loaded – ignore for now
         return state;
       }
-      // For Step 2 we only apply events, history handling will come later.
+      // For now we only apply events and push them to pastEvents.
       const nextState = applyEvent(state, action.event);
       return {
         ...nextState,
         history: {
           ...state.history,
-          // history stacks will be managed in a later step
           pastEvents: [...state.history.pastEvents, action.event],
           futureEvents: []
         },

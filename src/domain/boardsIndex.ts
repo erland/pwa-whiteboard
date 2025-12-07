@@ -1,4 +1,4 @@
-import { WhiteboardMeta } from './types';
+import type { WhiteboardMeta, WhiteboardState, WhiteboardId } from './types';
 
 /**
  * Simple index of boards for the board list page.
@@ -7,19 +7,19 @@ export type BoardsIndex = WhiteboardMeta[];
 
 /**
  * Abstraction for listing and managing boards.
- * Implementation will be added in a later step (local storage, etc.).
  */
 export interface BoardsRepository {
   listBoards(): Promise<BoardsIndex>;
   createBoard(name: string): Promise<WhiteboardMeta>;
-  renameBoard(id: string, name: string): Promise<void>;
-  deleteBoard(id: string): Promise<void>;
+  renameBoard(id: WhiteboardId, name: string): Promise<void>;
+  deleteBoard(id: WhiteboardId): Promise<void>;
 }
 
 /**
  * Abstraction for loading/saving the full state of a single board.
+ * Concrete implementation will be added later.
  */
 export interface WhiteboardRepository {
-  loadBoard(id: string): Promise<unknown>;
-  saveBoard(id: string, state: unknown): Promise<void>;
+  loadBoard(id: WhiteboardId): Promise<WhiteboardState | null>;
+  saveBoard(id: WhiteboardId, state: WhiteboardState): Promise<void>;
 }

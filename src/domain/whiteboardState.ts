@@ -47,9 +47,7 @@ export function applyEvent(state: WhiteboardState, event: BoardEvent): Whiteboar
       return {
         ...state,
         objects: state.objects.map((obj) =>
-          obj.id === event.payload.objectId
-            ? { ...obj, ...event.payload.patch }
-            : obj
+          obj.id === event.payload.objectId ? { ...obj, ...event.payload.patch } : obj
         )
       };
 
@@ -57,9 +55,7 @@ export function applyEvent(state: WhiteboardState, event: BoardEvent): Whiteboar
       return {
         ...state,
         objects: state.objects.filter((obj) => obj.id !== event.payload.objectId),
-        selectedObjectIds: state.selectedObjectIds.filter(
-          (id) => id !== event.payload.objectId
-        )
+        selectedObjectIds: state.selectedObjectIds.filter((id) => id !== event.payload.objectId)
       };
 
     case 'selectionChanged':

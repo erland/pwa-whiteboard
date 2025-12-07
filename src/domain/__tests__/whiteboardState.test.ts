@@ -12,7 +12,6 @@ function makeMeta(): WhiteboardMeta {
 }
 
 function makeEvent(base: Partial<BoardEvent>): BoardEvent {
-  // This helper is a bit loose, but good enough for tests.
   return {
     id: 'evt-1',
     boardId: 'test-board',

@@ -5,7 +5,7 @@ import App from './App';
 import { WhiteboardProvider } from './whiteboard/WhiteboardStore';
 
 describe('App', () => {
-  it('renders header and boards link', () => {
+  it('renders header and board list heading', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <WhiteboardProvider>
@@ -14,17 +14,13 @@ describe('App', () => {
       </MemoryRouter>
     );
 
-    // App title in the header
+    // These are static and can be checked synchronously
     expect(screen.getByText(/PWA Whiteboard/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Boards/i })).toBeInTheDocument();
 
-    // The navigation link with label "Boards"
-    expect(
-      screen.getByRole('link', { name: /Boards/i })
-    ).toBeInTheDocument();
-
-    // Optional: assert the page heading to be sure we’re on the board list page
-    expect(
-      screen.getByRole('heading', { name: /Your Boards/i })
-    ).toBeInTheDocument();
+    // This waits for the async effect in BoardListPage to finish and
+    // wraps the state updates in act(), removing the warning.
+    const heading = await screen.findByRole('heading', { name: /Your Boards/i });
+    expect(heading).toBeInTheDocument();
   });
 });

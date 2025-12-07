@@ -132,6 +132,10 @@ export const BoardEditorPage: React.FC = () => {
   };
 
   const selectedCount = state?.selectedObjectIds.length ?? 0;
+  const selectedObject =
+    state && state.selectedObjectIds.length === 1
+      ? state.objects.find((obj) => obj.id === state.selectedObjectIds[0])
+      : undefined;
 
   return (
     <section className="page page-board-editor">
@@ -168,6 +172,20 @@ export const BoardEditorPage: React.FC = () => {
                 onClick={() => setActiveTool('ellipse')}
               >
                 ◯ Ellipse
+              </button>
+              <button
+                type="button"
+                className={`tool-button ${activeTool === 'text' ? 'active' : ''}`}
+                onClick={() => setActiveTool('text')}
+              >
+                🔤 Text
+              </button>
+              <button
+                type="button"
+                className={`tool-button ${activeTool === 'stickyNote' ? 'active' : ''}`}
+                onClick={() => setActiveTool('stickyNote')}
+              >
+                🗒 Sticky note
               </button>
               <button
                 type="button"
@@ -248,6 +266,62 @@ export const BoardEditorPage: React.FC = () => {
                   Delete selection
                 </button>
               </div>
+
+              {selectedObject && (selectedObject.type === 'text' || selectedObject.type === 'stickyNote') && (
+                <>
+                  <div className="panel-row">
+                    <label className="field-label">
+                      Text
+                      <textarea
+                        className="text-input"
+                        rows={3}
+                        value={selectedObject.text ?? ''}
+                        onChange={(e) =>
+                          handleUpdateObject(selectedObject.id, {
+                            text: e.target.value
+                          })
+                        }
+                      />
+                    </label>
+                  </div>
+                  <div className="panel-row">
+                    <label className="field-label">
+                      Font size
+                      <input
+                        type="range"
+                        min={10}
+                        max={40}
+                        value={selectedObject.fontSize ?? 16}
+                        onChange={(e) =>
+                          handleUpdateObject(selectedObject.id, {
+                            fontSize: Number(e.target.value)
+                          })
+                        }
+                      />
+                      <span className="field-suffix">
+                        {(selectedObject.fontSize ?? 16) as number}px
+                      </span>
+                    </label>
+                  </div>
+                  {selectedObject.type === 'stickyNote' && (
+                    <div className="panel-row">
+                      <label className="field-label">
+                        Note color
+                        <input
+                          type="color"
+                          className="color-input"
+                          value={selectedObject.fillColor ?? '#facc15'}
+                          onChange={(e) =>
+                            handleUpdateObject(selectedObject.id, {
+                              fillColor: e.target.value
+                            })
+                          }
+                        />
+                      </label>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
         </aside>

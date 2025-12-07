@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { WhiteboardObject, Viewport, ObjectId, Point } from '../domain/types';
 
-export type DrawingTool = 'select' | 'freehand' | 'rectangle' | 'ellipse';
+export type DrawingTool = 'select' | 'freehand' | 'rectangle' | 'ellipse' | 'text' | 'stickyNote';
 
 interface WhiteboardCanvasProps {
   width: number;
@@ -53,7 +53,7 @@ function getBoundingBox(obj: WhiteboardObject): { x: number; y: number; width: n
   }
   const width = obj.width ?? 0;
   const height = obj.height ?? 0;
-  // If width/height are zero but we have points (freehand), compute from points as a fallback.
+
   if (width === 0 && height === 0 && obj.points && obj.points.length > 1) {
     const xs = obj.points.map((p) => p.x);
     const ys = obj.points.map((p) => p.y);
@@ -68,6 +68,8 @@ function getBoundingBox(obj: WhiteboardObject): { x: number; y: number; width: n
       height: maxY - minY
     };
   }
+
+  // For text/stickyNote we rely on width/height set at creation time.
   return {
     x: obj.x,
     y: obj.y,
@@ -77,7 +79,6 @@ function getBoundingBox(obj: WhiteboardObject): { x: number; y: number; width: n
 }
 
 function hitTest(objects: WhiteboardObject[], x: number, y: number): WhiteboardObject | null {
-  // Iterate from topmost (end of array) to bottom
   for (let i = objects.length - 1; i >= 0; i--) {
     const obj = objects[i];
     const box = getBoundingBox(obj);
@@ -108,11 +109,9 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   const [draft, setDraft] = useState<DraftShape | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
 
-  // Simple id generator used only within canvas for new objects
   const generateObjectId = () =>
     ('o_' + Math.random().toString(16).slice(2) + '_' + Date.now().toString(16)) as ObjectId;
 
-  // Drawing helper
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -125,14 +124,11 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.scale(dpr, dpr);
 
-    // Clear
     ctx.clearRect(0, 0, width, height);
 
-    // Background
     ctx.fillStyle = '#020617';
     ctx.fillRect(0, 0, width, height);
 
-    // Helper to go from board coords to canvas coords.
     const worldToCanvas = (x: number, y: number) => {
       const zoom = viewport.zoom ?? 1;
       const offsetX = viewport.offsetX ?? 0;
@@ -146,8 +142,6 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     const drawObject = (obj: WhiteboardObject) => {
       const stroke = obj.strokeColor ?? '#e5e7eb';
       const widthPx = obj.strokeWidth ?? 2;
-      ctx.strokeStyle = stroke;
-      ctx.lineWidth = widthPx;
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
 
@@ -160,8 +154,13 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           const p = worldToCanvas(pts[i].x, pts[i].y);
           ctx.lineTo(p.x, p.y);
         }
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = widthPx;
         ctx.stroke();
-      } else if (obj.type === 'rectangle') {
+        return;
+      }
+
+      if (obj.type === 'rectangle') {
         const { x, y, width: w = 0, height: h = 0 } = obj;
         const topLeft = worldToCanvas(x, y);
         const bottomRight = worldToCanvas(x + w, y + h);
@@ -172,22 +171,72 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           ctx.fillStyle = obj.fillColor;
           ctx.fillRect(topLeft.x, topLeft.y, drawW, drawH);
         }
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = widthPx;
         ctx.strokeRect(topLeft.x, topLeft.y, drawW, drawH);
-      } else if (obj.type === 'ellipse') {
+        return;
+      }
+
+      if (obj.type === 'ellipse') {
         const { x, y, width: w = 0, height: h = 0 } = obj;
         const center = worldToCanvas(x + w / 2, y + h / 2);
         const radiusX = (w / 2) * (viewport.zoom ?? 1);
         const radiusY = (h / 2) * (viewport.zoom ?? 1);
         ctx.beginPath();
         ctx.ellipse(center.x, center.y, Math.abs(radiusX), Math.abs(radiusY), 0, 0, Math.PI * 2);
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = widthPx;
         ctx.stroke();
+        return;
+      }
+
+      if (obj.type === 'stickyNote') {
+        const { x, y, width: w = 160, height: h = 100 } = obj;
+        const topLeft = worldToCanvas(x, y);
+        const bottomRight = worldToCanvas(x + w, y + h);
+        const drawW = bottomRight.x - topLeft.x;
+        const drawH = bottomRight.y - topLeft.y;
+
+        const fill = obj.fillColor ?? '#facc15';
+        const border = obj.strokeColor ?? '#f59e0b';
+
+        ctx.fillStyle = fill;
+        ctx.strokeStyle = border;
+        ctx.lineWidth = obj.strokeWidth ?? 1.5;
+        ctx.beginPath();
+        ctx.rect(topLeft.x, topLeft.y, drawW, drawH);
+        ctx.fill();
+        ctx.stroke();
+
+        if (obj.text) {
+          const fontSize = obj.fontSize ?? 16;
+          ctx.font = `${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+          ctx.textBaseline = 'top';
+          ctx.textAlign = 'left';
+          ctx.fillStyle = '#020617';
+          const padding = 8;
+          const textPos = worldToCanvas(x + padding, y + padding);
+          ctx.fillText(obj.text, textPos.x, textPos.y, drawW - padding * 2);
+        }
+        return;
+      }
+
+      if (obj.type === 'text') {
+        if (!obj.text) return;
+        const fontSize = obj.fontSize ?? 18;
+        const pos = worldToCanvas(obj.x, obj.y);
+        ctx.font = `${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+        ctx.textBaseline = 'top';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = stroke;
+        ctx.fillText(obj.text, pos.x, pos.y);
+        return;
       }
     };
 
     objects.forEach((obj) => {
       drawObject(obj);
 
-      // Selection overlay
       if (isSelected(obj.id, selectedObjectIds)) {
         const box = getBoundingBox(obj);
         if (box) {
@@ -207,7 +256,6 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       }
     });
 
-    // Draw draft shape on top
     if (draft) {
       ctx.save();
       ctx.globalAlpha = 0.9;
@@ -264,7 +312,6 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     const offsetX = viewport.offsetX ?? 0;
     const offsetY = viewport.offsetY ?? 0;
 
-    // Convert back from screen to board coordinates
     return {
       x: x / zoom - offsetX,
       y: y / zoom - offsetY
@@ -272,7 +319,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   };
 
   const handlePointerDown = (evt: React.PointerEvent<HTMLCanvasElement>) => {
-    if (evt.button !== 0) return; // left only
+    if (evt.button !== 0) return;
     const pos = getCanvasPos(evt);
 
     if (activeTool === 'select') {
@@ -290,6 +337,45 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
         setDrag(null);
       }
       (evt.target as HTMLCanvasElement).setPointerCapture(evt.pointerId);
+      return;
+    }
+
+    if (activeTool === 'text') {
+      const id = generateObjectId();
+      const obj: WhiteboardObject = {
+        id,
+        type: 'text',
+        x: pos.x,
+        y: pos.y,
+        width: 200,
+        height: 40,
+        strokeColor,
+        strokeWidth,
+        fontSize: 18,
+        text: 'Text'
+      };
+      onCreateObject(obj);
+      onSelectionChange([id]);
+      return;
+    }
+
+    if (activeTool === 'stickyNote') {
+      const id = generateObjectId();
+      const obj: WhiteboardObject = {
+        id,
+        type: 'stickyNote',
+        x: pos.x,
+        y: pos.y,
+        width: 200,
+        height: 140,
+        strokeColor,
+        strokeWidth,
+        fillColor: '#facc15',
+        fontSize: 16,
+        text: 'Sticky note'
+      };
+      onCreateObject(obj);
+      onSelectionChange([id]);
       return;
     }
 

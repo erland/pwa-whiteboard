@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useWhiteboard } from '../whiteboard/WhiteboardStore';
-import type { WhiteboardMeta, WhiteboardObject, BoardEvent } from '../domain/types';
+import type { WhiteboardMeta, WhiteboardObject, BoardEvent, Viewport } from '../domain/types';
 import { WhiteboardCanvas, type DrawingTool } from '../whiteboard/WhiteboardCanvas';
 
 const CANVAS_WIDTH = 960;
@@ -13,7 +13,7 @@ function generateEventId(): string {
 
 export const BoardEditorPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { state, resetBoard, dispatchEvent } = useWhiteboard();
+  const { state, resetBoard, dispatchEvent, undo, redo, setViewport } = useWhiteboard();
 
   const [activeTool, setActiveTool] = useState<DrawingTool>('freehand');
   const [strokeColor, setStrokeColor] = useState<string>('#38bdf8');
@@ -131,11 +131,31 @@ export const BoardEditorPage: React.FC = () => {
     }
   };
 
+  const handleZoomChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+    const value = Number(e.target.value);
+    const zoom = value / 100;
+    if (zoom > 0 && zoom <= 4) {
+      setViewport({ zoom });
+    }
+  };
+
+  const handleResetView = () => {
+    setViewport({ offsetX: 0, offsetY: 0, zoom: 1 });
+  };
+
   const selectedCount = state?.selectedObjectIds.length ?? 0;
   const selectedObject =
     state && state.selectedObjectIds.length === 1
       ? state.objects.find((obj) => obj.id === state.selectedObjectIds[0])
       : undefined;
+
+  const canUndo = !!state && state.history.pastEvents.length > 0;
+  const canRedo = !!state && state.history.futureEvents.length > 0;
+  const zoomPercent = Math.round(((state?.viewport.zoom ?? 1) * 100));
+
+  const handleViewportChange = (patch: Partial<Viewport>) => {
+    setViewport(patch);
+  };
 
   return (
     <section className="page page-board-editor">
@@ -149,6 +169,50 @@ export const BoardEditorPage: React.FC = () => {
 
       <div className="board-editor-layout">
         <aside className="board-editor-sidebar">
+          <div className="panel">
+            <h2 className="panel-title">History &amp; View</h2>
+            <div className="panel-row">
+              <button
+                type="button"
+                className="tool-button"
+                disabled={!canUndo}
+                onClick={undo}
+              >
+                ⬅ Undo
+              </button>
+              <button
+                type="button"
+                className="tool-button"
+                disabled={!canRedo}
+                onClick={redo}
+              >
+                Redo ➜
+              </button>
+            </div>
+            <div className="panel-row">
+              <label className="field-label">
+                Zoom
+                <input
+                  type="range"
+                  min={25}
+                  max={200}
+                  value={zoomPercent}
+                  onChange={handleZoomChange}
+                />
+                <span className="field-suffix">{zoomPercent}%</span>
+              </label>
+            </div>
+            <div className="panel-row">
+              <button
+                type="button"
+                className="tool-button"
+                onClick={handleResetView}
+              >
+                Reset view
+              </button>
+            </div>
+          </div>
+
           <div className="panel">
             <h2 className="panel-title">Tools</h2>
             <div className="tool-buttons">
@@ -340,6 +404,7 @@ export const BoardEditorPage: React.FC = () => {
               onCreateObject={handleCreateObject}
               onSelectionChange={handleSelectionChange}
               onUpdateObject={handleUpdateObject}
+              onViewportChange={handleViewportChange}
             />
           ) : (
             <div className="board-editor-placeholder">

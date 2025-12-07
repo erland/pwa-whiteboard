@@ -15,6 +15,7 @@ interface WhiteboardCanvasProps {
   onCreateObject: (object: WhiteboardObject) => void;
   onSelectionChange: (selectedIds: ObjectId[]) => void;
   onUpdateObject: (objectId: ObjectId, patch: Partial<WhiteboardObject>) => void;
+  onViewportChange: (patch: Partial<Viewport>) => void;
 }
 
 type DraftShape =
@@ -36,12 +37,21 @@ type DraftShape =
       currentY: number;
     };
 
-type DragState = {
-  kind: 'move';
-  objectId: ObjectId;
-  lastX: number;
-  lastY: number;
-};
+type DragState =
+  | {
+      kind: 'move';
+      objectId: ObjectId;
+      lastX: number;
+      lastY: number;
+    }
+  | {
+      kind: 'pan';
+      startCanvasX: number;
+      startCanvasY: number;
+      startOffsetX: number;
+      startOffsetY: number;
+      zoomAtStart: number;
+    };
 
 function isSelected(id: ObjectId, selectedIds: ObjectId[]): boolean {
   return selectedIds.includes(id);
@@ -69,7 +79,6 @@ function getBoundingBox(obj: WhiteboardObject): { x: number; y: number; width: n
     };
   }
 
-  // For text/stickyNote we rely on width/height set at creation time.
   return {
     x: obj.x,
     y: obj.y,
@@ -103,7 +112,8 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   strokeWidth,
   onCreateObject,
   onSelectionChange,
-  onUpdateObject
+  onUpdateObject,
+  onViewportChange
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [draft, setDraft] = useState<DraftShape | null>(null);
@@ -321,6 +331,9 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   const handlePointerDown = (evt: React.PointerEvent<HTMLCanvasElement>) => {
     if (evt.button !== 0) return;
     const pos = getCanvasPos(evt);
+    const rect = (evt.target as HTMLCanvasElement).getBoundingClientRect();
+    const canvasX = evt.clientX - rect.left;
+    const canvasY = evt.clientY - rect.top;
 
     if (activeTool === 'select') {
       const hit = hitTest(objects, pos.x, pos.y);
@@ -334,7 +347,14 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
         });
       } else {
         onSelectionChange([]);
-        setDrag(null);
+        setDrag({
+          kind: 'pan',
+          startCanvasX: canvasX,
+          startCanvasY: canvasY,
+          startOffsetX: viewport.offsetX ?? 0,
+          startOffsetY: viewport.offsetY ?? 0,
+          zoomAtStart: viewport.zoom ?? 1
+        });
       }
       (evt.target as HTMLCanvasElement).setPointerCapture(evt.pointerId);
       return;
@@ -409,6 +429,9 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
 
   const handlePointerMove = (evt: React.PointerEvent<HTMLCanvasElement>) => {
     const pos = getCanvasPos(evt);
+    const rect = (evt.target as HTMLCanvasElement).getBoundingClientRect();
+    const canvasX = evt.clientX - rect.left;
+    const canvasY = evt.clientY - rect.top;
 
     if (draft) {
       setDraft((current) => {
@@ -429,24 +452,36 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     }
 
     if (drag && activeTool === 'select') {
-      const dx = pos.x - drag.lastX;
-      const dy = pos.y - drag.lastY;
-      if (dx === 0 && dy === 0) {
-        return;
+      if (drag.kind === 'move') {
+        const dx = pos.x - drag.lastX;
+        const dy = pos.y - drag.lastY;
+        if (dx === 0 && dy === 0) {
+          return;
+        }
+        const obj = objects.find((o) => o.id === drag.objectId);
+        if (!obj) {
+          return;
+        }
+        onUpdateObject(obj.id, {
+          x: obj.x + dx,
+          y: obj.y + dy
+        });
+        setDrag({
+          ...drag,
+          lastX: pos.x,
+          lastY: pos.y
+        });
+      } else if (drag.kind === 'pan') {
+        const dxCanvas = canvasX - drag.startCanvasX;
+        const dyCanvas = canvasY - drag.startCanvasY;
+        const zoom = drag.zoomAtStart || 1;
+        const newOffsetX = drag.startOffsetX + dxCanvas / zoom;
+        const newOffsetY = drag.startOffsetY + dyCanvas / zoom;
+        onViewportChange({
+          offsetX: newOffsetX,
+          offsetY: newOffsetY
+        });
       }
-      const obj = objects.find((o) => o.id === drag.objectId);
-      if (!obj) {
-        return;
-      }
-      onUpdateObject(obj.id, {
-        x: obj.x + dx,
-        y: obj.y + dy
-      });
-      setDrag({
-        ...drag,
-        lastX: pos.x,
-        lastY: pos.y
-      });
     }
   };
 

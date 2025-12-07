@@ -18,6 +18,8 @@ export const BoardEditorPage: React.FC = () => {
   const [activeTool, setActiveTool] = useState<DrawingTool>('freehand');
   const [strokeColor, setStrokeColor] = useState<string>('#38bdf8');
   const [strokeWidth, setStrokeWidth] = useState<number>(3);
+  const [canvasEl, setCanvasEl] = useState<HTMLCanvasElement | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -131,6 +133,12 @@ export const BoardEditorPage: React.FC = () => {
     }
   };
 
+  const handleViewportChange = (patch: Partial<Viewport>) => {
+    setViewport(patch);
+  };
+
+  const zoomPercent = Math.round(((state?.viewport.zoom ?? 1) * 100));
+
   const handleZoomChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     const value = Number(e.target.value);
     const zoom = value / 100;
@@ -143,6 +151,102 @@ export const BoardEditorPage: React.FC = () => {
     setViewport({ offsetX: 0, offsetY: 0, zoom: 1 });
   };
 
+  const handleExportJson = () => {
+    if (!state) return;
+    const exportData = {
+      version: 1,
+      boardId: state.meta.id,
+      meta: state.meta,
+      objects: state.objects,
+      viewport: state.viewport
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: 'application/json'
+    });
+    const url = URL.createObjectURL(blob);
+    const safeName = state.meta.name?.replace(/[^a-z0-9_-]+/gi, '_') || 'whiteboard';
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${safeName}.whiteboard.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportPng = () => {
+    if (!canvasEl || !state) return;
+    try {
+      const dataUrl = canvasEl.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      const safeName = state.meta.name?.replace(/[^a-z0-9_-]+/gi, '_') || 'whiteboard';
+      a.download = `${safeName}.png`;
+      a.click();
+    } catch (err) {
+      console.error('Failed to export PNG', err);
+      window.alert('Could not export image. See console for details.');
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleImportFileChange: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !state) {
+      return;
+    }
+    try {
+      const text = await file.text();
+      const data: any = JSON.parse(text);
+
+      if (!data || typeof data !== 'object') {
+        throw new Error('Invalid JSON');
+      }
+      if (!Array.isArray(data.objects)) {
+        throw new Error('File does not contain a valid objects array');
+      }
+
+      const now = new Date().toISOString();
+      const importedMeta = (data.meta ?? {}) as Partial<WhiteboardMeta>;
+      const newMeta: WhiteboardMeta = {
+        ...state.meta,
+        ...importedMeta,
+        id: state.meta.id,
+        updatedAt: now
+      };
+
+      // Reset board with new meta, then recreate objects via events so history is consistent
+      resetBoard(newMeta);
+
+      const objects = data.objects as WhiteboardObject[];
+      const boardId = newMeta.id;
+
+      for (const obj of objects) {
+        const event: BoardEvent = {
+          id: generateEventId(),
+          boardId,
+          type: 'objectCreated',
+          timestamp: now,
+          payload: { object: obj }
+        } as BoardEvent;
+        dispatchEvent(event);
+      }
+
+      if (data.viewport) {
+        const vp = data.viewport as Viewport;
+        setViewport(vp);
+      }
+
+      window.alert('Board imported successfully.');
+    } catch (err) {
+      console.error('Failed to import board', err);
+      window.alert('Could not import board JSON. Please check the file format.');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
   const selectedCount = state?.selectedObjectIds.length ?? 0;
   const selectedObject =
     state && state.selectedObjectIds.length === 1
@@ -151,11 +255,6 @@ export const BoardEditorPage: React.FC = () => {
 
   const canUndo = !!state && state.history.pastEvents.length > 0;
   const canRedo = !!state && state.history.futureEvents.length > 0;
-  const zoomPercent = Math.round(((state?.viewport.zoom ?? 1) * 100));
-
-  const handleViewportChange = (patch: Partial<Viewport>) => {
-    setViewport(patch);
-  };
 
   return (
     <section className="page page-board-editor">
@@ -210,6 +309,46 @@ export const BoardEditorPage: React.FC = () => {
               >
                 Reset view
               </button>
+            </div>
+          </div>
+
+          <div className="panel">
+            <h2 className="panel-title">Export &amp; Import</h2>
+            <div className="panel-row">
+              <button
+                type="button"
+                className="tool-button"
+                onClick={handleExportJson}
+                disabled={!state}
+              >
+                Export board (JSON)
+              </button>
+            </div>
+            <div className="panel-row">
+              <button
+                type="button"
+                className="tool-button"
+                onClick={handleExportPng}
+                disabled={!state}
+              >
+                Export view (PNG)
+              </button>
+            </div>
+            <div className="panel-row">
+              <button
+                type="button"
+                className="tool-button"
+                onClick={handleImportClick}
+              >
+                Import board (JSON)
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/json"
+                style={{ display: 'none' }}
+                onChange={handleImportFileChange}
+              />
             </div>
           </div>
 
@@ -405,6 +544,7 @@ export const BoardEditorPage: React.FC = () => {
               onSelectionChange={handleSelectionChange}
               onUpdateObject={handleUpdateObject}
               onViewportChange={handleViewportChange}
+              onCanvasReady={setCanvasEl}
             />
           ) : (
             <div className="board-editor-placeholder">

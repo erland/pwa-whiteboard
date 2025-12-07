@@ -16,6 +16,7 @@ interface WhiteboardCanvasProps {
   onSelectionChange: (selectedIds: ObjectId[]) => void;
   onUpdateObject: (objectId: ObjectId, patch: Partial<WhiteboardObject>) => void;
   onViewportChange: (patch: Partial<Viewport>) => void;
+  onCanvasReady?: (canvas: HTMLCanvasElement | null) => void;
 }
 
 type DraftShape =
@@ -113,11 +114,19 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   onCreateObject,
   onSelectionChange,
   onUpdateObject,
-  onViewportChange
+  onViewportChange,
+  onCanvasReady
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [draft, setDraft] = useState<DraftShape | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+
+  // Notify parent about the canvas element so it can be used for image export.
+  useEffect(() => {
+    if (onCanvasReady) {
+      onCanvasReady(canvasRef.current);
+    }
+  }, [onCanvasReady]);
 
   const generateObjectId = () =>
     ('o_' + Math.random().toString(16).slice(2) + '_' + Date.now().toString(16)) as ObjectId;

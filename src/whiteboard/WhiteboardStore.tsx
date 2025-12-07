@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useMemo, useReducer } from 'react';
 import { applyEvent, createEmptyWhiteboardState } from '../domain/whiteboardState';
 import type { BoardEvent, WhiteboardMeta, WhiteboardState, Viewport } from '../domain/types';
@@ -21,18 +22,16 @@ interface WhiteboardContextValue {
 const WhiteboardContext = createContext<WhiteboardContextValue | undefined>(undefined);
 
 /**
- * Rebuilds a WhiteboardState from metadata and a list of past events.
- * History is reset to the provided events as past and empty future.
- * NOTE: This does NOT preserve the viewport – callers that care about the
- * current view should override `viewport` after calling this.
+ * Rebuilds a whiteboard state from metadata and a list of past events.
+ * NOTE: This does NOT preserve the viewport – callers that care about
+ * keeping the current view should override `viewport` in the returned state.
  */
 function rebuildStateFromHistory(meta: WhiteboardMeta, pastEvents: BoardEvent[]): WhiteboardState {
   let state = createEmptyWhiteboardState(meta);
   for (const ev of pastEvents) {
     state = applyEvent(state, ev);
   }
-  const updatedAt =
-    pastEvents.length > 0 ? pastEvents[pastEvents.length - 1].timestamp : meta.updatedAt;
+  const updatedAt = pastEvents.length > 0 ? pastEvents[pastEvents.length - 1].timestamp : meta.updatedAt;
   return {
     ...state,
     meta: {
@@ -46,23 +45,18 @@ function rebuildStateFromHistory(meta: WhiteboardMeta, pastEvents: BoardEvent[])
   };
 }
 
-function whiteboardReducer(
-  state: WhiteboardState | null,
-  action: WhiteboardAction
-): WhiteboardState | null {
+function whiteboardReducer(state: WhiteboardState | null, action: WhiteboardAction): WhiteboardState | null {
   switch (action.type) {
     case 'RESET_BOARD':
       return action.state;
 
     case 'APPLY_EVENT': {
       if (!state) return state;
-
       const past = state.history.pastEvents;
       const newPast = [...past, action.event];
 
-      // Apply the event on top of the current state so we preserve the viewport
+      // Apply the new event on top of the current state (so viewport is preserved)
       const applied = applyEvent(state, action.event);
-
       return {
         ...applied,
         history: {
@@ -74,18 +68,16 @@ function whiteboardReducer(
 
     case 'UNDO': {
       if (!state) return state;
-
       const past = state.history.pastEvents;
       if (past.length === 0) return state;
-
       const future = state.history.futureEvents;
       const last = past[past.length - 1];
       const newPast = past.slice(0, past.length - 1);
 
-      // Rebuild from shortened history, but keep the current viewport
+      // Rebuild objects/selection/history from the shortened past,
+      // but preserve the current viewport so the view doesn't jump.
       const currentViewport = state.viewport;
       const rebuilt = rebuildStateFromHistory(state.meta, newPast);
-
       return {
         ...rebuilt,
         viewport: currentViewport,
@@ -98,10 +90,8 @@ function whiteboardReducer(
 
     case 'REDO': {
       if (!state) return state;
-
       const future = state.history.futureEvents;
       if (future.length === 0) return state;
-
       const past = state.history.pastEvents;
       const last = future[future.length - 1];
       const newFuture = future.slice(0, future.length - 1);
@@ -109,7 +99,6 @@ function whiteboardReducer(
 
       const currentViewport = state.viewport;
       const rebuilt = rebuildStateFromHistory(state.meta, newPast);
-
       return {
         ...rebuilt,
         viewport: currentViewport,

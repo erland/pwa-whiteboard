@@ -16,19 +16,27 @@ export type WhiteboardObjectType =
   | 'text'
   | 'stickyNote';
 
+export interface Point {
+  x: number;
+  y: number;
+}
+
 /**
  * Base representation of an object on the board.
- * Specific tools may use fields differently, but this is enough for v1.
+ * For v1:
+ * - freehand: uses `points` (and derives a loose bounding box from x/y/width/height)
+ * - rectangle/ellipse: use x, y, width, height
+ * - text/stickyNote: use x, y and optional width/height + text/fontSize
  */
 export interface WhiteboardObject {
   id: ObjectId;
   type: WhiteboardObjectType;
 
-  // Position
+  // Anchor position in board coordinates
   x: number;
   y: number;
 
-  // Size (for rectangle/ellipse/stickyNote). Freehand may ignore this or use bounds.
+  // Size (for rectangle/ellipse/stickyNote). Freehand uses this as a loose bounding box.
   width?: number;
   height?: number;
 
@@ -40,6 +48,9 @@ export interface WhiteboardObject {
   // Text content (for text / sticky notes)
   text?: string;
   fontSize?: number;
+
+  // Freehand path (board coordinates)
+  points?: Point[];
 }
 
 export interface Viewport {

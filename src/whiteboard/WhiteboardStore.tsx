@@ -35,7 +35,7 @@ function whiteboardReducer(state: WhiteboardState | null, action: WhiteboardActi
         },
         meta: {
           ...state.meta,
-          updatedAt: action.event.timestamp
+          updatedAt: event.timestamp
         }
       };
 

@@ -38,6 +38,36 @@ type DraftShape =
       currentY: number;
     };
 
+// --- New types for resize handles -----------------------------------------
+
+type ResizeHandleId =
+  | 'nw'
+  | 'n'
+  | 'ne'
+  | 'e'
+  | 'se'
+  | 's'
+  | 'sw'
+  | 'w';
+
+type Bounds = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type ResizeDragState = {
+  kind: 'resize';
+  objectId: ObjectId;
+  handle: ResizeHandleId;
+  startX: number; // world coords at pointer-down
+  startY: number;
+  originalBounds: Bounds;
+};
+
+// -------------------------------------------------------------------------
+
 type DragState =
   | {
       kind: 'move';
@@ -52,7 +82,8 @@ type DragState =
       startOffsetX: number;
       startOffsetY: number;
       zoomAtStart: number;
-    };
+    }
+  | ResizeDragState;
 
 function isSelected(id: ObjectId, selectedIds: ObjectId[]): boolean {
   return selectedIds.includes(id);
@@ -87,6 +118,107 @@ function getBoundingBox(obj: WhiteboardObject): { x: number; y: number; width: n
     height
   };
 }
+
+// --- New helpers for handles & resize -------------------------------------
+
+function getHandlePositions(bounds: Bounds): Record<ResizeHandleId, Point> {
+  const { x, y, width, height } = bounds;
+  const cx = x + width / 2;
+  const cy = y + height / 2;
+  const right = x + width;
+  const bottom = y + height;
+
+  return {
+    nw: { x, y },
+    n: { x: cx, y },
+    ne: { x: right, y },
+    e: { x: right, y: cy },
+    se: { x: right, y: bottom },
+    s: { x: cx, y: bottom },
+    sw: { x, y: bottom },
+    w: { x, y: cy }
+  };
+}
+
+function hitTestResizeHandleCanvas(
+  pointerCanvasX: number,
+  pointerCanvasY: number,
+  bounds: Bounds,
+  viewport: Viewport
+): ResizeHandleId | null {
+  const zoom = viewport.zoom ?? 1;
+  const offsetX = viewport.offsetX ?? 0;
+  const offsetY = viewport.offsetY ?? 0;
+  const HANDLE_SIZE = 10; // px
+  const half = HANDLE_SIZE / 2;
+
+  const handles = getHandlePositions(bounds);
+
+  for (const [id, pos] of Object.entries(handles) as [ResizeHandleId, Point][]) {
+    const cx = (pos.x + offsetX) * zoom;
+    const cy = (pos.y + offsetY) * zoom;
+    if (
+      pointerCanvasX >= cx - half &&
+      pointerCanvasX <= cx + half &&
+      pointerCanvasY >= cy - half &&
+      pointerCanvasY <= cy + half
+    ) {
+      return id;
+    }
+  }
+
+  return null;
+}
+
+function resizeBounds(original: Bounds, handle: ResizeHandleId, dx: number, dy: number): Bounds {
+  const MIN_SIZE = 4;
+
+  let { x, y, width, height } = original;
+
+  // Horizontal adjustment
+  switch (handle) {
+    case 'e':
+    case 'ne':
+    case 'se': {
+      width = Math.max(MIN_SIZE, original.width + dx);
+      break;
+    }
+    case 'w':
+    case 'nw':
+    case 'sw': {
+      const newWidth = Math.max(MIN_SIZE, original.width - dx);
+      x = original.x + (original.width - newWidth);
+      width = newWidth;
+      break;
+    }
+    default:
+      break;
+  }
+
+  // Vertical adjustment
+  switch (handle) {
+    case 's':
+    case 'se':
+    case 'sw': {
+      height = Math.max(MIN_SIZE, original.height + dy);
+      break;
+    }
+    case 'n':
+    case 'ne':
+    case 'nw': {
+      const newHeight = Math.max(MIN_SIZE, original.height - dy);
+      y = original.y + (original.height - newHeight);
+      height = newHeight;
+      break;
+    }
+    default:
+      break;
+  }
+
+  return { x, y, width, height };
+}
+
+// -------------------------------------------------------------------------
 
 function hitTest(objects: WhiteboardObject[], x: number, y: number): WhiteboardObject | null {
   for (let i = objects.length - 1; i >= 0; i--) {
@@ -259,20 +391,54 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       drawObject(obj);
 
       if (isSelected(obj.id, selectedObjectIds)) {
-        const box = getBoundingBox(obj);
-        if (box) {
+        const boxRaw = getBoundingBox(obj);
+        if (boxRaw) {
           const margin = 4;
-          const tl = worldToCanvas(box.x - margin, box.y - margin);
-          const br = worldToCanvas(box.x + box.width + margin, box.y + box.height + margin);
+          const tl = worldToCanvas(boxRaw.x - margin, boxRaw.y - margin);
+          const br = worldToCanvas(boxRaw.x + boxRaw.width + margin, boxRaw.y + boxRaw.height + margin);
           const wDraw = br.x - tl.x;
           const hDraw = br.y - tl.y;
 
+          // Selection rectangle
           ctx.save();
           ctx.strokeStyle = '#38bdf8';
           ctx.lineWidth = 1;
           ctx.setLineDash([4, 3]);
           ctx.strokeRect(tl.x, tl.y, wDraw, hDraw);
           ctx.restore();
+
+          // Resize handles for non-freehand objects
+          if (obj.type !== 'freehand') {
+            const bounds: Bounds = {
+              x: boxRaw.x,
+              y: boxRaw.y,
+              width: boxRaw.width,
+              height: boxRaw.height
+            };
+            const handlePositions = getHandlePositions(bounds);
+            const HANDLE_SIZE = 10;
+
+            ctx.save();
+            ctx.setLineDash([]);
+            ctx.lineWidth = 1;
+
+            for (const pos of Object.values(handlePositions)) {
+              const c = worldToCanvas(pos.x, pos.y);
+              ctx.beginPath();
+              ctx.rect(
+                c.x - HANDLE_SIZE / 2,
+                c.y - HANDLE_SIZE / 2,
+                HANDLE_SIZE,
+                HANDLE_SIZE
+              );
+              ctx.fillStyle = '#ffffff';
+              ctx.fill();
+              ctx.strokeStyle = '#38bdf8';
+              ctx.stroke();
+            }
+
+            ctx.restore();
+          }
         }
       }
     });
@@ -323,7 +489,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       }
       ctx.restore();
     }
-  }, [objects, selectedObjectIds, draft, viewport, width, height]);
+  }, [objects, selectedObjectIds, draft, viewport, width, height, strokeColor]);
 
   const getCanvasPos = (evt: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = (evt.target as HTMLCanvasElement).getBoundingClientRect();
@@ -341,12 +507,42 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
 
   const handlePointerDown = (evt: React.PointerEvent<HTMLCanvasElement>) => {
     if (evt.button !== 0) return;
-    const pos = getCanvasPos(evt);
+    const pos = getCanvasPos(evt); // world coords
     const rect = (evt.target as HTMLCanvasElement).getBoundingClientRect();
     const canvasX = evt.clientX - rect.left;
     const canvasY = evt.clientY - rect.top;
 
     if (activeTool === 'select') {
+      // First: if exactly one object is selected, see if we clicked a resize handle on it
+      if (selectedObjectIds.length === 1) {
+        const selectedId = selectedObjectIds[0];
+        const selectedObj = objects.find((o) => o.id === selectedId);
+        if (selectedObj && selectedObj.type !== 'freehand') {
+          const box = getBoundingBox(selectedObj);
+          if (box) {
+            const handleId = hitTestResizeHandleCanvas(canvasX, canvasY, box as Bounds, viewport);
+            if (handleId) {
+              setDrag({
+                kind: 'resize',
+                objectId: selectedId,
+                handle: handleId,
+                startX: pos.x,
+                startY: pos.y,
+                originalBounds: {
+                  x: box.x,
+                  y: box.y,
+                  width: box.width,
+                  height: box.height
+                }
+              });
+              (evt.target as HTMLCanvasElement).setPointerCapture(evt.pointerId);
+              return;
+            }
+          }
+        }
+      }
+
+      // Otherwise, normal selection / move / pan
       const hit = hitTest(objects, pos.x, pos.y);
       if (hit) {
         onSelectionChange([hit.id]);
@@ -441,7 +637,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   };
 
   const handlePointerMove = (evt: React.PointerEvent<HTMLCanvasElement>) => {
-    const pos = getCanvasPos(evt);
+    const pos = getCanvasPos(evt); // world coords
     const rect = (evt.target as HTMLCanvasElement).getBoundingClientRect();
     const canvasX = evt.clientX - rect.left;
     const canvasY = evt.clientY - rect.top;
@@ -494,6 +690,25 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           offsetX: newOffsetX,
           offsetY: newOffsetY
         });
+      } else if (drag.kind === 'resize') {
+        const dx = pos.x - drag.startX;
+        const dy = pos.y - drag.startY;
+        const newBounds = resizeBounds(drag.originalBounds, drag.handle, dx, dy);
+
+        const obj = objects.find((o) => o.id === drag.objectId);
+        if (!obj) {
+          return;
+        }
+
+        // Only resize objects that actually have x/y/width/height
+        if (obj.type !== 'freehand') {
+          onUpdateObject(drag.objectId, {
+            x: newBounds.x,
+            y: newBounds.y,
+            width: newBounds.width,
+            height: newBounds.height
+          });
+        }
       }
     }
   };
@@ -525,6 +740,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
         points: draft.points
       };
       onCreateObject(obj);
+      onSelectionChange([draft.id]);
       setDraft(null);
       return;
     }
@@ -551,6 +767,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       strokeWidth
     };
     onCreateObject(obj);
+    onSelectionChange([draft.id]);
     setDraft(null);
   };
 

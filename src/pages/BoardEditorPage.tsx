@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useWhiteboard } from '../whiteboard/WhiteboardStore';
 import type { WhiteboardMeta, WhiteboardObject, BoardEvent, Viewport } from '../domain/types';
+import { getWhiteboardRepository } from '../infrastructure/localStorageWhiteboardRepository';
 import { WhiteboardCanvas, type DrawingTool } from '../whiteboard/WhiteboardCanvas';
 
 const CANVAS_WIDTH = 960;
@@ -41,17 +42,52 @@ export const BoardEditorPage: React.FC = () => {
   useEffect(() => {
     if (!id) return;
 
-    if (!state || state.meta.id !== id) {
-      const now = new Date().toISOString();
-      const meta: WhiteboardMeta = {
-        id,
-        name: `Board ${id}`,
-        createdAt: now,
-        updatedAt: now
-      };
-      resetBoard(meta);
+    // If we already have the correct board loaded, do nothing.
+    if (state && state.meta.id === id) {
+      return;
     }
-  }, [id, state, resetBoard]);
+
+    let cancelled = false;
+    const repo = getWhiteboardRepository();
+
+    (async () => {
+      try {
+        const existing = await repo.loadBoard(id);
+        if (cancelled) return;
+
+        if (existing) {
+          // Load persisted state
+          resetBoard(existing);
+          return;
+        }
+
+        // No persisted state found → create a fresh board
+        const now = new Date().toISOString();
+        const meta: WhiteboardMeta = {
+          id,
+          name: `Board ${id}`,
+          createdAt: now,
+          updatedAt: now
+        };
+        resetBoard(meta);
+      } catch (err) {
+        console.error('Failed to load board state', err);
+        const now = new Date().toISOString();
+        const meta: WhiteboardMeta = {
+          id,
+          name: `Board ${id}`,
+          createdAt: now,
+          updatedAt: now
+        };
+        resetBoard(meta);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, state?.meta.id, resetBoard]);
+
 
   const handleCreateObject = (object: WhiteboardObject) => {
     if (!state) return;

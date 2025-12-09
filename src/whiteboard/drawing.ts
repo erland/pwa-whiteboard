@@ -1,0 +1,268 @@
+// src/whiteboard/drawing.ts
+import type { WhiteboardObject, Viewport, Point, ObjectId } from '../domain/types';
+import { worldToCanvas, getBoundingBox, Bounds, getHandlePositions } from './geometry';
+
+export type DraftShape =
+  | {
+      kind: 'freehand';
+      id: ObjectId;
+      strokeColor: string;
+      strokeWidth: number;
+      points: Point[];
+    }
+  | {
+      kind: 'rectangle' | 'ellipse';
+      id: ObjectId;
+      strokeColor: string;
+      strokeWidth: number;
+      startX: number;
+      startY: number;
+      currentX: number;
+      currentY: number;
+    };
+
+/**
+ * Draw a single whiteboard object.
+ */
+export function drawObject(
+  ctx: CanvasRenderingContext2D,
+  obj: WhiteboardObject,
+  viewport: Viewport,
+  fallbackStrokeColor: string
+): void {
+  const stroke = obj.strokeColor ?? '#e5e7eb';
+  const widthPx = obj.strokeWidth ?? 2;
+  const toCanvas = (x: number, y: number) => worldToCanvas(x, y, viewport);
+
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  if (obj.type === 'freehand' && obj.points && obj.points.length > 1) {
+    const pts = obj.points;
+    ctx.beginPath();
+    const first = toCanvas(pts[0].x, pts[0].y);
+    ctx.moveTo(first.x, first.y);
+    for (let i = 1; i < pts.length; i++) {
+      const p = toCanvas(pts[i].x, pts[i].y);
+      ctx.lineTo(p.x, p.y);
+    }
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = widthPx;
+    ctx.stroke();
+    return;
+  }
+
+  if (obj.type === 'rectangle') {
+    const { x, y, width: w = 0, height: h = 0 } = obj;
+    const topLeft = toCanvas(x, y);
+    const bottomRight = toCanvas(x + w, y + h);
+    const drawW = bottomRight.x - topLeft.x;
+    const drawH = bottomRight.y - topLeft.y;
+
+    if (obj.fillColor) {
+      ctx.fillStyle = obj.fillColor;
+      ctx.fillRect(topLeft.x, topLeft.y, drawW, drawH);
+    }
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = widthPx;
+    ctx.strokeRect(topLeft.x, topLeft.y, drawW, drawH);
+    return;
+  }
+
+  if (obj.type === 'ellipse') {
+    const { x, y, width: w = 0, height: h = 0 } = obj;
+    const center = toCanvas(x + w / 2, y + h / 2);
+    const zoom = viewport.zoom ?? 1;
+    const radiusX = (w / 2) * zoom;
+    const radiusY = (h / 2) * zoom;
+    ctx.beginPath();
+    ctx.ellipse(center.x, center.y, Math.abs(radiusX), Math.abs(radiusY), 0, 0, Math.PI * 2);
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = widthPx;
+    ctx.stroke();
+    return;
+  }
+
+  if (obj.type === 'stickyNote') {
+    const { x, y, width: w = 160, height: h = 100 } = obj;
+    const topLeft = toCanvas(x, y);
+    const bottomRight = toCanvas(x + w, y + h);
+    const drawW = bottomRight.x - topLeft.x;
+    const drawH = bottomRight.y - topLeft.y;
+
+    const fill = obj.fillColor ?? '#facc15';
+    const border = obj.strokeColor ?? '#f59e0b';
+
+    ctx.fillStyle = fill;
+    ctx.strokeStyle = border;
+    ctx.lineWidth = obj.strokeWidth ?? 1.5;
+    ctx.beginPath();
+    ctx.rect(topLeft.x, topLeft.y, drawW, drawH);
+    ctx.fill();
+    ctx.stroke();
+
+    if (obj.text) {
+      const fontSize = obj.fontSize ?? 16;
+      ctx.font = `${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+      ctx.textBaseline = 'top';
+      ctx.textAlign = 'left';
+      const textColor = obj.textColor ?? fallbackStrokeColor ?? '#e5e7eb';
+      ctx.fillStyle = textColor;
+      const padding = 8;
+      const textPos = toCanvas(x + padding, y + padding);
+      ctx.fillText(obj.text, textPos.x, textPos.y, drawW - padding * 2);
+    }
+    return;
+  }
+
+  if (obj.type === 'text') {
+    if (!obj.text) return;
+    const fontSize = obj.fontSize ?? 18;
+    const pos = toCanvas(obj.x, obj.y);
+    ctx.font = `${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    const textColor = obj.textColor ?? fallbackStrokeColor ?? '#e5e7eb';
+    ctx.fillStyle = textColor;
+    ctx.fillText(obj.text, pos.x, pos.y);
+    return;
+  }
+}
+
+/**
+ * Draw selection rectangle + resize handles for a given object (if applicable).
+ */
+export function drawSelectionOutlineAndHandles(
+  ctx: CanvasRenderingContext2D,
+  obj: WhiteboardObject,
+  viewport: Viewport
+): void {
+  const bounds = getBoundingBox(obj);
+  if (!bounds) return;
+
+  const toCanvas = (x: number, y: number) => worldToCanvas(x, y, viewport);
+
+  const margin = 4;
+  const tl = toCanvas(bounds.x - margin, bounds.y - margin);
+  const br = toCanvas(
+    bounds.x + bounds.width + margin,
+    bounds.y + bounds.height + margin
+  );
+  const wDraw = br.x - tl.x;
+  const hDraw = br.y - tl.y;
+
+  // Selection rectangle
+  ctx.save();
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 3]);
+  ctx.strokeRect(tl.x, tl.y, wDraw, hDraw);
+  ctx.restore();
+
+  // Resize handles for non-freehand objects
+  if (obj.type === 'freehand') {
+    return;
+  }
+
+  const HANDLE_SIZE = 10;
+  const handlePositions = getHandlePositions(bounds);
+
+  ctx.save();
+  ctx.setLineDash([]);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = '#38bdf8';
+
+  for (const pos of Object.values(handlePositions)) {
+    const c = toCanvas(pos.x, pos.y);
+    ctx.beginPath();
+    ctx.rect(
+      c.x - HANDLE_SIZE / 2,
+      c.y - HANDLE_SIZE / 2,
+      HANDLE_SIZE,
+      HANDLE_SIZE
+    );
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+/**
+ * Draw all objects + selection overlays.
+ */
+export function drawObjectsWithSelection(
+  ctx: CanvasRenderingContext2D,
+  objects: WhiteboardObject[],
+  selectedObjectIds: ObjectId[],
+  viewport: Viewport,
+  fallbackStrokeColor: string
+): void {
+  for (const obj of objects) {
+    drawObject(ctx, obj, viewport, fallbackStrokeColor);
+  }
+
+  for (const obj of objects) {
+    if (!selectedObjectIds.includes(obj.id)) continue;
+    drawSelectionOutlineAndHandles(ctx, obj, viewport);
+  }
+}
+
+/**
+ * Draw the in-progress draft shape (while drawing/dragging).
+ */
+export function drawDraftShape(
+  ctx: CanvasRenderingContext2D,
+  draft: DraftShape,
+  viewport: Viewport
+): void {
+  const toCanvas = (x: number, y: number) => worldToCanvas(x, y, viewport);
+
+  ctx.save();
+  ctx.globalAlpha = 0.9;
+
+  if (draft.kind === 'freehand') {
+    const pts = draft.points;
+    if (pts.length > 1) {
+      ctx.strokeStyle = draft.strokeColor;
+      ctx.lineWidth = draft.strokeWidth;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      const first = toCanvas(pts[0].x, pts[0].y);
+      ctx.moveTo(first.x, first.y);
+      for (let i = 1; i < pts.length; i++) {
+        const p = toCanvas(pts[i].x, pts[i].y);
+        ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+    }
+  } else {
+    const { startX, startY, currentX, currentY } = draft;
+    const x1 = Math.min(startX, currentX);
+    const y1 = Math.min(startY, currentY);
+    const x2 = Math.max(startX, currentX);
+    const y2 = Math.max(startY, currentY);
+    const tl = toCanvas(x1, y1);
+    const br = toCanvas(x2, y2);
+    const wDraw = br.x - tl.x;
+    const hDraw = br.y - tl.y;
+
+    ctx.strokeStyle = draft.strokeColor;
+    ctx.lineWidth = draft.strokeWidth;
+    ctx.setLineDash([6, 4]);
+
+    if (draft.kind === 'rectangle') {
+      ctx.strokeRect(tl.x, tl.y, wDraw, hDraw);
+    } else if (draft.kind === 'ellipse') {
+      const cx = tl.x + wDraw / 2;
+      const cy = tl.y + hDraw / 2;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, Math.abs(wDraw / 2), Math.abs(hDraw / 2), 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+}

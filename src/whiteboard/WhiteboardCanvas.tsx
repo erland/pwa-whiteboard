@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { WhiteboardObject, Viewport, ObjectId, Point } from '../domain/types';
+import type { WhiteboardObject, Viewport, ObjectId } from '../domain/types';
 import {
   getBoundingBox,
   hitTest,
@@ -7,9 +7,13 @@ import {
   resizeBounds,
   Bounds,
   ResizeHandleId,
-  canvasToWorld,
-  worldToCanvas
+  canvasToWorld
 } from './geometry';
+import {
+  DraftShape,
+  drawObjectsWithSelection,
+  drawDraftShape
+} from './drawing';
 
 export type DrawingTool = 'select' | 'freehand' | 'rectangle' | 'ellipse' | 'text' | 'stickyNote';
 
@@ -28,25 +32,6 @@ interface WhiteboardCanvasProps {
   onViewportChange: (patch: Partial<Viewport>) => void;
   onCanvasReady?: (canvas: HTMLCanvasElement | null) => void;
 }
-
-type DraftShape =
-  | {
-      kind: 'freehand';
-      id: ObjectId;
-      strokeColor: string;
-      strokeWidth: number;
-      points: Point[];
-    }
-  | {
-      kind: 'rectangle' | 'ellipse';
-      id: ObjectId;
-      strokeColor: string;
-      strokeWidth: number;
-      startX: number;
-      startY: number;
-      currentX: number;
-      currentY: number;
-    };
 
 type ResizeDragState = {
   kind: 'resize';
@@ -119,281 +104,17 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.scale(dpr, dpr);
 
+    // Clear and background
     ctx.clearRect(0, 0, width, height);
-
     ctx.fillStyle = '#020617';
     ctx.fillRect(0, 0, width, height);
 
-    const toCanvas = (x: number, y: number) => worldToCanvas(x, y, viewport);
+    // Draw all objects + selection overlays
+    drawObjectsWithSelection(ctx, objects, selectedObjectIds, viewport, strokeColor);
 
-    const drawObject = (obj: WhiteboardObject) => {
-      const stroke = obj.strokeColor ?? '#e5e7eb';
-      const widthPx = obj.strokeWidth ?? 2;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-
-      if (obj.type === 'freehand' && obj.points && obj.points.length > 1) {
-        const pts = obj.points;
-        ctx.beginPath();
-        const first = toCanvas(pts[0].x, pts[0].y);
-        ctx.moveTo(first.x, first.y);
-        for (let i = 1; i < pts.length; i++) {
-          const p = toCanvas(pts[i].x, pts[i].y);
-          ctx.lineTo(p.x, p.y);
-        }
-        ctx.strokeStyle = stroke;
-        ctx.lineWidth = widthPx;
-        ctx.stroke();
-        return;
-      }
-
-      if (obj.type === 'rectangle') {
-        const { x, y, width: w = 0, height: h = 0 } = obj;
-        const topLeft = toCanvas(x, y);
-        const bottomRight = toCanvas(x + w, y + h);
-        const drawW = bottomRight.x - topLeft.x;
-        const drawH = bottomRight.y - topLeft.y;
-
-        if (obj.fillColor) {
-          ctx.fillStyle = obj.fillColor;
-          ctx.fillRect(topLeft.x, topLeft.y, drawW, drawH);
-        }
-        ctx.strokeStyle = stroke;
-        ctx.lineWidth = widthPx;
-        ctx.strokeRect(topLeft.x, topLeft.y, drawW, drawH);
-        return;
-      }
-
-      if (obj.type === 'ellipse') {
-        const { x, y, width: w = 0, height: h = 0 } = obj;
-        const center = toCanvas(x + w / 2, y + h / 2);
-        const zoom = viewport.zoom ?? 1;
-        const radiusX = (w / 2) * zoom;
-        const radiusY = (h / 2) * zoom;
-        ctx.beginPath();
-        ctx.ellipse(center.x, center.y, Math.abs(radiusX), Math.abs(radiusY), 0, 0, Math.PI * 2);
-        ctx.strokeStyle = stroke;
-        ctx.lineWidth = widthPx;
-        ctx.stroke();
-        return;
-      }
-
-      if (obj.type === 'stickyNote') {
-        const { x, y, width: w = 160, height: h = 100 } = obj;
-        const topLeft = toCanvas(x, y);
-        const bottomRight = toCanvas(x + w, y + h);
-        const drawW = bottomRight.x - topLeft.x;
-        const drawH = bottomRight.y - topLeft.y;
-
-        const fill = obj.fillColor ?? '#facc15';
-        const border = obj.strokeColor ?? '#f59e0b';
-
-        ctx.fillStyle = fill;
-        ctx.strokeStyle = border;
-        ctx.lineWidth = obj.strokeWidth ?? 1.5;
-        ctx.beginPath();
-        ctx.rect(topLeft.x, topLeft.y, drawW, drawH);
-        ctx.fill();
-        ctx.stroke();
-
-        if (obj.text) {
-          const fontSize = obj.fontSize ?? 16;
-          ctx.font = `${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
-          ctx.textBaseline = 'top';
-          ctx.textAlign = 'left';
-          const textColor = obj.textColor ?? strokeColor ?? '#e5e7eb';
-          ctx.fillStyle = textColor;
-          const padding = 8;
-          const textPos = toCanvas(x + padding, y + padding);
-          ctx.fillText(obj.text, textPos.x, textPos.y, drawW - padding * 2);
-        }
-        return;
-      }
-
-      if (obj.type === 'text') {
-        if (!obj.text) return;
-        const fontSize = obj.fontSize ?? 18;
-        const pos = toCanvas(obj.x, obj.y);
-        ctx.font = `${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
-        ctx.textBaseline = 'top';
-        ctx.textAlign = 'left';
-        const textColor = obj.textColor ?? strokeColor ?? '#e5e7eb';
-        ctx.fillStyle = textColor;
-        ctx.fillText(obj.text, pos.x, pos.y);
-        return;
-      }
-    };
-
-    objects.forEach((obj) => {
-      drawObject(obj);
-
-      if (isSelected(obj.id, selectedObjectIds)) {
-        const boxRaw = getBoundingBox(obj);
-        if (boxRaw) {
-          const margin = 4;
-          const tl = toCanvas(boxRaw.x - margin, boxRaw.y - margin);
-          const br = toCanvas(
-            boxRaw.x + boxRaw.width + margin,
-            boxRaw.y + boxRaw.height + margin
-          );
-          const wDraw = br.x - tl.x;
-          const hDraw = br.y - tl.y;
-
-          // Selection rectangle
-          ctx.save();
-          ctx.strokeStyle = '#38bdf8';
-          ctx.lineWidth = 1;
-          ctx.setLineDash([4, 3]);
-          ctx.strokeRect(tl.x, tl.y, wDraw, hDraw);
-          ctx.restore();
-
-          // Resize handles for non-freehand objects
-          if (obj.type !== 'freehand') {
-            const bounds: Bounds = {
-              x: boxRaw.x,
-              y: boxRaw.y,
-              width: boxRaw.width,
-              height: boxRaw.height
-            };
-            const handlePositions = (Object.values(
-              // reuse helper to get world handle centers
-              // but we only need positions here, so we recompute them via getHandlePositions
-              // (hit-testing uses hitTestResizeHandleCanvas)
-              // This is fine to keep; geometry is still pure.
-              // For drawing we can just compute them again:
-              // but easiest is to reuse Bounds and worldToCanvas directly:
-              // we create them manually below.
-              bounds
-            ) as unknown) as Point[]; // NOTE: this line is replaced below
-          }
-        }
-      }
-    });
-
-    // Re-draw selection handles correctly:
-    objects.forEach((obj) => {
-      if (!isSelected(obj.id, selectedObjectIds)) return;
-      if (obj.type === 'freehand') return;
-      const boxRaw = getBoundingBox(obj);
-      if (!boxRaw) return;
-
-      const bounds: Bounds = {
-        x: boxRaw.x,
-        y: boxRaw.y,
-        width: boxRaw.width,
-        height: boxRaw.height
-      };
-      const HANDLE_SIZE = 10;
-
-      const handlePositions = [
-        // We can use getHandlePositions, but drawing only needs the positions:
-        // to keep it simple, call getHandlePositions here:
-        // (importing it explicitly if you like)
-      ];
-    });
-
-    // Instead of the slightly messy attempt above, we keep the original handle drawing code:
-    objects.forEach((obj) => {
-      if (!isSelected(obj.id, selectedObjectIds)) return;
-      if (obj.type === 'freehand') return;
-
-      const boxRaw = getBoundingBox(obj);
-      if (!boxRaw) return;
-
-      const bounds: Bounds = {
-        x: boxRaw.x,
-        y: boxRaw.y,
-        width: boxRaw.width,
-        height: boxRaw.height
-      };
-      const HANDLE_SIZE = 10;
-
-      // We don't actually need getHandlePositions here; just reuse hitTest logic's shape:
-      // but easiest is to compute handle centers same way as in geometry:
-      const { x, y, width: bw, height: bh } = bounds;
-      const cx = x + bw / 2;
-      const cy = y + bh / 2;
-      const right = x + bw;
-      const bottom = y + bh;
-
-      const handleWorldPositions: Point[] = [
-        { x, y }, // nw
-        { x: cx, y }, // n
-        { x: right, y }, // ne
-        { x: right, y: cy }, // e
-        { x: right, y: bottom }, // se
-        { x: cx, y: bottom }, // s
-        { x, y: bottom }, // sw
-        { x, y: cy } // w
-      ];
-
-      ctx.save();
-      ctx.setLineDash([]);
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = '#38bdf8';
-
-      for (const pos of handleWorldPositions) {
-        const c = toCanvas(pos.x, pos.y);
-        ctx.beginPath();
-        ctx.rect(
-          c.x - HANDLE_SIZE / 2,
-          c.y - HANDLE_SIZE / 2,
-          HANDLE_SIZE,
-          HANDLE_SIZE
-        );
-        ctx.fillStyle = '#ffffff';
-        ctx.fill();
-        ctx.stroke();
-      }
-
-      ctx.restore();
-    });
-
+    // Draw draft shape on top
     if (draft) {
-      ctx.save();
-      ctx.globalAlpha = 0.9;
-      if (draft.kind === 'freehand') {
-        const pts = draft.points;
-        if (pts.length > 1) {
-          ctx.strokeStyle = draft.strokeColor;
-          ctx.lineWidth = draft.strokeWidth;
-          ctx.lineJoin = 'round';
-          ctx.lineCap = 'round';
-          ctx.beginPath();
-          const first = toCanvas(pts[0].x, pts[0].y);
-          ctx.moveTo(first.x, first.y);
-          for (let i = 1; i < pts.length; i++) {
-            const p = toCanvas(pts[i].x, pts[i].y);
-            ctx.lineTo(p.x, p.y);
-          }
-          ctx.stroke();
-        }
-      } else {
-        const { startX, startY, currentX, currentY } = draft;
-        const x1 = Math.min(startX, currentX);
-        const y1 = Math.min(startY, currentY);
-        const x2 = Math.max(startX, currentX);
-        const y2 = Math.max(startY, currentY);
-        const tl = toCanvas(x1, y1);
-        const br = toCanvas(x2, y2);
-        const wDraw = br.x - tl.x;
-        const hDraw = br.y - tl.y;
-
-        ctx.strokeStyle = draft.strokeColor;
-        ctx.lineWidth = draft.strokeWidth;
-        ctx.setLineDash([6, 4]);
-
-        if (draft.kind === 'rectangle') {
-          ctx.strokeRect(tl.x, tl.y, wDraw, hDraw);
-        } else if (draft.kind === 'ellipse') {
-          const cx = tl.x + wDraw / 2;
-          const cy = tl.y + hDraw / 2;
-          ctx.beginPath();
-          ctx.ellipse(cx, cy, Math.abs(wDraw / 2), Math.abs(hDraw / 2), 0, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-      }
-      ctx.restore();
+      drawDraftShape(ctx, draft, viewport);
     }
   }, [objects, selectedObjectIds, draft, viewport, width, height, strokeColor]);
 

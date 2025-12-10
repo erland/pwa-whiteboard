@@ -63,34 +63,27 @@ function isSelected(id: ObjectId, selectedIds: ObjectId[]): boolean {
   return selectedIds.includes(id);
 }
 
-export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
-  width,
-  height,
-  objects,
-  selectedObjectIds,
-  viewport,
-  activeTool,
-  strokeColor,
-  strokeWidth,
-  onCreateObject,
-  onSelectionChange,
-  onUpdateObject,
-  onViewportChange,
-  onCanvasReady
-}) => {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [draft, setDraft] = useState<DraftShape | null>(null);
-  const [drag, setDrag] = useState<DragState | null>(null);
 
-  // Notify parent about the canvas element so it can be used for image export.
-  useEffect(() => {
-    if (onCanvasReady) {
-      onCanvasReady(canvasRef.current);
-    }
-  }, [onCanvasReady]);
-
-  const generateObjectId = () =>
-    ('o_' + Math.random().toString(16).slice(2) + '_' + Date.now().toString(16)) as ObjectId;
+function useCanvasDrawing(params: {
+  canvasRef: React.RefObject<HTMLCanvasElement | null>;
+  width: number;
+  height: number;
+  objects: WhiteboardObject[];
+  selectedObjectIds: ObjectId[];
+  viewport: Viewport;
+  draft: DraftShape | null;
+  strokeColor: string;
+}) {
+  const {
+    canvasRef,
+    width,
+    height,
+    objects,
+    selectedObjectIds,
+    viewport,
+    draft,
+    strokeColor
+  } = params;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -116,7 +109,49 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     if (draft) {
       drawDraftShape(ctx, draft, viewport);
     }
-  }, [objects, selectedObjectIds, draft, viewport, width, height, strokeColor]);
+  }, [canvasRef, width, height, objects, selectedObjectIds, viewport, draft, strokeColor]);
+}
+
+type CanvasInteractionsParams = {
+  objects: WhiteboardObject[];
+  selectedObjectIds: ObjectId[];
+  viewport: Viewport;
+  activeTool: DrawingTool;
+  strokeColor: string;
+  strokeWidth: number;
+  onCreateObject: (object: WhiteboardObject) => void;
+  onSelectionChange: (selectedIds: ObjectId[]) => void;
+  onUpdateObject: (objectId: ObjectId, patch: Partial<WhiteboardObject>) => void;
+  onViewportChange: (patch: Partial<Viewport>) => void;
+};
+
+type CanvasInteractionsResult = {
+  draft: DraftShape | null;
+  handlePointerDown: (evt: React.PointerEvent<HTMLCanvasElement>) => void;
+  handlePointerMove: (evt: React.PointerEvent<HTMLCanvasElement>) => void;
+  handlePointerUp: (evt: React.PointerEvent<HTMLCanvasElement>) => void;
+  handlePointerLeave: (evt: React.PointerEvent<HTMLCanvasElement>) => void;
+};
+
+function useCanvasInteractions(params: CanvasInteractionsParams): CanvasInteractionsResult {
+  const {
+    objects,
+    selectedObjectIds,
+    viewport,
+    activeTool,
+    strokeColor,
+    strokeWidth,
+    onCreateObject,
+    onSelectionChange,
+    onUpdateObject,
+    onViewportChange
+  } = params;
+
+  const [draft, setDraft] = useState<DraftShape | null>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
+
+  const generateObjectId = () =>
+    ('o_' + Math.random().toString(16).slice(2) + '_' + Date.now().toString(16)) as ObjectId;
 
   const getCanvasPos = (evt: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = (evt.target as HTMLCanvasElement).getBoundingClientRect();
@@ -417,6 +452,69 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     finishInteraction(evt);
   };
 
+  return {
+    draft,
+    handlePointerDown,
+    handlePointerMove,
+    handlePointerUp,
+    handlePointerLeave
+  };
+}
+
+export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
+  width,
+  height,
+  objects,
+  selectedObjectIds,
+  viewport,
+  activeTool,
+  strokeColor,
+  strokeWidth,
+  onCreateObject,
+  onSelectionChange,
+  onUpdateObject,
+  onViewportChange,
+  onCanvasReady
+}) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Notify parent about the canvas element so it can be used for image export.
+  useEffect(() => {
+    if (onCanvasReady) {
+      onCanvasReady(canvasRef.current);
+    }
+  }, [onCanvasReady]);
+
+  const {
+    draft,
+    handlePointerDown,
+    handlePointerMove,
+    handlePointerUp,
+    handlePointerLeave
+  } = useCanvasInteractions({
+    objects,
+    selectedObjectIds,
+    viewport,
+    activeTool,
+    strokeColor,
+    strokeWidth,
+    onCreateObject,
+    onSelectionChange,
+    onUpdateObject,
+    onViewportChange
+  });
+
+  useCanvasDrawing({
+    canvasRef,
+    width,
+    height,
+    objects,
+    selectedObjectIds,
+    viewport,
+    draft,
+    strokeColor
+  });
+
   return (
     <canvas
       ref={canvasRef}
@@ -429,3 +527,4 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     />
   );
 };
+

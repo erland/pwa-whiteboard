@@ -7,6 +7,7 @@ import type {
   BoardEvent
 } from '../../domain/types';
 import { getWhiteboardRepository } from '../../infrastructure/localStorageWhiteboardRepository';
+import { getBoardsRepository } from '../../infrastructure/localStorageBoardsRepository';
 import type { DrawingTool } from '../../whiteboard/WhiteboardCanvas';
 import { generateEventId } from './boardEvents';
 import { useBoardViewport } from './useBoardViewport';
@@ -32,6 +33,7 @@ export function useBoardEditor(id: string | undefined) {
 
     let cancelled = false;
     const repo = getWhiteboardRepository();
+    const boardsRepo = getBoardsRepository();
 
     (async () => {
       try {
@@ -45,24 +47,50 @@ export function useBoardEditor(id: string | undefined) {
         }
 
         // No persisted state found → create a fresh board
+        const index = await boardsRepo.listBoards();
+        const indexMeta = index.find((m) => m.id === id) ?? null;
+
         const now = new Date().toISOString();
         const meta: WhiteboardMeta = {
           id,
-          name: `Board ${id}`,
-          createdAt: now,
-          updatedAt: now
+          name: indexMeta?.name ?? 'Untitled board',
+          createdAt: indexMeta?.createdAt ?? now,
+          updatedAt: now,
         };
+
         resetBoard(meta);
       } catch (err) {
         console.error('Failed to load board state', err);
-        const now = new Date().toISOString();
-        const meta: WhiteboardMeta = {
-          id,
-          name: `Board ${id}`,
-          createdAt: now,
-          updatedAt: now
-        };
-        resetBoard(meta);
+
+        try {
+          // Best-effort: still try to respect the index name in the error path
+          const index = await boardsRepo.listBoards();
+          const indexMeta = index.find((m) => m.id === id) ?? null;
+
+          const now = new Date().toISOString();
+          const meta: WhiteboardMeta = {
+            id,
+            name: indexMeta?.name ?? 'Untitled board',
+            createdAt: indexMeta?.createdAt ?? now,
+            updatedAt: now,
+          };
+
+          if (!cancelled) {
+            resetBoard(meta);
+          }
+        } catch {
+          // Absolute fallback if even the index fails
+          if (!cancelled) {
+            const now = new Date().toISOString();
+            const meta: WhiteboardMeta = {
+              id,
+              name: 'Untitled board',
+              createdAt: now,
+              updatedAt: now,
+            };
+            resetBoard(meta);
+          }
+        }
       }
     })();
 

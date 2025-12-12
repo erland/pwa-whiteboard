@@ -148,6 +148,19 @@ a:hover {
   font-size: 1.4rem;
 }
 
+/* Board editor header: name + back link on one line */
+.board-editor-header .board-header-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.board-header-title {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
 .page-header-actions {
   display: flex;
   align-items: center;
@@ -267,25 +280,119 @@ a:hover {
 .board-editor-layout {
   display: grid;
   grid-template-columns: minmax(220px, 260px) 1fr;
+  grid-template-areas: "sidebar main";
   gap: 1rem;
   align-items: flex-start;
 }
 
 .board-editor-sidebar {
+  grid-area: sidebar;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
 }
 
+/* Board editor main area: stack controls above canvas */
 .board-editor-main {
+  grid-area: main;
   padding: 0.75rem;
   border-radius: 0.75rem;
   border: 1px solid var(--color-border);
   background: var(--color-panel-strong);
   display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Wrapper so the canvas still fills remaining space */
+.board-editor-canvas-wrapper {
+  flex: 1;
+  display: flex;
   align-items: center;
   justify-content: center;
   overflow: auto;
+}
+
+/* Compact inline History & View controls above the canvas */
+.board-editor-top-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+/* Left & right groups in the top bar */
+.board-editor-top-controls-left,
+.board-editor-top-controls-right {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Bigger buttons than default tool chip size */
+.board-editor-top-button {
+  padding: 0.3rem 0.9rem;
+  font-size: 0.9rem;
+}
+
+/* Reset button: slightly emphasized but still compact */
+.board-editor-reset-button {
+  font-weight: 500;
+}
+
+/* Zoom slider: a bit wider so it's actually visible as a control */
+.board-editor-zoom-range {
+  width: 160px;
+}
+
+/* +/- zoom hints */
+.board-editor-zoom-icon {
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+/* Export & Import dropdown panel */
+.export-panel {
+  position: relative;
+  padding: 0.5rem 0.75rem;
+}
+
+/* Row that holds the trigger button */
+.export-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+/* Trigger button can reuse .tool-button styling, this just tweaks it slightly if needed */
+.export-panel-trigger {
+  width: 100%;
+  text-align: left;
+}
+
+/* Floating menu that does not affect layout below */
+.export-panel-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 0.35rem;
+  min-width: 220px;
+  padding: 0.5rem;
+  border-radius: 0.75rem;
+  background: var(--color-panel-stronger);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+/* Make menu buttons full-width inside the dropdown */
+.export-panel-menu .tool-button {
+  width: 100%;
+  text-align: left;
 }
 
 .panel {
@@ -335,9 +442,10 @@ a:hover {
 }
 
 .tool-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
+  display: grid;
+  /* As many columns as fit, each at least 72px wide, share remaining space */
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: 0.35rem;
 }
 
 .tool-button {
@@ -428,10 +536,16 @@ a:hover {
 
   .board-editor-layout {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "main"
+      "sidebar";
   }
 
   .board-editor-main {
     min-height: 320px;
+  }
+  .panel-title-tools {
+    display: none;
   }
 }
 
@@ -446,6 +560,15 @@ a:hover {
 
   .page-board-list .page-header {
     align-items: flex-start;
+  }
+
+  .board-editor-header .board-header-main {
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .board-header-title {
+    font-size: 1.1rem;
   }
 
   .board-list-item {

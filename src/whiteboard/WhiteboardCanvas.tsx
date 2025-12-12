@@ -140,7 +140,12 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = (props) => {
     <canvas
       ref={canvasRef}
       className="whiteboard-canvas"
-      style={{ width: props.width, height: props.height, touchAction: 'none' }}
+      style={{
+        width: '100%',
+        height: 'auto',
+        maxWidth: '100%',
+        touchAction: 'none',
+      }}
       onPointerDown={handlePointerDownReact}
       onPointerMove={handlePointerMoveReact}
       onPointerUp={handlePointerUpReact}

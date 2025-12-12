@@ -11,7 +11,8 @@ export const ToolSelectorPanel: React.FC<ToolSelectorPanelProps> = ({
   onChangeTool
 }) => (
   <div className="panel">
-    <h2 className="panel-title">Tools</h2>
+    {/* Extra class so we can hide only this title on smaller screens */}
+    <h2 className="panel-title panel-title-tools">Tools</h2>
     <div className="tool-buttons">
       <button
         type="button"

@@ -47,33 +47,23 @@ export const BoardEditorPage: React.FC = () => {
     redo
   } = useBoardEditor(id);
 
+  // Derive board name from state (adjust if your meta shape differs)
+  const boardName = state?.meta?.name ?? 'Untitled board';
+
   return (
     <section className="page page-board-editor">
-      <BoardEditorHeader boardId={id} />
+      {/* Pass boardName instead of boardId */}
+      <BoardEditorHeader boardName={boardName} />
 
       <div className="board-editor-layout">
         <aside className="board-editor-sidebar">
-          <HistoryAndViewPanel
-            canUndo={canUndo}
-            canRedo={canRedo}
-            zoomPercent={zoomPercent}
-            onUndo={undo}
-            onRedo={redo}
-            onZoomChange={handleZoomChange}
-            onResetView={handleResetView}
+          {/* Tools first */}
+          <ToolSelectorPanel
+            activeTool={activeTool}
+            onChangeTool={setActiveTool}
           />
 
-          <ExportImportPanel
-            canExport={!!state}
-            onExportJson={handleExportJson}
-            onExportPng={handleExportPng}
-            onImportClick={handleImportClick}
-            fileInputRef={fileInputRef}
-            onImportFileChange={handleImportFileChange}
-          />
-
-          <ToolSelectorPanel activeTool={activeTool} onChangeTool={setActiveTool} />
-
+          {/* Then Tools & Selection */}
           <ToolAndSelectionPanel
             activeTool={activeTool}
             strokeColor={strokeColor}
@@ -86,6 +76,17 @@ export const BoardEditorPage: React.FC = () => {
             updateSelectionProp={updateSelectionProp}
           />
 
+          {/* Then Export & Import as dropdown */}
+          <ExportImportPanel
+            canExport={!!state}
+            onExportJson={handleExportJson}
+            onExportPng={handleExportPng}
+            onImportClick={handleImportClick}
+            fileInputRef={fileInputRef}
+            onImportFileChange={handleImportFileChange}
+          />
+
+          {/* Board Info at the very bottom */}
           {state && (
             <BoardInfoPanel
               meta={state.meta}
@@ -96,27 +97,40 @@ export const BoardEditorPage: React.FC = () => {
         </aside>
 
         <div className="board-editor-main">
-          {state ? (
-            <WhiteboardCanvas
-              width={CANVAS_WIDTH}
-              height={CANVAS_HEIGHT}
-              objects={state.objects}
-              selectedObjectIds={state.selectedObjectIds}
-              viewport={state.viewport}
-              activeTool={activeTool}
-              strokeColor={strokeColor}
-              strokeWidth={strokeWidth}
-              onCreateObject={handleCreateObject}
-              onSelectionChange={handleSelectionChange}
-              onUpdateObject={handleUpdateObject}
-              onViewportChange={handleViewportChange}
-              onCanvasReady={setCanvasEl}
-            />
-          ) : (
-            <div className="board-editor-placeholder">
-              <p>Loading board…</p>
-            </div>
-          )}
+          {/* History & View controls above the canvas */}
+          <HistoryAndViewPanel
+            canUndo={canUndo}
+            canRedo={canRedo}
+            zoomPercent={zoomPercent}
+            onUndo={undo}
+            onRedo={redo}
+            onZoomChange={handleZoomChange}
+            onResetView={handleResetView}
+          />
+
+          <div className="board-editor-canvas-wrapper">
+            {state ? (
+              <WhiteboardCanvas
+                width={CANVAS_WIDTH}
+                height={CANVAS_HEIGHT}
+                objects={state.objects}
+                selectedObjectIds={state.selectedObjectIds}
+                viewport={state.viewport}
+                activeTool={activeTool}
+                strokeColor={strokeColor}
+                strokeWidth={strokeWidth}
+                onCreateObject={handleCreateObject}
+                onSelectionChange={handleSelectionChange}
+                onUpdateObject={handleUpdateObject}
+                onViewportChange={handleViewportChange}
+                onCanvasReady={setCanvasEl}
+              />
+            ) : (
+              <div className="board-editor-placeholder">
+                <p>Loading board…</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </section>

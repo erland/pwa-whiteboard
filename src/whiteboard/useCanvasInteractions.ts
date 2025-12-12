@@ -9,7 +9,7 @@ import {
   resizeBounds,
   Bounds,
   ResizeHandleId,
-  canvasToWorld
+  canvasToWorld,
 } from './geometry';
 import type { DraftShape } from './drawing';
 import type { DrawingTool } from './whiteboardTypes';
@@ -76,7 +76,7 @@ export function useCanvasInteractions({
   onCreateObject,
   onSelectionChange,
   onUpdateObject,
-  onViewportChange
+  onViewportChange,
 }: CanvasInteractionsParams): CanvasInteractionsResult {
   const [draft, setDraft] = useState<DraftShape | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -91,8 +91,27 @@ export function useCanvasInteractions({
     return canvasToWorld(canvasX, canvasY, viewport);
   };
 
+  const setPointerCaptureSafe = (evt: React.PointerEvent<HTMLCanvasElement>) => {
+    const el = evt.target as HTMLCanvasElement;
+    try {
+      (el as any).setPointerCapture?.(evt.pointerId);
+    } catch {
+      // ignore
+    }
+  };
+
+  const releasePointerCaptureSafe = (evt: React.PointerEvent<HTMLCanvasElement>) => {
+    const el = evt.target as HTMLCanvasElement;
+    try {
+      (el as any).releasePointerCapture?.(evt.pointerId);
+    } catch {
+      // ignore
+    }
+  };
+
   const handlePointerDown = (evt: React.PointerEvent<HTMLCanvasElement>) => {
-    if (evt.button !== 0) return;
+    // Ignore non-left *mouse* buttons; don't block touch.
+    if (evt.pointerType === 'mouse' && evt.button !== 0) return;
 
     const pos = getCanvasPos(evt); // world coords
     const rect = (evt.target as HTMLCanvasElement).getBoundingClientRect();
@@ -124,10 +143,10 @@ export function useCanvasInteractions({
                   x: box.x,
                   y: box.y,
                   width: box.width,
-                  height: box.height
-                }
+                  height: box.height,
+                },
               });
-              (evt.target as HTMLCanvasElement).setPointerCapture(evt.pointerId);
+              setPointerCaptureSafe(evt);
               return;
             }
           }
@@ -142,7 +161,7 @@ export function useCanvasInteractions({
           kind: 'move',
           objectId: hitObj.id,
           lastX: pos.x,
-          lastY: pos.y
+          lastY: pos.y,
         });
       } else {
         onSelectionChange([]);
@@ -152,11 +171,11 @@ export function useCanvasInteractions({
           startCanvasY: canvasY,
           startOffsetX: viewport.offsetX ?? 0,
           startOffsetY: viewport.offsetY ?? 0,
-          zoomAtStart: viewport.zoom ?? 1
+          zoomAtStart: viewport.zoom ?? 1,
         });
       }
 
-      (evt.target as HTMLCanvasElement).setPointerCapture(evt.pointerId);
+      setPointerCaptureSafe(evt);
       return;
     }
 
@@ -173,7 +192,7 @@ export function useCanvasInteractions({
         textColor: strokeColor,
         strokeWidth,
         fontSize: 18,
-        text: 'Text'
+        text: 'Text',
       };
       onCreateObject(obj);
       onSelectionChange([id]);
@@ -194,7 +213,7 @@ export function useCanvasInteractions({
         fillColor: '#facc15',
         fontSize: 16,
         textColor: strokeColor,
-        text: 'Sticky note'
+        text: 'Sticky note',
       };
       onCreateObject(obj);
       onSelectionChange([id]);
@@ -207,9 +226,9 @@ export function useCanvasInteractions({
         id: generateObjectId(),
         strokeColor,
         strokeWidth,
-        points: [pos]
+        points: [pos],
       });
-      (evt.target as HTMLCanvasElement).setPointerCapture(evt.pointerId);
+      setPointerCaptureSafe(evt);
       return;
     }
 
@@ -222,9 +241,9 @@ export function useCanvasInteractions({
         startX: pos.x,
         startY: pos.y,
         currentX: pos.x,
-        currentY: pos.y
+        currentY: pos.y,
       });
-      (evt.target as HTMLCanvasElement).setPointerCapture(evt.pointerId);
+      setPointerCaptureSafe(evt);
       return;
     }
   };
@@ -242,13 +261,13 @@ export function useCanvasInteractions({
         if (current.kind === 'freehand') {
           return {
             ...current,
-            points: [...current.points, pos]
+            points: [...current.points, pos],
           };
         }
         return {
           ...current,
           currentX: pos.x,
-          currentY: pos.y
+          currentY: pos.y,
         };
       });
       return;
@@ -272,13 +291,13 @@ export function useCanvasInteractions({
 
       onUpdateObject(obj.id, {
         x: obj.x + dx,
-        y: obj.y + dy
+        y: obj.y + dy,
       });
 
       setDrag({
         ...drag,
         lastX: pos.x,
-        lastY: pos.y
+        lastY: pos.y,
       });
       return;
     }
@@ -293,7 +312,7 @@ export function useCanvasInteractions({
 
       onViewportChange({
         offsetX: newOffsetX,
-        offsetY: newOffsetY
+        offsetY: newOffsetY,
       });
       return;
     }
@@ -314,7 +333,7 @@ export function useCanvasInteractions({
           x: newBounds.x,
           y: newBounds.y,
           width: newBounds.width,
-          height: newBounds.height
+          height: newBounds.height,
         });
       }
     }
@@ -345,7 +364,7 @@ export function useCanvasInteractions({
         height: maxY - minY,
         strokeColor: draft.strokeColor,
         strokeWidth: draft.strokeWidth,
-        points: draft.points
+        points: draft.points,
       };
 
       onCreateObject(obj);
@@ -373,7 +392,7 @@ export function useCanvasInteractions({
       width: x2 - x1,
       height: y2 - y1,
       strokeColor,
-      strokeWidth
+      strokeWidth,
     };
 
     onCreateObject(obj);
@@ -388,12 +407,7 @@ export function useCanvasInteractions({
 
     setDraft(null);
     setDrag(null);
-
-    try {
-      (evt.target as HTMLCanvasElement).releasePointerCapture(evt.pointerId);
-    } catch {
-      // ignore
-    }
+    releasePointerCaptureSafe(evt);
   };
 
   const handlePointerUp = (evt: React.PointerEvent<HTMLCanvasElement>) => {
@@ -409,6 +423,6 @@ export function useCanvasInteractions({
     handlePointerDown,
     handlePointerMove,
     handlePointerUp,
-    handlePointerLeave
+    handlePointerLeave,
   };
 }

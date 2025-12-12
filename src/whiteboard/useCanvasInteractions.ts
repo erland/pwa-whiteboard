@@ -56,6 +56,10 @@ export type CanvasInteractionsParams = {
   onSelectionChange: (selectedIds: ObjectId[]) => void;
   onUpdateObject: (objectId: ObjectId, patch: Partial<WhiteboardObject>) => void;
   onViewportChange: (patch: Partial<Viewport>) => void;
+
+  // NEW: logical canvas size (same as the props.width / props.height)
+  canvasWidth: number;
+  canvasHeight: number;
 };
 
 export type CanvasInteractionsResult = {
@@ -77,6 +81,8 @@ export function useCanvasInteractions({
   onSelectionChange,
   onUpdateObject,
   onViewportChange,
+  canvasWidth,
+  canvasHeight,
 }: CanvasInteractionsParams): CanvasInteractionsResult {
   const [draft, setDraft] = useState<DraftShape | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -85,9 +91,16 @@ export function useCanvasInteractions({
     ('o_' + Math.random().toString(16).slice(2) + '_' + Date.now().toString(16)) as ObjectId;
 
   const getCanvasPos = (evt: React.PointerEvent<HTMLCanvasElement>) => {
-    const rect = (evt.target as HTMLCanvasElement).getBoundingClientRect();
-    const canvasX = evt.clientX - rect.left;
-    const canvasY = evt.clientY - rect.top;
+    const canvas = evt.target as HTMLCanvasElement;
+    const rect = canvas.getBoundingClientRect();
+
+    // Map from CSS pixels → logical canvas pixels (0..canvasWidth / 0..canvasHeight)
+    const scaleX = canvasWidth / rect.width || 1;
+    const scaleY = canvasHeight / rect.height || 1;
+
+    const canvasX = (evt.clientX - rect.left) * scaleX;
+    const canvasY = (evt.clientY - rect.top) * scaleY;
+
     return canvasToWorld(canvasX, canvasY, viewport);
   };
 
@@ -114,9 +127,12 @@ export function useCanvasInteractions({
     if (evt.pointerType === 'mouse' && evt.button !== 0) return;
 
     const pos = getCanvasPos(evt); // world coords
-    const rect = (evt.target as HTMLCanvasElement).getBoundingClientRect();
-    const canvasX = evt.clientX - rect.left;
-    const canvasY = evt.clientY - rect.top;
+    const canvas = evt.target as HTMLCanvasElement;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvasWidth / rect.width || 1;
+    const scaleY = canvasHeight / rect.height || 1;
+    const canvasX = (evt.clientX - rect.left) * scaleX;
+    const canvasY = (evt.clientY - rect.top) * scaleY;
 
     if (activeTool === 'select') {
       // 1) Resize if exactly one object selected and we hit a handle
@@ -250,9 +266,12 @@ export function useCanvasInteractions({
 
   const handlePointerMove = (evt: React.PointerEvent<HTMLCanvasElement>) => {
     const pos = getCanvasPos(evt); // world coords
-    const rect = (evt.target as HTMLCanvasElement).getBoundingClientRect();
-    const canvasX = evt.clientX - rect.left;
-    const canvasY = evt.clientY - rect.top;
+    const canvas = evt.target as HTMLCanvasElement;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvasWidth / rect.width || 1;
+    const scaleY = canvasHeight / rect.height || 1;
+    const canvasX = (evt.clientX - rect.left) * scaleX;
+    const canvasY = (evt.clientY - rect.top) * scaleY;
 
     // Update draft (drawing in progress)
     if (draft) {

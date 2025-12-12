@@ -34,6 +34,8 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = (props) => {
     onSelectionChange: props.onSelectionChange,
     onUpdateObject: props.onUpdateObject,
     onViewportChange: props.onViewportChange,
+    canvasWidth: props.width,
+    canvasHeight: props.height,
   });
 
   useCanvasDrawing({
@@ -143,7 +145,6 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = (props) => {
       style={{
         width: '100%',
         height: 'auto',
-        maxWidth: '100%',
         touchAction: 'none',
       }}
       onPointerDown={handlePointerDownReact}

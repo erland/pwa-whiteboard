@@ -2,6 +2,7 @@
 import React from 'react';
 import type { WhiteboardObject } from '../../../domain/types';
 import type { SelectionDetails } from '../useSelectionDetails';
+import { EDITABLE_PROP_DEFS, type EditablePropKey } from '../../../whiteboard/tools/selectionRegistry';
 
 type Props = {
   selection: SelectionDetails;
@@ -12,8 +13,62 @@ type Props = {
   ) => void;
 };
 
-function hasValue<T>(v: T | undefined): v is T {
-  return v !== undefined;
+function hasValue<T>(v: T | undefined | null): v is T {
+  return v !== undefined && v !== null;
+}
+
+function renderEditablePropControl(
+  key: EditablePropKey,
+  value: unknown,
+  updateSelectionProp: <K extends keyof WhiteboardObject>(
+    k: K,
+    v: WhiteboardObject[K]
+  ) => void
+): React.ReactNode {
+  const def = EDITABLE_PROP_DEFS[key];
+
+  if (def.control.kind === 'color') {
+    const v = typeof value === 'string' ? value : '#000000';
+    return (
+      <div className="panel-row" key={key}>
+        <label className="field-label">
+          <span className="field-label-inline">{def.label}</span>
+          <input
+            className="color-input"
+            type="color"
+            value={v}
+            onChange={(e) => updateSelectionProp(key as any, e.target.value as any)}
+            aria-label={def.label}
+          />
+        </label>
+      </div>
+    );
+  }
+
+  if (def.control.kind === 'range') {
+    const n = typeof value === 'number' ? value : def.control.min;
+    return (
+      <div className="panel-row" key={key}>
+        <label className="field-label">
+          <span className="field-label-inline">{def.label}</span>
+          <span className="field-value">{n}</span>
+        </label>
+        <input
+          type="range"
+          min={def.control.min}
+          max={def.control.max}
+          step={def.control.step}
+          value={n}
+          onChange={(e) => updateSelectionProp(key as any, Number(e.target.value) as any)}
+          style={{ width: '100%' }}
+          aria-label={def.label}
+        />
+      </div>
+    );
+  }
+
+  // textarea is handled separately (we only show it for single selection)
+  return null;
 }
 
 export const SelectionToolPanel: React.FC<Props> = ({
@@ -22,6 +77,12 @@ export const SelectionToolPanel: React.FC<Props> = ({
   updateSelectionProp
 }) => {
   const hasSelection = selection.selectedCount > 0;
+  const singleObj = selection.singleAnySelectedObject;
+
+  const singleCanEditText =
+    selection.selectedCount === 1 &&
+    selection.commonEditableProps.includes('text') &&
+    singleObj !== undefined;
 
   return (
     <div>
@@ -44,134 +105,30 @@ export const SelectionToolPanel: React.FC<Props> = ({
         </button>
       </div>
 
-      {/* Connector info (minimal, read-only) */}
-      {selection.isSingleConnectorSelected && selection.singleConnectorObject && (
-        <>
-          <div className="panel-row" style={{ marginTop: 10 }}>
-            <span className="field-label-inline">Type</span>
-            <span className="field-value">Connector</span>
-          </div>
+      {/* Capability-driven shared props across the current selection */}
+      {selection.commonEditableProps
+        .filter((k) => k !== 'text')
+        .map((key) => {
+          const shared = selection.sharedEditableValues[key];
+          if (!hasValue(shared as any)) return null;
+          return renderEditablePropControl(key, shared, updateSelectionProp);
+        })}
 
-          <div className="panel-row">
-            <span className="field-label-inline">From</span>
-            <span className="field-value">
-              {selection.singleConnectorObject.from?.objectId ?? '—'}
-            </span>
-          </div>
-
-          <div className="panel-row">
-            <span className="field-label-inline">To</span>
-            <span className="field-value">
-              {selection.singleConnectorObject.to?.objectId ?? '—'}
-            </span>
-          </div>
-        </>
-      )}
-
-      {/* Shared style props across selection */}
-      {hasValue(selection.sharedStrokeColor) && (
+      {/* Capability-driven text editing (only for single selection, to preserve v1 UX) */}
+      {singleCanEditText && (
         <div className="panel-row">
-          <label className="field-label">
-            <span className="field-label-inline">Stroke color</span>
-            <input
-              className="color-input"
-              type="color"
-              value={selection.sharedStrokeColor}
-              onChange={(e) => updateSelectionProp('strokeColor', e.target.value)}
-              aria-label="Stroke color"
-            />
-          </label>
-        </div>
-      )}
-
-      {hasValue(selection.sharedStrokeWidth) && (
-        <div className="panel-row">
-          <label className="field-label">
-            <span className="field-label-inline">Stroke width</span>
-            <span className="field-value">{selection.sharedStrokeWidth}</span>
-          </label>
-          <input
-            type="range"
-            min={1}
-            max={12}
-            step={1}
-            value={selection.sharedStrokeWidth}
-            onChange={(e) =>
-              updateSelectionProp('strokeWidth', Number(e.target.value))
-            }
-            style={{ width: '100%' }}
-            aria-label="Stroke width"
-          />
-        </div>
-      )}
-
-      {hasValue(selection.sharedFillColor) && (
-        <div className="panel-row">
-          <label className="field-label">
-            <span className="field-label-inline">Fill color</span>
-            <input
-              className="color-input"
-              type="color"
-              value={selection.sharedFillColor}
-              onChange={(e) => updateSelectionProp('fillColor', e.target.value)}
-              aria-label="Fill color"
-            />
-          </label>
-        </div>
-      )}
-
-      {hasValue(selection.sharedTextColor) && (
-        <div className="panel-row">
-          <label className="field-label">
-            <span className="field-label-inline">Text color</span>
-            <input
-              className="color-input"
-              type="color"
-              value={selection.sharedTextColor}
-              onChange={(e) => updateSelectionProp('textColor', e.target.value)}
-              aria-label="Text color"
-            />
-          </label>
-        </div>
-      )}
-
-      {hasValue(selection.sharedFontSize) && (
-        <div className="panel-row">
-          <label className="field-label">
-            <span className="field-label-inline">Font size</span>
-            <span className="field-value">{selection.sharedFontSize}</span>
-          </label>
-          <input
-            type="range"
-            min={8}
-            max={72}
-            step={1}
-            value={selection.sharedFontSize}
-            onChange={(e) =>
-              updateSelectionProp('fontSize', Number(e.target.value))
-            }
-            style={{ width: '100%' }}
-            aria-label="Font size"
-          />
-        </div>
-      )}
-
-      {/* Single text/sticky: edit text (minimal) */}
-      {(selection.isSingleTextSelected || selection.isSingleStickySelected) &&
-        selection.singleSelectedObject && (
-          <div className="panel-row">
-            <div style={{ width: '100%' }}>
-              <div className="field-label-inline" style={{ marginBottom: 6 }}>
-                Text
-              </div>
-              <textarea
-                className="text-input"
-                value={selection.singleSelectedObject.text ?? ''}
-                onChange={(e) => updateSelectionProp('text', e.target.value as any)}
-              />
+          <div style={{ width: '100%' }}>
+            <div className="field-label-inline" style={{ marginBottom: 6 }}>
+              {EDITABLE_PROP_DEFS.text.label}
             </div>
+            <textarea
+              className="text-input"
+              value={(singleObj?.text ?? '') as string}
+              onChange={(e) => updateSelectionProp('text' as any, e.target.value as any)}
+            />
           </div>
-        )}
+        </div>
+      )}
     </div>
   );
 };

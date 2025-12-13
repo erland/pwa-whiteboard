@@ -2,9 +2,21 @@ import type { DrawingTool } from '../whiteboardTypes';
 import type { DraftShape } from '../drawing';
 import type { ObjectId, Point, Viewport, WhiteboardObject } from '../../domain/types';
 
-import { startFreehandDraft, updateFreehandDraft, finishFreehandDraft } from './freehand/interactions';
-import { startRectangleDraft, updateRectangleDraft, finishRectangleDraft } from './rectangle/interactions';
-import { startEllipseDraft, updateEllipseDraft, finishEllipseDraft } from './ellipse/interactions';
+import {
+  startFreehandDraft,
+  updateFreehandDraft,
+  finishFreehandDraft,
+} from './freehand/interactions';
+import {
+  startRectangleDraft,
+  updateRectangleDraft,
+  finishRectangleDraft,
+} from './rectangle/interactions';
+import {
+  startEllipseDraft,
+  updateEllipseDraft,
+  finishEllipseDraft,
+} from './ellipse/interactions';
 import { createTextObject } from './text/interactions';
 import { createStickyNoteObject } from './stickyNote/interactions';
 import {
@@ -40,11 +52,6 @@ type DraftPointerMoveHandler = (draft: DraftShape, ctx: ToolPointerContext, pos:
 
 type DraftPointerUpHandler = (draft: DraftShape, ctx: ToolPointerContext, pos: Point) => ToolPointerUpResult;
 
-/**
- * Registry map refinement:
- * - No switches needed for tool pointer-down behavior.
- * - Adding a new tool becomes "implement tool module + add one line here".
- */
 const TOOL_POINTER_DOWN_HANDLERS: Partial<Record<DrawingTool, ToolPointerDownHandler>> = {
   freehand: (ctx, pos) => ({
     kind: 'draft',
@@ -78,26 +85,21 @@ const TOOL_POINTER_DOWN_HANDLERS: Partial<Record<DrawingTool, ToolPointerDownHan
     const { object, selectIds } = createStickyNoteObject({ pos, ...ctx });
     return object && selectIds ? { kind: 'create', object, selectIds } : { kind: 'noop' };
   },
-
-  // select intentionally has no handler here (core handles selection/pan/move/resize).
 };
 
-/**
- * Registry map refinement:
- * - No switches needed for draft pointer-move behavior.
- */
 const DRAFT_POINTER_MOVE_HANDLERS: Record<DraftKind, DraftPointerMoveHandler> = {
   freehand: (draft, _ctx, pos) => updateFreehandDraft(draft as any, pos),
   rectangle: (draft, _ctx, pos) => updateRectangleDraft(draft as any, pos),
   ellipse: (draft, _ctx, pos) => updateEllipseDraft(draft as any, pos),
   connector: (draft, ctx, pos) =>
-    updateConnectorDraft({ draft: draft as any, pos, objects: ctx.objects, viewport: ctx.viewport }),
+    updateConnectorDraft({
+      draft: draft as any,
+      pos,
+      objects: ctx.objects,
+      viewport: ctx.viewport,
+    }),
 };
 
-/**
- * Registry map refinement:
- * - No switches needed for draft pointer-up behavior.
- */
 const DRAFT_POINTER_UP_HANDLERS: Record<DraftKind, DraftPointerUpHandler> = {
   freehand: (draft) => {
     const { object, selectIds } = finishFreehandDraft(draft as any);
@@ -134,6 +136,9 @@ export function toolPointerDown(
   return handler ? handler(ctx, pos) : { kind: 'noop' };
 }
 
+/**
+ * Internal names (used by the registry maps).
+ */
 export function toolDraftPointerMove(
   draft: DraftShape,
   ctx: ToolPointerContext,
@@ -151,3 +156,10 @@ export function toolDraftPointerUp(
   const handler = DRAFT_POINTER_UP_HANDLERS[draft.kind];
   return handler(draft, ctx, pos);
 }
+
+/**
+ * Compatibility exports (useCanvasInteractions.ts expects these names).
+ * Keeps the "core pointer plumbing" file stable while we refactor internals.
+ */
+export const toolPointerMove = toolDraftPointerMove;
+export const toolPointerUp = toolDraftPointerUp;

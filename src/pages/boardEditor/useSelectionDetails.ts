@@ -1,19 +1,10 @@
 // src/pages/boardEditor/useSelectionDetails.ts
 import type { WhiteboardObject } from '../../domain/types';
-
-function getSharedProp<K extends keyof WhiteboardObject>(
-  objects: WhiteboardObject[],
-  key: K
-): WhiteboardObject[K] | undefined {
-  if (objects.length === 0) return undefined;
-  const first = objects[0][key];
-  if (first === undefined) return undefined;
-
-  for (const obj of objects) {
-    if (obj[key] !== first) return undefined;
-  }
-  return first;
-}
+import {
+  getCommonEditableProps,
+  getSharedPropValue,
+  type EditablePropKey,
+} from '../../whiteboard/tools/selectionRegistry';
 
 export type SelectionDetails = {
   selectedCount: number;
@@ -28,18 +19,24 @@ export type SelectionDetails = {
   isAllTextSelection: boolean;
   isAllConnectorSelection: boolean;
 
-  sharedStrokeColor?: string;
-  sharedStrokeWidth?: number;
-  sharedFillColor?: string;
-  sharedFontSize?: number;
-  sharedText?: string;
-  sharedTextColor?: string;
+  /**
+   * Capability-driven selection fields.
+   * - commonEditableProps: intersection of editable props across selected objects
+   * - sharedEditableValues: shared values for those props (only set when all selected objects have same value)
+   */
+  commonEditableProps: EditablePropKey[];
+  sharedEditableValues: Partial<Record<EditablePropKey, unknown>>;
+
+  /** Convenience: single selected object (any type). */
+  singleAnySelectedObject?: WhiteboardObject;
 };
 
 export function useSelectionDetails(
   selectedObjects: WhiteboardObject[]
 ): SelectionDetails {
   const selectedCount = selectedObjects.length;
+
+  const singleAnySelectedObject = selectedCount === 1 ? selectedObjects[0] : undefined;
 
   const isSingleTextSelected =
     selectedCount === 1 && selectedObjects[0].type === 'text';
@@ -60,27 +57,16 @@ export function useSelectionDetails(
   const isAllConnectorSelection =
     selectedCount > 0 && selectedObjects.every((obj) => obj.type === 'connector');
 
-  const sharedStrokeColor = getSharedProp(selectedObjects, 'strokeColor') as
-    | string
-    | undefined;
-
-  const sharedStrokeWidth = getSharedProp(selectedObjects, 'strokeWidth') as
-    | number
-    | undefined;
-
-  const sharedFillColor = getSharedProp(selectedObjects, 'fillColor') as
-    | string
-    | undefined;
-
-  const sharedFontSize = getSharedProp(selectedObjects, 'fontSize') as
-    | number
-    | undefined;
-
-  const sharedText = getSharedProp(selectedObjects, 'text') as string | undefined;
-
-  const sharedTextColor = getSharedProp(selectedObjects, 'textColor') as
-    | string
-    | undefined;
+  const commonEditableProps = getCommonEditableProps(selectedObjects);
+  const sharedEditableValues: Partial<Record<EditablePropKey, unknown>> = {};
+  for (const key of commonEditableProps) {
+    // NOTE: our editable prop keys are a subset of WhiteboardObject keys.
+    // We only surface a control if all selected objects share the same value.
+    sharedEditableValues[key] = getSharedPropValue(
+      selectedObjects,
+      key as keyof WhiteboardObject
+    );
+  }
 
   return {
     selectedCount,
@@ -89,13 +75,10 @@ export function useSelectionDetails(
     isSingleConnectorSelected,
     singleSelectedObject,
     singleConnectorObject,
+    singleAnySelectedObject,
     isAllTextSelection,
     isAllConnectorSelection,
-    sharedStrokeColor,
-    sharedStrokeWidth,
-    sharedFillColor,
-    sharedFontSize,
-    sharedText,
-    sharedTextColor
+    commonEditableProps,
+    sharedEditableValues
   };
 }

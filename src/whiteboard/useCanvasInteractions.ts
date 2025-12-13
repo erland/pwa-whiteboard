@@ -15,10 +15,12 @@ import {
   resizeBounds,
   Bounds,
   ResizeHandleId,
+  worldToCanvas,
   canvasToWorld,
   isConnectable,
   getPorts,
-  resolveAttachmentPoint
+  resolveAttachmentPoint,
+  resolveConnectorEndpoints
 } from './geometry';
 import type { DraftShape } from './drawing';
 import type { DrawingTool } from './whiteboardTypes';
@@ -48,7 +50,17 @@ type PanDragState = {
   zoomAtStart: number;
 };
 
-type DragState = MoveDragState | PanDragState | ResizeDragState;
+type ConnectorEndpointDragState = {
+  kind: 'connectorEndpoint';
+  connectorId: ObjectId;
+  endpoint: 'from' | 'to';
+};
+
+type DragState =
+  | MoveDragState
+  | PanDragState
+  | ResizeDragState
+  | ConnectorEndpointDragState;
 
 function clamp01(n: number): number {
   if (Number.isNaN(n)) return 0;
@@ -124,6 +136,61 @@ function pickAttachmentForObject(
   }
 
   return { type: 'edgeT', edge, t: clamp01(t) };
+}
+
+
+function hitTestConnectableObject(
+  objects: WhiteboardObject[],
+  x: number,
+  y: number
+): WhiteboardObject | null {
+  for (let i = objects.length - 1; i >= 0; i--) {
+    const obj = objects[i];
+    if (!isConnectable(obj)) continue;
+    const box = getBoundingBox(obj);
+    if (!box) continue;
+    const x2 = box.x + box.width;
+    const y2 = box.y + box.height;
+    if (x >= box.x && x <= x2 && y >= box.y && y <= y2) {
+      return obj;
+    }
+  }
+  return null;
+}
+
+function getConnectorEndpointHit(
+  connector: WhiteboardObject,
+  objects: WhiteboardObject[],
+  viewport: Viewport,
+  pointerCanvasX: number,
+  pointerCanvasY: number
+): 'from' | 'to' | null {
+  const endpoints = resolveConnectorEndpoints(objects, connector);
+  if (!endpoints) return null;
+
+  const a = worldToCanvas(endpoints.p1.x, endpoints.p1.y, viewport);
+  const b = worldToCanvas(endpoints.p2.x, endpoints.p2.y, viewport);
+
+  const dxA = pointerCanvasX - a.x;
+  const dyA = pointerCanvasY - a.y;
+  const dxB = pointerCanvasX - b.x;
+  const dyB = pointerCanvasY - b.y;
+
+  const dA2 = dxA * dxA + dyA * dyA;
+  const dB2 = dxB * dxB + dyB * dyB;
+
+  // Match the visual endpoint handle (~5px) but make it easier to grab.
+  const HIT_R = 10;
+  const hit2 = HIT_R * HIT_R;
+
+  const hitA = dA2 <= hit2;
+  const hitB = dB2 <= hit2;
+  if (!hitA && !hitB) return null;
+  if (hitA && !hitB) return 'from';
+  if (!hitA && hitB) return 'to';
+
+  // Both: pick the closest.
+  return dA2 <= dB2 ? 'from' : 'to';
 }
 
 export type CanvasInteractionsParams = {
@@ -294,6 +361,33 @@ export function useCanvasInteractions({
       // 2) Move selection or pan
       const hitObj = hitTest(objects, pos.x, pos.y);
       if (hitObj) {
+        // Special-case connectors: allow dragging endpoints to retarget / move anchors.
+        if (hitObj.type === 'connector') {
+          onSelectionChange([hitObj.id]);
+
+          const endpoint = getConnectorEndpointHit(
+            hitObj,
+            objects,
+            viewport,
+            canvasX,
+            canvasY
+          );
+
+          if (endpoint) {
+            setDrag({
+              kind: 'connectorEndpoint',
+              connectorId: hitObj.id,
+              endpoint
+            });
+            setPointerCaptureSafe(evt);
+            return;
+          }
+
+          // Clicked the connector line, but not an endpoint handle: select only.
+          setPointerCaptureSafe(evt);
+          return;
+        }
+
         onSelectionChange([hitObj.id]);
         setDrag({
           kind: 'move',
@@ -437,6 +531,48 @@ export function useCanvasInteractions({
 
     // Now we may need canvas coords (pan)
     const { canvasX, canvasY } = getCanvasXY(evt);
+
+    if (drag.kind === 'connectorEndpoint') {
+      const connector = objects.find((o) => o.id === drag.connectorId);
+      if (!connector || connector.type !== 'connector') return;
+
+      // Resolve the *other* endpoint so the attachment can "face" it.
+      const endpoints = resolveConnectorEndpoints(objects, connector);
+      const otherPoint = endpoints
+        ? drag.endpoint === 'from'
+          ? endpoints.p2
+          : endpoints.p1
+        : pos;
+
+      // Prefer re-attaching to the connectable object currently under pointer.
+      const hoverObj = hitTestConnectableObject(objects, pos.x, pos.y);
+
+      // Otherwise, move along the currently attached object (if still present).
+      const attachedId =
+        drag.endpoint === 'from'
+          ? connector.from?.objectId
+          : connector.to?.objectId;
+      const attachedObj = attachedId
+        ? objects.find((o) => o.id === attachedId)
+        : undefined;
+
+      const targetObj = hoverObj ?? (attachedObj && isConnectable(attachedObj) ? attachedObj : null);
+      if (!targetObj) return;
+
+      const newAttachment = pickAttachmentForObject(targetObj, pos, pos);
+
+      if (drag.endpoint === 'from') {
+        onUpdateObject(connector.id, {
+          from: { objectId: targetObj.id, attachment: newAttachment }
+        });
+      } else {
+        onUpdateObject(connector.id, {
+          to: { objectId: targetObj.id, attachment: newAttachment }
+        });
+      }
+
+      return;
+    }
 
     if (drag.kind === 'move') {
       const dx = pos.x - drag.lastX;

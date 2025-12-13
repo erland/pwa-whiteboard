@@ -3,18 +3,19 @@ import type {
   WhiteboardObject,
   Viewport,
   Point,
-  Attachment,
   WhiteboardState
 } from '../domain/types';
 
 import type { Bounds, ResizeHandleId } from './geometry/types';
 import { getHandlePositions, resizeBounds } from './geometry/handles';
-import { getConnectorBoundingBox, hitTestConnector } from './tools/connector/geometry';
-import { getFreehandBoundingBox } from './tools/freehand/geometry';
-import { getRectangleBoundingBox } from './tools/rectangle/geometry';
-import { getEllipseBoundingBox } from './tools/ellipse/geometry';
-import { getTextBoundingBox } from './tools/text/geometry';
-import { getStickyNoteBoundingBox } from './tools/stickyNote/geometry';
+import { getShape, getPortsFor } from './tools/shapeRegistry';
+
+// NOTE: Connector-specific helpers are still re-exported from the connector tool module
+// for backwards compatibility. A later step can move these behind the shape registry.
+export {
+  resolveAttachmentPoint,
+  resolveConnectorEndpoints,
+} from './tools/connector/geometry';
 
 export type { Bounds, ResizeHandleId };
 
@@ -55,30 +56,21 @@ export function canvasToWorld(
 /**
  * Compute the bounding box of an object in world coordinates.
  *
- * For connectors:
- * - Provide `stateOrObjects` so we can resolve endpoints and compute a padded bounds.
- * - If not provided, returns null.
+ * Registry-driven dispatch:
+ * - The specific shape/tool implementation owns its bounding box computation.
+ * - Some object types (e.g. connector) require the full object list to resolve endpoints;
+ *   pass `stateOrObjects` for those cases.
  */
 export function getBoundingBox(
   obj: WhiteboardObject,
   stateOrObjects?: WhiteboardState | WhiteboardObject[]
 ): Bounds | null {
-  switch (obj.type) {
-    case 'connector':
-      return getConnectorBoundingBox(obj, stateOrObjects);
-    case 'freehand':
-      return getFreehandBoundingBox(obj);
-    case 'rectangle':
-      return getRectangleBoundingBox(obj);
-    case 'ellipse':
-      return getEllipseBoundingBox(obj);
-    case 'text':
-      return getTextBoundingBox(obj);
-    case 'stickyNote':
-      return getStickyNoteBoundingBox(obj);
-    default:
-      return null;
-  }
+  const objects = Array.isArray(stateOrObjects)
+    ? stateOrObjects
+    : stateOrObjects?.objects;
+
+  const shape = getShape(obj.type);
+  return shape.getBoundingBox(obj, objects ? { objects } : undefined);
 }
 
 export { getHandlePositions, resizeBounds };
@@ -115,10 +107,10 @@ export function hitTestResizeHandleCanvas(
 /**
  * Hit-test objects from topmost to bottom-most.
  * x, y are world coordinates.
- */
-/**
- * Hit-test objects from topmost to bottom-most.
- * x, y are world coordinates.
+ *
+ * Registry-driven dispatch:
+ * - If the shape provides a precise hitTest, use it.
+ * - Otherwise fall back to bounding-box hit testing.
  */
 export function hitTest(
   objects: WhiteboardObject[],
@@ -127,14 +119,14 @@ export function hitTest(
 ): WhiteboardObject | null {
   for (let i = objects.length - 1; i >= 0; i--) {
     const obj = objects[i];
+    const shape = getShape(obj.type);
 
-    if (obj.type === 'connector') {
-      if (hitTestConnector(objects, obj, x, y)) return obj;
+    if (shape.hitTest) {
+      if (shape.hitTest(obj, x, y, { objects })) return obj;
       continue;
     }
 
-    // Default bbox hit test
-    const box = getBoundingBox(obj);
+    const box = shape.getBoundingBox(obj, { objects });
     if (!box) continue;
 
     const x2 = box.x + box.width;
@@ -148,10 +140,17 @@ export function hitTest(
   return null;
 }
 
-// Connector-related exports (kept in geometry.ts for backwards compatibility)
-export {
-  isConnectable,
-  getPorts,
-  resolveAttachmentPoint,
-  resolveConnectorEndpoints
-} from './tools/connector/geometry';
+/**
+ * Backwards-compatible helper used by some existing code:
+ * an object is connectable if it exposes at least one port.
+ */
+export function isConnectable(obj: WhiteboardObject): boolean {
+  return getPortsFor(obj).length > 0;
+}
+
+/**
+ * Backwards-compatible helper used by some existing code.
+ */
+export function getPorts(obj: WhiteboardObject) {
+  return getPortsFor(obj);
+}

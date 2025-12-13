@@ -3,11 +3,7 @@
 import type { WhiteboardObject, WhiteboardObjectType } from '../../domain/types';
 import type { EditablePropKey, SelectionCapabilities } from './selection/types';
 
-import { rectangleSelectionCapabilities } from './rectangle/selection';
-import { ellipseSelectionCapabilities } from './ellipse/selection';
-import { stickyNoteSelectionCapabilities } from './stickyNote/selection';
-import { textSelectionCapabilities } from './text/selection';
-import { connectorSelectionCapabilities } from './connector/selection';
+import { getShape } from './shapeRegistry';
 
 /**
  * Selection UI capabilities.
@@ -50,17 +46,14 @@ export const EDITABLE_PROP_DEFS: Record<EditablePropKey, EditablePropDefinition>
   text: { key: 'text', label: 'Text', control: { kind: 'textarea' } },
 };
 
-const SELECTION_CAPABILITIES: Partial<Record<WhiteboardObjectType, SelectionCapabilities>> = {
-  rectangle: rectangleSelectionCapabilities,
-  ellipse: ellipseSelectionCapabilities,
-  stickyNote: stickyNoteSelectionCapabilities,
-  text: textSelectionCapabilities,
-  connector: connectorSelectionCapabilities,
-  // freehand intentionally omitted (no editable selection props)
-};
-
 export function getSelectionCapabilities(objType: WhiteboardObjectType): SelectionCapabilities {
-  return SELECTION_CAPABILITIES[objType] ?? { editableProps: [] };
+  // Step C2: selection capabilities come from each shape definition.
+  // If a shape doesn't define selectionCaps, treat it as non-editable.
+  try {
+    return getShape(objType).selectionCaps ?? { editableProps: [] };
+  } catch {
+    return { editableProps: [] };
+  }
 }
 
 export function getEditablePropsForObject(obj: WhiteboardObject): readonly EditablePropKey[] {

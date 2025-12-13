@@ -6,12 +6,7 @@ import {
   getHandlePositions,
   resolveConnectorEndpoints
 } from './geometry';
-import { drawConnectorObject } from './tools/connector/draw';
-import { drawFreehandObject } from './tools/freehand/draw';
-import { drawRectangleObject } from './tools/rectangle/draw';
-import { drawEllipseObject } from './tools/ellipse/draw';
-import { drawStickyNoteObject } from './tools/stickyNote/draw';
-import { drawTextObject } from './tools/text/draw';
+import { getShape } from './tools/shapeRegistry';
 
 
 export type DraftShape =
@@ -61,36 +56,15 @@ export function drawObject(
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
 
-  if (obj.type === 'connector') {
-    if (!allObjects) return;
-    drawConnectorObject(ctx, obj, allObjects, viewport);
-    return;
-  }
+  // Preserve previous behavior: connectors require the full object list to resolve endpoints.
+  if (obj.type === 'connector' && !allObjects) return;
 
-  if (obj.type === 'freehand') {
-    drawFreehandObject(ctx, obj, viewport);
-    return;
-  }
+  const shape = getShape(obj.type);
+  shape.draw(ctx, obj, viewport, {
+    objects: allObjects,
+    fallbackStrokeColor,
+  });
 
-  if (obj.type === 'rectangle') {
-    drawRectangleObject(ctx, obj, viewport);
-    return;
-  }
-
-  if (obj.type === 'ellipse') {
-    drawEllipseObject(ctx, obj, viewport);
-    return;
-  }
-
-  if (obj.type === 'stickyNote') {
-    drawStickyNoteObject(ctx, obj, viewport, fallbackStrokeColor);
-    return;
-  }
-
-  if (obj.type === 'text') {
-    drawTextObject(ctx, obj, viewport, fallbackStrokeColor);
-    return;
-  }
 }
 
 function drawConnectorSelection(

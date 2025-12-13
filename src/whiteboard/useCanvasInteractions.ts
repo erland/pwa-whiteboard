@@ -22,7 +22,7 @@ import {
 } from './geometry';
 import type { DraftShape } from './drawing';
 import type { DrawingTool } from './whiteboardTypes';
-import { toolPointerDown, toolPointerMove, toolPointerUp } from './tools/interactionsRegistry';
+import { toolPointerDown, toolPointerMove, toolPointerUp } from './tools/shapeRegistry';
 import { pickAttachmentForObject } from './tools/connector/interactions';
 
 type ResizeDragState = {
@@ -350,7 +350,7 @@ export function useCanvasInteractions({
       if (!targetObj) return;
 
       // Allow continuous anchor motion (edgeT/perimeterAngle) while still supporting ports.
-      const newAttachment: Attachment = pickAttachmentForObject(targetObj, pos, viewport, otherPoint);
+      const newAttachment: Attachment = pickAttachmentForObject(targetObj, pos, viewport);
 
       if (drag.endpoint === 'from') {
         onUpdateObject(connector.id, {

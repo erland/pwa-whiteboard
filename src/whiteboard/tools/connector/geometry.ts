@@ -8,7 +8,7 @@ import type {
 } from '../../../domain/types';
 import type { Bounds } from '../../geometry/types';
 
-import { getPortsForObject, isObjectConnectable } from '../portsRegistry';
+import { getPortsFor } from '../shapeRegistry';
 
 function clamp01(n: number): number {
   if (Number.isNaN(n)) return 0;
@@ -56,7 +56,7 @@ function getObjectCenter(obj: WhiteboardObject): Point {
  * A shape is connectable if it exposes at least one port.
  */
 export function isConnectable(obj: WhiteboardObject): boolean {
-  return isObjectConnectable(obj);
+  return getPortsFor(obj).length > 0;
 }
 
 /**
@@ -69,10 +69,7 @@ export function isConnectable(obj: WhiteboardObject): boolean {
 export function getPorts(
   obj: WhiteboardObject
 ): Array<{ portId: string; point: Point }> {
-  // Connectors depend on ports provided by shapes.
-  // Refinement: the mapping of object type -> port provider lives in portsRegistry.ts
-  // so this module doesn't need a switch for every shape type.
-  return getPortsForObject(obj);
+  return getPortsFor(obj);
 }
 
 /**

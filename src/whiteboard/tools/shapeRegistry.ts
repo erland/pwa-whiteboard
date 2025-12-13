@@ -11,7 +11,7 @@
  *   this module (not a separate interactionsRegistry).
  */
 
-import type { WhiteboardObject, WhiteboardObjectType, Point, ObjectId } from '../../domain/types';
+import type { WhiteboardObject, WhiteboardObjectType, Point, ObjectId, Viewport } from '../../domain/types';
 import type { ShapeToolDefinition, ToolPointerContext, ToolCreateResult } from './shapeTypes';
 import type { ObjectPort } from './shapeTypes';
 import type { SelectionCapabilities } from './selection/types';
@@ -140,7 +140,8 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
 
   stickyNote: {
     type: 'stickyNote',
-    draw: (ctx, obj, viewport, env) => drawStickyNoteObject(ctx, obj, viewport, env.fallbackStrokeColor ?? '#000000'),
+    draw: (ctx, obj, viewport, env) =>
+      drawStickyNoteObject(ctx, obj, viewport, env.fallbackStrokeColor ?? '#000000'),
     getBoundingBox: (obj) => getStickyNoteBoundingBox(obj),
     getPorts: (obj): ObjectPort[] => getStickyNotePorts(obj),
     selectionCaps: stickyNoteSelectionCapabilities,
@@ -201,9 +202,7 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
 };
 
 export function getShape(type: WhiteboardObjectType): ShapeToolDefinition {
-  const def = SHAPES[type];
-  if (!def) throw new Error(`Unknown shape: ${type}`);
-  return def;
+  return SHAPES[type];
 }
 
 export function getPortsFor(obj: WhiteboardObject): ObjectPort[] {
@@ -255,16 +254,20 @@ export function toolPointerDown(
   const start = def.draft?.startDraft;
   if (!start) return { kind: 'noop' };
 
-  const draft = start(ctx, pos);
-  if (!draft) return { kind: 'noop' };
+  const draft0 = start(ctx, pos);
+  if (!draft0) return { kind: 'noop' };
+
+  // Step D1: tag the draft with its owning tool/object type so tools can reuse
+  // an existing draft kind but still dispatch update/finish to the owning tool.
+  const draft = ({ ...draft0, toolType: def.type } as unknown) as DraftShape;
 
   return { kind: 'draft', draft, capturePointer: true };
 }
 
 function getDefForDraft(draft: DraftShape): ShapeToolDefinition | undefined {
-  // DraftShape.kind values are aligned with object types for now:
-  // 'freehand' | 'rectangle' | 'ellipse' | 'connector'
-  return SHAPES[draft.kind as unknown as WhiteboardObjectType];
+  // Step D1: Prefer toolType if present; fall back to the draft kind.
+  const key = ((draft as any).toolType ?? draft.kind) as WhiteboardObjectType;
+  return SHAPES[key];
 }
 
 export function toolPointerMove(

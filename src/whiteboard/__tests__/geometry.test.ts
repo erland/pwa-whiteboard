@@ -49,9 +49,38 @@ describe('whiteboard/geometry (Step 2 primitives)', () => {
   });
 
   describe('getPorts', () => {
-    test('returns empty array by default (Step 2)', () => {
-      const rect: WhiteboardObject = { id: 'r1', type: 'rectangle', x: 0, y: 0, width: 10, height: 10 };
-      expect(getPorts(rect)).toEqual([]);
+    test('returns default rectangle ports (center + 4 sides)', () => {
+      const rect: WhiteboardObject = {
+        id: 'r1',
+        type: 'rectangle',
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10
+      };
+  
+      expect(getPorts(rect)).toEqual([
+        { portId: 'center', point: { x: 5, y: 5 } },
+        { portId: 'top', point: { x: 5, y: 0 } },
+        { portId: 'right', point: { x: 10, y: 5 } },
+        { portId: 'bottom', point: { x: 5, y: 10 } },
+        { portId: 'left', point: { x: 0, y: 5 } }
+      ]);
+    });
+  
+    test('returns only center port when rectangle has no meaningful dimensions', () => {
+      const rect: WhiteboardObject = {
+        id: 'r1',
+        type: 'rectangle',
+        x: 3,
+        y: 7,
+        width: 0,
+        height: 10
+      };
+  
+      expect(getPorts(rect)).toEqual([
+        { portId: 'center', point: { x: 3, y: 7 } }
+      ]);
     });
   });
 
@@ -297,9 +326,38 @@ describe('whiteboard/geometry (Step 2+3 primitives)', () => {
   });
 
   describe('getPorts', () => {
-    test('returns empty array by default (Step 2)', () => {
-      const rect: WhiteboardObject = { id: 'r1', type: 'rectangle', x: 0, y: 0, width: 10, height: 10 };
-      expect(getPorts(rect)).toEqual([]);
+    test('returns default rectangle ports (center + 4 sides)', () => {
+      const rect: WhiteboardObject = {
+        id: 'r1',
+        type: 'rectangle',
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10
+      };
+  
+      expect(getPorts(rect)).toEqual([
+        { portId: 'center', point: { x: 5, y: 5 } },
+        { portId: 'top', point: { x: 5, y: 0 } },
+        { portId: 'right', point: { x: 10, y: 5 } },
+        { portId: 'bottom', point: { x: 5, y: 10 } },
+        { portId: 'left', point: { x: 0, y: 5 } }
+      ]);
+    });
+  
+    test('returns only center port when rectangle has no meaningful dimensions', () => {
+      const rect: WhiteboardObject = {
+        id: 'r1',
+        type: 'rectangle',
+        x: 3,
+        y: 7,
+        width: 0,
+        height: 10
+      };
+  
+      expect(getPorts(rect)).toEqual([
+        { portId: 'center', point: { x: 3, y: 7 } }
+      ]);
     });
   });
 

@@ -1,5 +1,5 @@
 // src/whiteboard/drawing.ts
-import type { WhiteboardObject, Viewport, Point, ObjectId, Attachment } from '../domain/types';
+import type {WhiteboardObject, Viewport, Point, ObjectId, Attachment, WhiteboardObjectType} from '../domain/types';
 import {
   worldToCanvas,
   getBoundingBox,
@@ -9,29 +9,39 @@ import {
 import { getShape } from './tools/shapeRegistry';
 
 
+export type DraftBase = {
+  id: ObjectId;
+  strokeColor: string;
+  strokeWidth: number;
+
+  /**
+   * Optional "owner" tool/object type for this draft.
+   *
+   * Step D1: Keep DraftShape kinds stable (freehand/rectangle/ellipse/connector),
+   * but allow tools to reuse an existing draft kind while still dispatching
+   * update/finish logic to the owning tool type.
+   *
+   * Example future use: a 'diamond' tool could reuse the 'rectangle' draft kind
+   * (box-like drag) while setting toolType='diamond' so finishDraft creates a
+   * Diamond object.
+   */
+  toolType?: WhiteboardObjectType;
+};
+
 export type DraftShape =
-  | {
+  | (DraftBase & {
       kind: 'freehand';
-      id: ObjectId;
-      strokeColor: string;
-      strokeWidth: number;
       points: Point[];
-    }
-  | {
+    })
+  | (DraftBase & {
       kind: 'rectangle' | 'ellipse';
-      id: ObjectId;
-      strokeColor: string;
-      strokeWidth: number;
       startX: number;
       startY: number;
       currentX: number;
       currentY: number;
-    }
-  | {
+    })
+  | (DraftBase & {
       kind: 'connector';
-      id: ObjectId;
-      strokeColor: string;
-      strokeWidth: number;
       fromObjectId: ObjectId;
       fromAttachment: Attachment;
       fromPoint: Point; // resolved world point for the start
@@ -40,7 +50,7 @@ export type DraftShape =
       toObjectId?: ObjectId;
       toAttachment?: Attachment;
       toPoint?: Point;
-    };
+    });
 
 /**
  * Draw a single whiteboard object.

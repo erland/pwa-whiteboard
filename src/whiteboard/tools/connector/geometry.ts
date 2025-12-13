@@ -8,6 +8,8 @@ import type {
 } from '../../../domain/types';
 import type { Bounds } from '../../geometry/types';
 
+import { getPortsForObject, isObjectConnectable } from '../portsRegistry';
+
 function clamp01(n: number): number {
   if (Number.isNaN(n)) return 0;
   return Math.max(0, Math.min(1, n));
@@ -51,28 +53,26 @@ function getObjectCenter(obj: WhiteboardObject): Point {
 
 /**
  * Whether an object can be a connector endpoint target.
- * For now we intentionally disallow connecting to freehand and connectors.
+ * A shape is connectable if it exposes at least one port.
  */
 export function isConnectable(obj: WhiteboardObject): boolean {
-  if (!obj) return false;
-  if (obj.type === 'connector') return false;
-  if (obj.type === 'freehand') return false; // keep simple for v1
-  return (
-    obj.type === 'rectangle' ||
-    obj.type === 'ellipse' ||
-    obj.type === 'text' ||
-    obj.type === 'stickyNote'
-  );
+  return isObjectConnectable(obj);
 }
 
 /**
- * Optional named ports exposed by objects.
- * For Step 2, return empty by default.
+ * Named ports exposed by objects.
+ *
+ * Step 6: connectors depend on ports provided by shapes.
+ * - Each shape tool owns its own port layout in its tool module.
+ * - Connectors only call this function; they don't hardcode shape types.
  */
 export function getPorts(
-  _obj: WhiteboardObject
+  obj: WhiteboardObject
 ): Array<{ portId: string; point: Point }> {
-  return [];
+  // Connectors depend on ports provided by shapes.
+  // Refinement: the mapping of object type -> port provider lives in portsRegistry.ts
+  // so this module doesn't need a switch for every shape type.
+  return getPortsForObject(obj);
 }
 
 /**

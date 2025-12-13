@@ -81,15 +81,24 @@ function getCenter(obj: WhiteboardObject): Point {
 
 /**
  * Pick an Attachment for an object based on:
- * - ports (if any) preferred
- * - ellipse: perimeterAngle facing `otherPoint` (or pointer)
- * - rect-like: edgeT on side facing `otherPoint` (or pointer), with t from pointer projection
+ * - If the pointer is close to a named port: snap to { type: 'port' }.
+ * - Otherwise:
+ *   - ellipse: { type: 'perimeterAngle' } (continuous around perimeter)
+ *   - rect-like: { type: 'edgeT' } (continuous along edges)
+ *
+ * This keeps "ports provided by shapes" (future-proofing for e.g. process arrows),
+ * while still allowing free movement of anchors along rectangle/ellipse boundaries.
  */
 function pickAttachmentForObject(
   obj: WhiteboardObject,
   pointer: Point,
+  viewport: Viewport,
   otherPoint?: Point
 ): Attachment {
+  const zoom = viewport.zoom ?? 1;
+  // Snap radius in pixels, converted to world units.
+  const snapWorld = 12 / Math.max(0.0001, zoom);
+
   const ports = getPorts(obj);
   if (ports.length > 0) {
     let best = ports[0];
@@ -101,23 +110,26 @@ function pickAttachmentForObject(
         best = ports[i];
       }
     }
-    return { type: 'port', portId: best.portId };
+
+    // Only snap to a port if we are close enough.
+    if (bestD <= snapWorld * snapWorld) {
+      return { type: 'port', portId: best.portId };
+    }
   }
 
   const bounds = getBoundingBox(obj);
-  if (!bounds) {
-    return { type: 'fallback', anchor: 'center' };
-  }
+  if (!bounds) return { type: 'fallback', anchor: 'center' };
 
   const c = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
   const ref = otherPoint ?? pointer;
 
+  // Continuous attachment around ellipse perimeter
   if (obj.type === 'ellipse') {
     const angle = Math.atan2(ref.y - c.y, ref.x - c.x);
     return { type: 'perimeterAngle', angleRad: angle };
   }
 
-  // Rect-like behavior (rectangle, text, stickyNote)
+  // Rect-like behavior (rectangle, stickyNote, text, etc.)
   const dx = ref.x - c.x;
   const dy = ref.y - c.y;
 
@@ -137,6 +149,7 @@ function pickAttachmentForObject(
 
   return { type: 'edgeT', edge, t: clamp01(t) };
 }
+
 
 
 function hitTestConnectableObject(
@@ -291,7 +304,7 @@ export function useCanvasInteractions({
       const hitObj = hitTest(objects, pos.x, pos.y);
       if (!hitObj || !isConnectable(hitObj)) return;
 
-      const fromAttachment = pickAttachmentForObject(hitObj, pos);
+      const fromAttachment = pickAttachmentForObject(hitObj, pos, viewport);
       const fromPoint = resolveAttachmentPoint(hitObj, fromAttachment, pos);
 
       setDraft({
@@ -491,7 +504,7 @@ export function useCanvasInteractions({
       const hitObj = hitTest(objects, pos.x, pos.y);
 
       if (hitObj && isConnectable(hitObj) && hitObj.id !== draft.fromObjectId) {
-        const toAttachment = pickAttachmentForObject(hitObj, pos, fromCenter);
+        const toAttachment = pickAttachmentForObject(hitObj, pos, viewport, fromCenter);
         const toPoint = resolveAttachmentPoint(hitObj, toAttachment, fromCenter);
 
         setDraft({
@@ -559,7 +572,7 @@ export function useCanvasInteractions({
       const targetObj = hoverObj ?? (attachedObj && isConnectable(attachedObj) ? attachedObj : null);
       if (!targetObj) return;
 
-      const newAttachment = pickAttachmentForObject(targetObj, pos, pos);
+      const newAttachment = pickAttachmentForObject(targetObj, pos, viewport, pos);
 
       if (drag.endpoint === 'from') {
         onUpdateObject(connector.id, {
@@ -718,7 +731,7 @@ export function useCanvasInteractions({
         const hitObj = hitTest(objects, pos.x, pos.y);
         if (hitObj && isConnectable(hitObj) && hitObj.id !== draft.fromObjectId) {
           toObj = hitObj;
-          toAttachment = pickAttachmentForObject(hitObj, pos, fromCenter);
+          toAttachment = pickAttachmentForObject(hitObj, pos, viewport, fromCenter);
         }
       }
 

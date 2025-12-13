@@ -6,6 +6,13 @@ import {
   getHandlePositions,
   resolveConnectorEndpoints
 } from './geometry';
+import { drawConnectorObject } from './tools/connector/draw';
+import { drawFreehandObject } from './tools/freehand/draw';
+import { drawRectangleObject } from './tools/rectangle/draw';
+import { drawEllipseObject } from './tools/ellipse/draw';
+import { drawStickyNoteObject } from './tools/stickyNote/draw';
+import { drawTextObject } from './tools/text/draw';
+
 
 export type DraftShape =
   | {
@@ -40,35 +47,6 @@ export type DraftShape =
       toPoint?: Point;
     };
 
-function drawConnector(
-  ctx: CanvasRenderingContext2D,
-  obj: WhiteboardObject,
-  objects: WhiteboardObject[],
-  viewport: Viewport
-): void {
-  const endpoints = resolveConnectorEndpoints(objects, obj);
-  if (!endpoints) return;
-
-  const stroke = obj.strokeColor ?? '#e5e7eb';
-  const widthPx = obj.strokeWidth ?? 2;
-
-  const a = worldToCanvas(endpoints.p1.x, endpoints.p1.y, viewport);
-  const b = worldToCanvas(endpoints.p2.x, endpoints.p2.y, viewport);
-
-  ctx.save();
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = stroke;
-  ctx.lineWidth = widthPx;
-
-  ctx.beginPath();
-  ctx.moveTo(a.x, a.y);
-  ctx.lineTo(b.x, b.y);
-  ctx.stroke();
-
-  ctx.restore();
-}
-
 /**
  * Draw a single whiteboard object.
  */
@@ -79,107 +57,38 @@ export function drawObject(
   fallbackStrokeColor: string,
   allObjects?: WhiteboardObject[]
 ): void {
-  const stroke = obj.strokeColor ?? '#e5e7eb';
-  const widthPx = obj.strokeWidth ?? 2;
-  const toCanvas = (x: number, y: number) => worldToCanvas(x, y, viewport);
-
+  // Keep shared canvas defaults here; per-tool drawing lives in tool modules.
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
 
   if (obj.type === 'connector') {
     if (!allObjects) return;
-    drawConnector(ctx, obj, allObjects, viewport);
+    drawConnectorObject(ctx, obj, allObjects, viewport);
     return;
   }
 
-  if (obj.type === 'freehand' && obj.points && obj.points.length > 1) {
-    const pts = obj.points;
-    ctx.beginPath();
-    const first = toCanvas(pts[0].x, pts[0].y);
-    ctx.moveTo(first.x, first.y);
-    for (let i = 1; i < pts.length; i++) {
-      const p = toCanvas(pts[i].x, pts[i].y);
-      ctx.lineTo(p.x, p.y);
-    }
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth = widthPx;
-    ctx.stroke();
+  if (obj.type === 'freehand') {
+    drawFreehandObject(ctx, obj, viewport);
     return;
   }
 
   if (obj.type === 'rectangle') {
-    const { x, y, width: w = 0, height: h = 0 } = obj;
-    const topLeft = toCanvas(x, y);
-    const bottomRight = toCanvas(x + w, y + h);
-    const drawW = bottomRight.x - topLeft.x;
-    const drawH = bottomRight.y - topLeft.y;
-
-    if (obj.fillColor) {
-      ctx.fillStyle = obj.fillColor;
-      ctx.fillRect(topLeft.x, topLeft.y, drawW, drawH);
-    }
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth = widthPx;
-    ctx.strokeRect(topLeft.x, topLeft.y, drawW, drawH);
+    drawRectangleObject(ctx, obj, viewport);
     return;
   }
 
   if (obj.type === 'ellipse') {
-    const { x, y, width: w = 0, height: h = 0 } = obj;
-    const center = toCanvas(x + w / 2, y + h / 2);
-    const zoom = viewport.zoom ?? 1;
-    const radiusX = (w / 2) * zoom;
-    const radiusY = (h / 2) * zoom;
-    ctx.beginPath();
-    ctx.ellipse(center.x, center.y, Math.abs(radiusX), Math.abs(radiusY), 0, 0, Math.PI * 2);
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth = widthPx;
-    ctx.stroke();
+    drawEllipseObject(ctx, obj, viewport);
     return;
   }
 
   if (obj.type === 'stickyNote') {
-    const { x, y, width: w = 160, height: h = 100 } = obj;
-    const topLeft = toCanvas(x, y);
-    const bottomRight = toCanvas(x + w, y + h);
-    const drawW = bottomRight.x - topLeft.x;
-    const drawH = bottomRight.y - topLeft.y;
-
-    const fill = obj.fillColor ?? '#facc15';
-    const border = obj.strokeColor ?? '#f59e0b';
-
-    ctx.fillStyle = fill;
-    ctx.strokeStyle = border;
-    ctx.lineWidth = obj.strokeWidth ?? 1.5;
-    ctx.beginPath();
-    ctx.rect(topLeft.x, topLeft.y, drawW, drawH);
-    ctx.fill();
-    ctx.stroke();
-
-    if (obj.text) {
-      const fontSize = obj.fontSize ?? 16;
-      ctx.font = `${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
-      ctx.textBaseline = 'top';
-      ctx.textAlign = 'left';
-      const textColor = obj.textColor ?? fallbackStrokeColor ?? '#e5e7eb';
-      ctx.fillStyle = textColor;
-      const padding = 8;
-      const textPos = toCanvas(x + padding, y + padding);
-      ctx.fillText(obj.text, textPos.x, textPos.y, drawW - padding * 2);
-    }
+    drawStickyNoteObject(ctx, obj, viewport, fallbackStrokeColor);
     return;
   }
 
   if (obj.type === 'text') {
-    if (!obj.text) return;
-    const fontSize = obj.fontSize ?? 18;
-    const pos = toCanvas(obj.x, obj.y);
-    ctx.font = `${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
-    ctx.textBaseline = 'top';
-    ctx.textAlign = 'left';
-    const textColor = obj.textColor ?? fallbackStrokeColor ?? '#e5e7eb';
-    ctx.fillStyle = textColor;
-    ctx.fillText(obj.text, pos.x, pos.y);
+    drawTextObject(ctx, obj, viewport, fallbackStrokeColor);
     return;
   }
 }

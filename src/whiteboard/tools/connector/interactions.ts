@@ -13,6 +13,7 @@ import {
   resolveAttachmentPoint,
 } from '../../geometry';
 import type { DraftShape } from '../../drawing';
+import { getShape, getPortsFor } from '../shapeRegistry';
 
 function clamp01(n: number): number {
   if (Number.isNaN(n)) return 0;
@@ -31,6 +32,24 @@ function getCenter(obj: WhiteboardObject): Point {
   return { x: obj.x ?? 0, y: obj.y ?? 0 };
 }
 
+function pickNearestPortAttachment(obj: WhiteboardObject, pos: Point): Attachment {
+  const ports = getPortsFor(obj);
+  if (ports.length === 0) return { type: 'fallback', anchor: 'center' };
+
+  let best = ports[0];
+  let bestD2 = Infinity;
+  for (const p of ports) {
+    const dx = p.point.x - pos.x;
+    const dy = p.point.y - pos.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < bestD2) {
+      bestD2 = d2;
+      best = p;
+    }
+  }
+  return { type: 'port', portId: best.portId };
+}
+
 /**
  * Pick an Attachment for an object based on:
  * - If the pointer is close to a named port: snap to { type: 'port' }.
@@ -44,6 +63,12 @@ export function pickAttachmentForObject(
   viewport: Viewport,
   otherPoint?: Point
 ): Attachment {
+  const def = getShape(obj.type);
+
+  if (def.connectorAttachmentPolicy === 'portsOnly') {
+    return pickNearestPortAttachment(obj, pointer);
+  }
+
   const zoom = viewport.zoom ?? 1;
   // Snap radius in pixels, converted to world units.
   const snapWorld = 12 / Math.max(0.0001, zoom);

@@ -13,6 +13,7 @@ export type WhiteboardObjectType =
   | 'freehand'
   | 'rectangle'
   | 'ellipse'
+  | 'diamond'
   | 'text'
   | 'stickyNote'
   | 'connector';

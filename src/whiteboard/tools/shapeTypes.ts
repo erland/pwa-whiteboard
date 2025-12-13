@@ -92,6 +92,19 @@ export interface ShapeDefinition<TObj extends WhiteboardObject = WhiteboardObjec
   selectionCaps?: SelectionCapabilities;
 }
 
+export type ConnectorAttachmentPolicy = 'free' | 'portsOnly';
+
+export interface ShapeDefinition<TObj extends WhiteboardObject = WhiteboardObject> {
+  // ...existing
+
+  /**
+   * Controls how connector endpoints may attach while dragging/creating.
+   * - 'free'      => can compute continuous attachments (edgeT/perimeterAngle)
+   * - 'portsOnly' => always snap to nearest port (type:'port')
+   */
+  connectorAttachmentPolicy?: ConnectorAttachmentPolicy;
+}
+
 /**
  * Tool interaction context (for pointer-driven tools).
  * This mirrors what useCanvasInteractions currently passes around.

@@ -1,5 +1,6 @@
 import React from 'react';
 import type { DrawingTool } from '../../whiteboard/whiteboardTypes';
+import { TOOL_REGISTRY } from '../../whiteboard/tools/registry';
 
 type ToolSelectorPanelProps = {
   activeTool: DrawingTool;
@@ -8,66 +9,24 @@ type ToolSelectorPanelProps = {
 
 export const ToolSelectorPanel: React.FC<ToolSelectorPanelProps> = ({
   activeTool,
-  onChangeTool
+  onChangeTool,
 }) => (
   <div className="panel">
     <h2 className="panel-title panel-title-tools">Tools</h2>
+
     <div className="tool-buttons">
-      <button
-        type="button"
-        className={`tool-button ${activeTool === 'freehand' ? 'active' : ''}`}
-        onClick={() => onChangeTool('freehand')}
-      >
-        ✏️ Freehand
-      </button>
-
-      <button
-        type="button"
-        className={`tool-button ${activeTool === 'rectangle' ? 'active' : ''}`}
-        onClick={() => onChangeTool('rectangle')}
-      >
-        ▭ Rectangle
-      </button>
-
-      <button
-        type="button"
-        className={`tool-button ${activeTool === 'ellipse' ? 'active' : ''}`}
-        onClick={() => onChangeTool('ellipse')}
-      >
-        ◯ Ellipse
-      </button>
-
-      <button
-        type="button"
-        className={`tool-button ${activeTool === 'connector' ? 'active' : ''}`}
-        onClick={() => onChangeTool('connector')}
-      >
-        🔗 Connector
-      </button>
-
-      <button
-        type="button"
-        className={`tool-button ${activeTool === 'text' ? 'active' : ''}`}
-        onClick={() => onChangeTool('text')}
-      >
-        🔤 Text
-      </button>
-
-      <button
-        type="button"
-        className={`tool-button ${activeTool === 'stickyNote' ? 'active' : ''}`}
-        onClick={() => onChangeTool('stickyNote')}
-      >
-        🗒 Sticky note
-      </button>
-
-      <button
-        type="button"
-        className={`tool-button ${activeTool === 'select' ? 'active' : ''}`}
-        onClick={() => onChangeTool('select')}
-      >
-        🖱 Select
-      </button>
+      {TOOL_REGISTRY.map((tool) => (
+        <button
+          key={tool.id}
+          type="button"
+          className={`tool-button ${activeTool === tool.id ? 'active' : ''}`}
+          onClick={() => onChangeTool(tool.id as DrawingTool)}
+          aria-pressed={activeTool === tool.id}
+        >
+          {tool.icon ? `${tool.icon} ` : ''}
+          {tool.label}
+        </button>
+      ))}
     </div>
   </div>
 );

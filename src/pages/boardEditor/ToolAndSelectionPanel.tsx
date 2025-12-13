@@ -40,10 +40,7 @@ export const ToolAndSelectionPanel: React.FC<ToolAndSelectionPanelProps> = ({
     <div className="panel">
       <h2 className="panel-title">Tool &amp; Selection</h2>
 
-      {(activeTool === 'freehand' ||
-        activeTool === 'rectangle' ||
-        activeTool === 'ellipse' ||
-        activeTool === 'connector') && (
+      {activeTool !== 'select' && activeTool !== 'text' && activeTool !== 'stickyNote' && (
         <DrawingToolStrokeSettings
           strokeColor={strokeColor}
           strokeWidth={strokeWidth}

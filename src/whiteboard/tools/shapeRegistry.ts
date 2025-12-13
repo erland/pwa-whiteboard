@@ -22,6 +22,7 @@ import type { DrawingTool } from '../whiteboardTypes';
 import { drawFreehandObject } from './freehand/draw';
 import { drawRectangleObject } from './rectangle/draw';
 import { drawEllipseObject } from './ellipse/draw';
+import { drawDiamondObject } from './diamond/draw';
 import { drawTextObject } from './text/draw';
 import { drawStickyNoteObject } from './stickyNote/draw';
 import { drawConnectorObject } from './connector/draw';
@@ -30,6 +31,7 @@ import { drawConnectorObject } from './connector/draw';
 import { getFreehandBoundingBox } from './freehand/geometry';
 import { getRectangleBoundingBox, getRectanglePorts } from './rectangle/geometry';
 import { getEllipseBoundingBox, getEllipsePorts } from './ellipse/geometry';
+import { getDiamondBoundingBox, getDiamondPorts, hitTestDiamond } from './diamond/geometry';
 import { getTextBoundingBox, getTextPorts } from './text/geometry';
 import { getStickyNoteBoundingBox, getStickyNotePorts } from './stickyNote/geometry';
 import { getConnectorBoundingBox, hitTestConnector } from './connector/geometry';
@@ -37,6 +39,7 @@ import { getConnectorBoundingBox, hitTestConnector } from './connector/geometry'
 /* ===== selection capabilities ===== */
 import { rectangleSelectionCapabilities } from './rectangle/selection';
 import { ellipseSelectionCapabilities } from './ellipse/selection';
+import { diamondSelectionCapabilities } from './diamond/selection';
 import { stickyNoteSelectionCapabilities } from './stickyNote/selection';
 import { textSelectionCapabilities } from './text/selection';
 import { connectorSelectionCapabilities } from './connector/selection';
@@ -45,6 +48,7 @@ import { connectorSelectionCapabilities } from './connector/selection';
 import { startFreehandDraft, updateFreehandDraft, finishFreehandDraft } from './freehand/interactions';
 import { startRectangleDraft, updateRectangleDraft, finishRectangleDraft } from './rectangle/interactions';
 import { startEllipseDraft, updateEllipseDraft, finishEllipseDraft } from './ellipse/interactions';
+import { startDiamondDraft, updateDiamondDraft, finishDiamondDraft } from './diamond/interactions';
 import { createTextObject } from './text/interactions';
 import { createStickyNoteObject } from './stickyNote/interactions';
 import { startConnectorDraft, updateConnectorDraft, finishConnectorDraft } from './connector/interactions';
@@ -114,6 +118,31 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
         updateEllipseDraft(draft, pos),
       finishDraft: (draft: DraftShape): ToolCreateResult | null => {
         const { object, selectIds } = finishEllipseDraft(draft);
+        return object && selectIds ? { object, selectIds } : null;
+      },
+    },
+  },
+
+  diamond: {
+    type: 'diamond',
+    connectorAttachmentPolicy: 'portsOnly',
+    draw: (ctx, obj, viewport) => drawDiamondObject(ctx, obj, viewport),
+    getBoundingBox: (obj) => getDiamondBoundingBox(obj),
+    hitTest: (obj, worldX, worldY) => hitTestDiamond(obj, worldX, worldY),
+    getPorts: (obj): ObjectPort[] => getDiamondPorts(obj),
+    selectionCaps: diamondSelectionCapabilities,
+    draft: {
+      startDraft: (ctx: ToolPointerContext, pos: Point) =>
+        startDiamondDraft({
+          pos,
+          strokeColor: ctx.strokeColor,
+          strokeWidth: ctx.strokeWidth,
+          generateObjectId: ctx.generateObjectId,
+        }),
+      updateDraft: (draft: DraftShape, _ctx: ToolPointerContext, pos: Point) =>
+        updateDiamondDraft(draft, pos),
+      finishDraft: (draft: DraftShape): ToolCreateResult | null => {
+        const { object, selectIds } = finishDiamondDraft(draft);
         return object && selectIds ? { object, selectIds } : null;
       },
     },

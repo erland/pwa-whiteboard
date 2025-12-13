@@ -1,14 +1,9 @@
 // src/whiteboard/whiteboardTypes.ts
 import type { WhiteboardObject, Viewport, ObjectId } from '../domain/types';
 
-export type DrawingTool =
-  | 'select'
-  | 'freehand'
-  | 'rectangle'
-  | 'ellipse'
-  | 'text'
-  | 'stickyNote'
-  | 'connector';
+import type { ToolId } from './tools/registry';
+
+export type DrawingTool = ToolId;
 
 export interface WhiteboardCanvasProps {
   width: number;

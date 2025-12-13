@@ -1,6 +1,11 @@
 // src/whiteboard/drawing.ts
-import type { WhiteboardObject, Viewport, Point, ObjectId } from '../domain/types';
-import { worldToCanvas, getBoundingBox, Bounds, getHandlePositions } from './geometry';
+import type { WhiteboardObject, Viewport, Point, ObjectId, Attachment } from '../domain/types';
+import {
+  worldToCanvas,
+  getBoundingBox,
+  getHandlePositions,
+  resolveConnectorEndpoints
+} from './geometry';
 
 export type DraftShape =
   | {
@@ -19,7 +24,50 @@ export type DraftShape =
       startY: number;
       currentX: number;
       currentY: number;
+    }
+  | {
+      kind: 'connector';
+      id: ObjectId;
+      strokeColor: string;
+      strokeWidth: number;
+      fromObjectId: ObjectId;
+      fromAttachment: Attachment;
+      fromPoint: Point; // resolved world point for the start
+      currentX: number; // world
+      currentY: number; // world
+      toObjectId?: ObjectId;
+      toAttachment?: Attachment;
+      toPoint?: Point;
     };
+
+function drawConnector(
+  ctx: CanvasRenderingContext2D,
+  obj: WhiteboardObject,
+  objects: WhiteboardObject[],
+  viewport: Viewport
+): void {
+  const endpoints = resolveConnectorEndpoints(objects, obj);
+  if (!endpoints) return;
+
+  const stroke = obj.strokeColor ?? '#e5e7eb';
+  const widthPx = obj.strokeWidth ?? 2;
+
+  const a = worldToCanvas(endpoints.p1.x, endpoints.p1.y, viewport);
+  const b = worldToCanvas(endpoints.p2.x, endpoints.p2.y, viewport);
+
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = widthPx;
+
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.stroke();
+
+  ctx.restore();
+}
 
 /**
  * Draw a single whiteboard object.
@@ -28,7 +76,8 @@ export function drawObject(
   ctx: CanvasRenderingContext2D,
   obj: WhiteboardObject,
   viewport: Viewport,
-  fallbackStrokeColor: string
+  fallbackStrokeColor: string,
+  allObjects?: WhiteboardObject[]
 ): void {
   const stroke = obj.strokeColor ?? '#e5e7eb';
   const widthPx = obj.strokeWidth ?? 2;
@@ -36,6 +85,12 @@ export function drawObject(
 
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
+
+  if (obj.type === 'connector') {
+    if (!allObjects) return;
+    drawConnector(ctx, obj, allObjects, viewport);
+    return;
+  }
 
   if (obj.type === 'freehand' && obj.points && obj.points.length > 1) {
     const pts = obj.points;
@@ -129,14 +184,64 @@ export function drawObject(
   }
 }
 
+function drawConnectorSelection(
+  ctx: CanvasRenderingContext2D,
+  obj: WhiteboardObject,
+  objects: WhiteboardObject[],
+  viewport: Viewport
+): void {
+  const endpoints = resolveConnectorEndpoints(objects, obj);
+  if (!endpoints) return;
+
+  const a = worldToCanvas(endpoints.p1.x, endpoints.p1.y, viewport);
+  const b = worldToCanvas(endpoints.p2.x, endpoints.p2.y, viewport);
+
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  // Highlight line
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = Math.max(3, (obj.strokeWidth ?? 2) + 2);
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.stroke();
+
+  // Endpoints
+  ctx.setLineDash([]);
+  const r = 5;
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 1;
+
+  for (const p of [a, b]) {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 /**
  * Draw selection rectangle + resize handles for a given object (if applicable).
  */
 export function drawSelectionOutlineAndHandles(
   ctx: CanvasRenderingContext2D,
   obj: WhiteboardObject,
-  viewport: Viewport
+  viewport: Viewport,
+  allObjects?: WhiteboardObject[]
 ): void {
+  // Special-case connectors: highlight the line + endpoints (no resize handles).
+  if (obj.type === 'connector') {
+    if (!allObjects) return;
+    drawConnectorSelection(ctx, obj, allObjects, viewport);
+    return;
+  }
+
   const bounds = getBoundingBox(obj);
   if (!bounds) return;
 
@@ -200,12 +305,12 @@ export function drawObjectsWithSelection(
   fallbackStrokeColor: string
 ): void {
   for (const obj of objects) {
-    drawObject(ctx, obj, viewport, fallbackStrokeColor);
+    drawObject(ctx, obj, viewport, fallbackStrokeColor, objects);
   }
 
   for (const obj of objects) {
     if (!selectedObjectIds.includes(obj.id)) continue;
-    drawSelectionOutlineAndHandles(ctx, obj, viewport);
+    drawSelectionOutlineAndHandles(ctx, obj, viewport, objects);
   }
 }
 
@@ -221,6 +326,26 @@ export function drawDraftShape(
 
   ctx.save();
   ctx.globalAlpha = 0.9;
+
+  // NEW: connector draft preview
+  if (draft.kind === 'connector') {
+    const a = toCanvas(draft.fromPoint.x, draft.fromPoint.y);
+    const b = toCanvas(draft.currentX, draft.currentY);
+
+    ctx.strokeStyle = draft.strokeColor;
+    ctx.lineWidth = Math.max(1, draft.strokeWidth);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.setLineDash([6, 4]);
+
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+
+    ctx.restore();
+    return;
+  }
 
   if (draft.kind === 'freehand') {
     const pts = draft.points;

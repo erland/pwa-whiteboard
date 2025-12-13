@@ -1,5 +1,5 @@
 import React from 'react';
-import type { DrawingTool } from '../../whiteboard/WhiteboardCanvas';
+import type { DrawingTool } from '../../whiteboard/whiteboardTypes';
 
 type ToolSelectorPanelProps = {
   activeTool: DrawingTool;
@@ -11,7 +11,6 @@ export const ToolSelectorPanel: React.FC<ToolSelectorPanelProps> = ({
   onChangeTool
 }) => (
   <div className="panel">
-    {/* Extra class so we can hide only this title on smaller screens */}
     <h2 className="panel-title panel-title-tools">Tools</h2>
     <div className="tool-buttons">
       <button
@@ -21,6 +20,7 @@ export const ToolSelectorPanel: React.FC<ToolSelectorPanelProps> = ({
       >
         ✏️ Freehand
       </button>
+
       <button
         type="button"
         className={`tool-button ${activeTool === 'rectangle' ? 'active' : ''}`}
@@ -28,6 +28,7 @@ export const ToolSelectorPanel: React.FC<ToolSelectorPanelProps> = ({
       >
         ▭ Rectangle
       </button>
+
       <button
         type="button"
         className={`tool-button ${activeTool === 'ellipse' ? 'active' : ''}`}
@@ -35,6 +36,15 @@ export const ToolSelectorPanel: React.FC<ToolSelectorPanelProps> = ({
       >
         ◯ Ellipse
       </button>
+
+      <button
+        type="button"
+        className={`tool-button ${activeTool === 'connector' ? 'active' : ''}`}
+        onClick={() => onChangeTool('connector')}
+      >
+        🔗 Connector
+      </button>
+
       <button
         type="button"
         className={`tool-button ${activeTool === 'text' ? 'active' : ''}`}
@@ -42,6 +52,7 @@ export const ToolSelectorPanel: React.FC<ToolSelectorPanelProps> = ({
       >
         🔤 Text
       </button>
+
       <button
         type="button"
         className={`tool-button ${activeTool === 'stickyNote' ? 'active' : ''}`}
@@ -49,6 +60,7 @@ export const ToolSelectorPanel: React.FC<ToolSelectorPanelProps> = ({
       >
         🗒 Sticky note
       </button>
+
       <button
         type="button"
         className={`tool-button ${activeTool === 'select' ? 'active' : ''}`}

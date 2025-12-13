@@ -42,7 +42,8 @@ export const ToolAndSelectionPanel: React.FC<ToolAndSelectionPanelProps> = ({
 
       {(activeTool === 'freehand' ||
         activeTool === 'rectangle' ||
-        activeTool === 'ellipse') && (
+        activeTool === 'ellipse' ||
+        activeTool === 'connector') && (
         <DrawingToolStrokeSettings
           strokeColor={strokeColor}
           strokeWidth={strokeWidth}

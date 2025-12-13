@@ -7,7 +7,8 @@ export type DrawingTool =
   | 'rectangle'
   | 'ellipse'
   | 'text'
-  | 'stickyNote';
+  | 'stickyNote'
+  | 'connector';
 
 export interface WhiteboardCanvasProps {
   width: number;

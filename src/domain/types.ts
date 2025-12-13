@@ -14,11 +14,34 @@ export type WhiteboardObjectType =
   | 'rectangle'
   | 'ellipse'
   | 'text'
-  | 'stickyNote';
+  | 'stickyNote'
+  | 'connector';
 
 export interface Point {
   x: number;
   y: number;
+}
+
+/**
+ * Attachment model for connectors (future-proof for modeling-style connections).
+ *
+ * - port: explicit named port on an object (later: shapes like process arrow can expose ports)
+ * - edgeT: parameterized point along a rectangle-like edge, t in [0..1]
+ * - perimeterAngle: angle on perimeter (useful for ellipse/circle and other radial shapes)
+ * - fallback: simple anchor for early implementation / degraded cases
+ */
+export type Attachment =
+  | { type: 'port'; portId: string }
+  | { type: 'edgeT'; edge: 'top' | 'right' | 'bottom' | 'left'; t: number }
+  | { type: 'perimeterAngle'; angleRad: number }
+  | {
+      type: 'fallback';
+      anchor: 'center' | 'top' | 'right' | 'bottom' | 'left';
+    };
+
+export interface ConnectorEnd {
+  objectId: ObjectId;
+  attachment: Attachment;
 }
 
 /**
@@ -27,6 +50,12 @@ export interface Point {
  * - freehand: uses `points` (and derives a loose bounding box from x/y/width/height)
  * - rectangle/ellipse: use x, y, width, height
  * - text/stickyNote: use x, y and optional width/height + text/fontSize
+ *
+ * For connectors (new):
+ * - type: 'connector'
+ * - uses `from` and `to` to reference connected objects
+ * - style uses strokeColor/strokeWidth
+ * - x/y/width/height are not required for connectors (kept for structural compatibility)
  */
 export interface WhiteboardObject {
   id: ObjectId;
@@ -52,6 +81,14 @@ export interface WhiteboardObject {
 
   // Freehand path (board coordinates)
   points?: Point[];
+
+  // Connector endpoints (only for type === 'connector')
+  from?: ConnectorEnd;
+  to?: ConnectorEnd;
+
+  // Reserved for later routing modes (not used in v1 implementation)
+  routing?: 'straight' | 'manual' | 'orthogonal';
+  waypoints?: Point[];
 }
 
 export interface Viewport {

@@ -3,7 +3,7 @@ import React from 'react';
 import type { WhiteboardObject } from '../../../domain/types';
 import type { SelectionDetails } from '../useSelectionDetails';
 
-type SelectionToolPanelProps = {
+type Props = {
   selection: SelectionDetails;
   onDeleteSelection: () => void;
   updateSelectionProp: <K extends keyof WhiteboardObject>(
@@ -12,130 +12,166 @@ type SelectionToolPanelProps = {
   ) => void;
 };
 
-export const SelectionToolPanel: React.FC<SelectionToolPanelProps> = ({
+function hasValue<T>(v: T | undefined): v is T {
+  return v !== undefined;
+}
+
+export const SelectionToolPanel: React.FC<Props> = ({
   selection,
   onDeleteSelection,
   updateSelectionProp
 }) => {
-  const {
-    selectedCount,
-    isAllTextSelection,
-    sharedStrokeColor,
-    sharedStrokeWidth,
-    sharedFillColor,
-    sharedTextColor,
-    sharedFontSize,
-    sharedText
-  } = selection;
+  const hasSelection = selection.selectedCount > 0;
 
   return (
-    <>
+    <div>
       <div className="panel-row">
         <span className="field-label-inline">Selected</span>
-        <span className="field-value">{selectedCount}</span>
+        <span className="field-value">
+          {hasSelection ? selection.selectedCount : 0}
+        </span>
       </div>
+
       <div className="panel-row">
         <button
           type="button"
           className="tool-button"
-          disabled={selectedCount === 0}
           onClick={onDeleteSelection}
+          disabled={!hasSelection}
+          style={{ width: '100%' }}
         >
-          Delete selection
+          🗑 Delete
         </button>
       </div>
 
-      {!isAllTextSelection && sharedStrokeColor !== undefined && (
+      {/* Connector info (minimal, read-only) */}
+      {selection.isSingleConnectorSelected && selection.singleConnectorObject && (
+        <>
+          <div className="panel-row" style={{ marginTop: 10 }}>
+            <span className="field-label-inline">Type</span>
+            <span className="field-value">Connector</span>
+          </div>
+
+          <div className="panel-row">
+            <span className="field-label-inline">From</span>
+            <span className="field-value">
+              {selection.singleConnectorObject.from?.objectId ?? '—'}
+            </span>
+          </div>
+
+          <div className="panel-row">
+            <span className="field-label-inline">To</span>
+            <span className="field-value">
+              {selection.singleConnectorObject.to?.objectId ?? '—'}
+            </span>
+          </div>
+        </>
+      )}
+
+      {/* Shared style props across selection */}
+      {hasValue(selection.sharedStrokeColor) && (
         <div className="panel-row">
           <label className="field-label">
-            Stroke color
+            <span className="field-label-inline">Stroke color</span>
             <input
-              type="color"
               className="color-input"
-              value={sharedStrokeColor}
+              type="color"
+              value={selection.sharedStrokeColor}
               onChange={(e) => updateSelectionProp('strokeColor', e.target.value)}
+              aria-label="Stroke color"
             />
           </label>
         </div>
       )}
 
-      {!isAllTextSelection && sharedStrokeWidth !== undefined && (
+      {hasValue(selection.sharedStrokeWidth) && (
         <div className="panel-row">
           <label className="field-label">
-            Stroke width
-            <input
-              type="range"
-              min={1}
-              max={10}
-              value={sharedStrokeWidth}
-              onChange={(e) =>
-                updateSelectionProp('strokeWidth', Number(e.target.value))
-              }
-            />
-            <span className="field-suffix">{sharedStrokeWidth}px</span>
+            <span className="field-label-inline">Stroke width</span>
+            <span className="field-value">{selection.sharedStrokeWidth}</span>
           </label>
+          <input
+            type="range"
+            min={1}
+            max={12}
+            step={1}
+            value={selection.sharedStrokeWidth}
+            onChange={(e) =>
+              updateSelectionProp('strokeWidth', Number(e.target.value))
+            }
+            style={{ width: '100%' }}
+            aria-label="Stroke width"
+          />
         </div>
       )}
 
-      {sharedFillColor !== undefined && (
+      {hasValue(selection.sharedFillColor) && (
         <div className="panel-row">
           <label className="field-label">
-            Fill color
+            <span className="field-label-inline">Fill color</span>
             <input
-              type="color"
               className="color-input"
-              value={sharedFillColor}
+              type="color"
+              value={selection.sharedFillColor}
               onChange={(e) => updateSelectionProp('fillColor', e.target.value)}
+              aria-label="Fill color"
             />
           </label>
         </div>
       )}
 
-      {sharedTextColor !== undefined && (
+      {hasValue(selection.sharedTextColor) && (
         <div className="panel-row">
           <label className="field-label">
-            Text color
+            <span className="field-label-inline">Text color</span>
             <input
-              type="color"
               className="color-input"
-              value={sharedTextColor}
+              type="color"
+              value={selection.sharedTextColor}
               onChange={(e) => updateSelectionProp('textColor', e.target.value)}
+              aria-label="Text color"
             />
           </label>
         </div>
       )}
 
-      {sharedFontSize !== undefined && (
+      {hasValue(selection.sharedFontSize) && (
         <div className="panel-row">
           <label className="field-label">
-            Font size
-            <input
-              type="range"
-              min={10}
-              max={40}
-              value={sharedFontSize}
-              onChange={(e) =>
-                updateSelectionProp('fontSize', Number(e.target.value))
-              }
-            />
-            <span className="field-suffix">{sharedFontSize}px</span>
+            <span className="field-label-inline">Font size</span>
+            <span className="field-value">{selection.sharedFontSize}</span>
           </label>
+          <input
+            type="range"
+            min={8}
+            max={72}
+            step={1}
+            value={selection.sharedFontSize}
+            onChange={(e) =>
+              updateSelectionProp('fontSize', Number(e.target.value))
+            }
+            style={{ width: '100%' }}
+            aria-label="Font size"
+          />
         </div>
       )}
 
-      {sharedText !== undefined && (
-        <div className="panel-row">
-          <label className="field-label">
-            Text
-            <textarea
-              className="text-input"
-              rows={3}
-              value={sharedText}
-              onChange={(e) => updateSelectionProp('text', e.target.value)}
-            />
-          </label>
-        </div>
-      )}
-    </>
+      {/* Single text/sticky: edit text (minimal) */}
+      {(selection.isSingleTextSelected || selection.isSingleStickySelected) &&
+        selection.singleSelectedObject && (
+          <div className="panel-row">
+            <div style={{ width: '100%' }}>
+              <div className="field-label-inline" style={{ marginBottom: 6 }}>
+                Text
+              </div>
+              <textarea
+                className="text-input"
+                value={selection.singleSelectedObject.text ?? ''}
+                onChange={(e) => updateSelectionProp('text', e.target.value as any)}
+              />
+            </div>
+          </div>
+        )}
+    </div>
   );
 };

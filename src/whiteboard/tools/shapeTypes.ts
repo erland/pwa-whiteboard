@@ -105,6 +105,16 @@ export interface ShapeDefinition<TObj extends WhiteboardObject = WhiteboardObjec
   translate?: (obj: TObj, dx: number, dy: number) => Partial<TObj> | null;
 
   /**
+   * Optional resize behavior, given the new axis-aligned bounds in world coordinates.
+   * - Return a patch to apply to the object.
+   * - Return null to indicate the object should not be resizable.
+   *
+   * Core is responsible for computing newBounds (e.g., via resize handles); shapes own
+   * how that maps onto their internal representation.
+   */
+  resize?: (obj: TObj, newBounds: Bounds) => Partial<TObj> | null;
+
+  /**
    * Controls how connector endpoints may attach while dragging/creating.
    * - 'free'      => can compute continuous attachments (edgeT/perimeterAngle)
    * - 'portsOnly' => always snap to nearest port (type:'port')

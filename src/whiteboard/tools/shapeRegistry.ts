@@ -13,6 +13,7 @@
 
 import type { WhiteboardObject, WhiteboardObjectType, Point, ObjectId, Viewport } from '../../domain/types';
 import type { ShapeToolDefinition, ToolPointerContext, ToolCreateResult } from './shapeTypes';
+import type { Bounds } from '../geometry/types';
 import type { ObjectPort } from './shapeTypes';
 import type { SelectionCapabilities } from './selection/types';
 import type { DraftShape } from '../drawing';
@@ -35,6 +36,7 @@ import { getDiamondBoundingBox, getDiamondPorts, hitTestDiamond } from './diamon
 import { getTextBoundingBox, getTextPorts } from './text/geometry';
 import { getStickyNoteBoundingBox, getStickyNotePorts } from './stickyNote/geometry';
 import { getConnectorBoundingBox, hitTestConnector } from './connector/geometry';
+import { resizeBoxObjectByBounds } from './_shared/resizeByBounds';
 
 /* ===== selection capabilities ===== */
 import { rectangleSelectionCapabilities } from './rectangle/selection';
@@ -82,6 +84,7 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
     type: 'rectangle',
     draw: (ctx, obj, viewport) => drawRectangleObject(ctx, obj, viewport),
     getBoundingBox: (obj) => getRectangleBoundingBox(obj),
+    resize: (obj, newBounds) => resizeBoxObjectByBounds(obj, newBounds),
     getPorts: (obj): ObjectPort[] => getRectanglePorts(obj),
     selectionCaps: rectangleSelectionCapabilities,
     draft: {
@@ -105,6 +108,7 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
     type: 'ellipse',
     draw: (ctx, obj, viewport) => drawEllipseObject(ctx, obj, viewport),
     getBoundingBox: (obj) => getEllipseBoundingBox(obj),
+    resize: (obj, newBounds) => resizeBoxObjectByBounds(obj, newBounds),
     getPorts: (obj): ObjectPort[] => getEllipsePorts(obj),
     selectionCaps: ellipseSelectionCapabilities,
     draft: {
@@ -129,6 +133,7 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
     connectorAttachmentPolicy: 'portsOnly',
     draw: (ctx, obj, viewport) => drawDiamondObject(ctx, obj, viewport),
     getBoundingBox: (obj) => getDiamondBoundingBox(obj),
+    resize: (obj, newBounds) => resizeBoxObjectByBounds(obj, newBounds),
     hitTest: (obj, worldX, worldY) => hitTestDiamond(obj, worldX, worldY),
     getPorts: (obj): ObjectPort[] => getDiamondPorts(obj),
     selectionCaps: diamondSelectionCapabilities,
@@ -155,6 +160,7 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
       drawTextObject(ctx, obj, viewport, env.fallbackStrokeColor ?? '#000000');
     },
     getBoundingBox: (obj) => getTextBoundingBox(obj),
+    resize: (obj, newBounds) => resizeBoxObjectByBounds(obj, newBounds),
     getPorts: (obj): ObjectPort[] => getTextPorts(obj),
     selectionCaps: textSelectionCapabilities,
     pointerDownCreate: (ctx: ToolPointerContext, pos: Point) => {
@@ -173,6 +179,7 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
     draw: (ctx, obj, viewport, env) =>
       drawStickyNoteObject(ctx, obj, viewport, env.fallbackStrokeColor ?? '#000000'),
     getBoundingBox: (obj) => getStickyNoteBoundingBox(obj),
+    resize: (obj, newBounds) => resizeBoxObjectByBounds(obj, newBounds),
     getPorts: (obj): ObjectPort[] => getStickyNotePorts(obj),
     selectionCaps: stickyNoteSelectionCapabilities,
     pointerDownCreate: (ctx: ToolPointerContext, pos: Point) => {
@@ -343,4 +350,28 @@ export function translateObject(
   }
   if (typeof obj.x !== 'number' || typeof obj.y !== 'number') return null;
   return { x: obj.x + dx, y: obj.y + dy };
+}
+
+/**
+ * Registry-driven resize plumbing.
+ *
+ * A shape is considered resizable if it provides a resize() implementation.
+ * (Core computes newBounds; shapes decide how to apply it.)
+ */
+export function canResizeObject(obj: WhiteboardObject): boolean {
+  const def = SHAPES[obj.type as WhiteboardObjectType];
+  return typeof def?.resize === 'function';
+}
+
+/**
+ * Resize an object by delegating to the owning shape definition.
+ * Returns a patch to apply via onUpdateObject(), or null if not resizable.
+ */
+export function resizeObject(
+  obj: WhiteboardObject,
+  newBounds: Bounds
+): Partial<WhiteboardObject> | null {
+  const def = SHAPES[obj.type as WhiteboardObjectType];
+  if (!def?.resize) return null;
+  return (def.resize as any)(obj as any, newBounds) as any;
 }

@@ -141,6 +141,40 @@ export function hitTest(
 }
 
 /**
+ * Hit-testing for connectable objects only (objects that expose ports).
+ * Uses registry-driven hit testing when available, otherwise falls back to bounding boxes.
+ */
+export function hitTestConnectable(
+  objects: WhiteboardObject[],
+  x: number,
+  y: number
+): WhiteboardObject | null {
+  for (let i = objects.length - 1; i >= 0; i--) {
+    const obj = objects[i];
+    if (!isConnectable(obj)) continue;
+
+    const shape = getShape(obj.type);
+
+    if (shape.hitTest) {
+      if (shape.hitTest(obj, x, y, { objects })) return obj;
+      continue;
+    }
+
+    const box = shape.getBoundingBox(obj, { objects });
+    if (!box) continue;
+
+    const x2 = box.x + box.width;
+    const y2 = box.y + box.height;
+
+    if (x >= box.x && x <= x2 && y >= box.y && y <= y2) {
+      return obj;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Backwards-compatible helper used by some existing code:
  * an object is connectable if it exposes at least one port.
  */

@@ -10,7 +10,7 @@ import type {
 } from '../domain/types';
 import {
   getBoundingBox,
-  hitTest,
+  hitTest, hitTestConnectable,
   hitTestResizeHandleCanvas,
   resizeBounds,
   Bounds,
@@ -22,7 +22,7 @@ import {
 } from './geometry';
 import type { DraftShape } from './drawing';
 import type { DrawingTool } from './whiteboardTypes';
-import { toolPointerDown, toolPointerMove, toolPointerUp, translateObject } from './tools/shapeRegistry';
+import { toolPointerDown, toolPointerMove, toolPointerUp, translateObject, canResizeObject, resizeObject } from './tools/shapeRegistry';
 import { pickAttachmentForObject } from './tools/connector/interactions';
 
 type ResizeDragState = {
@@ -58,24 +58,6 @@ type ConnectorEndpointDragState = {
 
 type DragState = MoveDragState | PanDragState | ResizeDragState | ConnectorEndpointDragState;
 
-function hitTestConnectableObject(
-  objects: WhiteboardObject[],
-  x: number,
-  y: number
-): WhiteboardObject | null {
-  for (let i = objects.length - 1; i >= 0; i--) {
-    const obj = objects[i];
-    if (!isConnectable(obj)) continue;
-    const box = getBoundingBox(obj);
-    if (!box) continue;
-    const x2 = box.x + box.width;
-    const y2 = box.y + box.height;
-    if (x >= box.x && x <= x2 && y >= box.y && y <= y2) {
-      return obj;
-    }
-  }
-  return null;
-}
 
 function getConnectorEndpointHit(
   connector: WhiteboardObject,
@@ -236,12 +218,8 @@ export function useCanvasInteractions({
       const selectedId = selectedObjectIds[0];
       const selectedObj = objects.find((o) => o.id === selectedId);
 
-      // Disallow resize on freehand + connectors
-      if (
-        selectedObj &&
-        selectedObj.type !== 'freehand' &&
-        selectedObj.type !== 'connector'
-      ) {
+      // Resize is registry-driven: only shapes that implement resize() are resizable.
+      if (selectedObj && canResizeObject(selectedObj)) {
         const box = getBoundingBox(selectedObj);
         if (box) {
           const handleId = hitTestResizeHandleCanvas(canvasX, canvasY, box as Bounds, viewport);
@@ -339,7 +317,7 @@ export function useCanvasInteractions({
         : pos;
 
       // Prefer re-attaching to the connectable object currently under pointer.
-      const hoverObj = hitTestConnectableObject(objects, pos.x, pos.y);
+      const hoverObj = hitTestConnectable(objects, pos.x, pos.y);
 
       // Otherwise, move along the currently attached object (if still present).
       const attachedId =
@@ -406,13 +384,9 @@ export function useCanvasInteractions({
       const obj = objects.find((o) => o.id === drag.objectId);
       if (!obj) return;
 
-      if (obj.type !== 'freehand' && obj.type !== 'connector') {
-        onUpdateObject(drag.objectId, {
-          x: newBounds.x,
-          y: newBounds.y,
-          width: newBounds.width,
-          height: newBounds.height,
-        });
+      const patch = resizeObject(obj, newBounds);
+      if (patch) {
+        onUpdateObject(drag.objectId, patch);
       }
     }
   };

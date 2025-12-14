@@ -1,10 +1,16 @@
 // src/pages/boardEditor/useSelectionDetails.ts
 import type { WhiteboardObject } from '../../domain/types';
+import type { BoardTypeDefinition } from '../../whiteboard/boardTypes';
 import {
   getCommonEditableProps,
   getSharedPropValue,
   type EditablePropKey,
 } from '../../whiteboard/tools/selectionRegistry';
+import {
+  getHiddenSelectionPropKeys,
+  getLockedEditableKeys,
+  getLockedObjectProps,
+} from '../../whiteboard/boardTypes';
 
 export type SelectionDetails = {
   selectedCount: number;
@@ -27,12 +33,18 @@ export type SelectionDetails = {
   commonEditableProps: EditablePropKey[];
   sharedEditableValues: Partial<Record<EditablePropKey, unknown>>;
 
+  /** Keys that are hidden by the board type policy (union across selected object types). */
+  hiddenEditableProps: EditablePropKey[];
+  /** Keys that are locked by the board type policy (union across selected object types). */
+  lockedEditableProps: EditablePropKey[];
+
   /** Convenience: single selected object (any type). */
   singleAnySelectedObject?: WhiteboardObject;
 };
 
 export function useSelectionDetails(
-  selectedObjects: WhiteboardObject[]
+  selectedObjects: WhiteboardObject[],
+  boardTypeDef?: BoardTypeDefinition
 ): SelectionDetails {
   const selectedCount = selectedObjects.length;
 
@@ -57,7 +69,22 @@ export function useSelectionDetails(
   const isAllConnectorSelection =
     selectedCount > 0 && selectedObjects.every((obj) => obj.type === 'connector');
 
-  const commonEditableProps = getCommonEditableProps(selectedObjects);
+  const rawCommonEditableProps = getCommonEditableProps(selectedObjects);
+
+  // Apply board type policy (hidden/locked). For multi-selection, we take the union across selected types.
+  const hiddenSet = new Set<EditablePropKey>();
+  const lockedSet = new Set<EditablePropKey>();
+  if (boardTypeDef && selectedCount > 0) {
+    for (const obj of selectedObjects) {
+      getHiddenSelectionPropKeys(boardTypeDef, obj.type).forEach((k) => hiddenSet.add(k));
+      const locked = getLockedObjectProps(boardTypeDef, obj.type);
+      getLockedEditableKeys(locked).forEach((k) => lockedSet.add(k));
+    }
+  }
+
+  const commonEditableProps = rawCommonEditableProps.filter(
+    (k) => !hiddenSet.has(k) // hidden wins
+  );
   const sharedEditableValues: Partial<Record<EditablePropKey, unknown>> = {};
   for (const key of commonEditableProps) {
     // NOTE: our editable prop keys are a subset of WhiteboardObject keys.
@@ -79,6 +106,8 @@ export function useSelectionDetails(
     isAllTextSelection,
     isAllConnectorSelection,
     commonEditableProps,
-    sharedEditableValues
+    sharedEditableValues,
+    hiddenEditableProps: Array.from(hiddenSet),
+    lockedEditableProps: Array.from(lockedSet)
   };
 }

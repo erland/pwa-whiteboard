@@ -2,13 +2,21 @@
 import React from 'react';
 import type { WhiteboardObject } from '../../../domain/types';
 import type { DrawingTool } from '../../../whiteboard/WhiteboardCanvas';
+import type { ToolId } from '../../../whiteboard/tools/registry';
 import {
   EDITABLE_PROP_DEFS,
   getSelectionCapabilities,
   type EditablePropKey,
 } from '../../../whiteboard/tools/selectionRegistry';
+import type { BoardTypeDefinition } from '../../../whiteboard/boardTypes';
+import {
+  getHiddenToolPropKeys,
+  getLockedEditableKeys,
+  getLockedToolProps,
+} from '../../../whiteboard/boardTypes';
 
 type Props = {
+  boardTypeDef: BoardTypeDefinition;
   activeTool: DrawingTool;
   strokeColor: string;
   strokeWidth: number;
@@ -33,6 +41,7 @@ function getToolPropValue(
 }
 
 export const ToolSettingsPanel: React.FC<Props> = ({
+  boardTypeDef,
   activeTool,
   strokeColor,
   strokeWidth,
@@ -43,9 +52,12 @@ export const ToolSettingsPanel: React.FC<Props> = ({
 }) => {
   if (activeTool === 'select') return null;
 
+  const hiddenKeys = getHiddenToolPropKeys(boardTypeDef, activeTool as any as ToolId);
+  const lockedKeys = getLockedEditableKeys(getLockedToolProps(boardTypeDef, activeTool as any as ToolId));
+
   // Tool ids match object types for all creation tools.
   const caps = getSelectionCapabilities(activeTool as any);
-  const editableProps = caps.editableProps ?? [];
+  const editableProps = (caps.editableProps ?? []).filter((k) => !hiddenKeys.has(k));
 
   if (editableProps.length === 0) {
     return (
@@ -60,6 +72,7 @@ export const ToolSettingsPanel: React.FC<Props> = ({
       {editableProps.map((key) => {
         const def = EDITABLE_PROP_DEFS[key];
         const value = getToolPropValue(key, strokeColor, strokeWidth, toolProps);
+        const disabled = lockedKeys.has(key);
 
         if (def.control.kind === 'color') {
           // Match current selection UI behavior: don't show fill controls unless a fill is set.
@@ -74,6 +87,7 @@ export const ToolSettingsPanel: React.FC<Props> = ({
                   className="color-input"
                   type="color"
                   value={v}
+                  disabled={disabled}
                   onChange={(e) => {
                     if (key === 'strokeColor') onStrokeColorChange(e.target.value);
                     else onUpdateToolProp(key as any, e.target.value as any);
@@ -99,6 +113,7 @@ export const ToolSettingsPanel: React.FC<Props> = ({
                 max={def.control.max}
                 step={def.control.step}
                 value={n}
+                disabled={disabled}
                 onChange={(e) => {
                   const next = Number(e.target.value);
                   if (key === 'strokeWidth') onStrokeWidthChange(next);
@@ -122,6 +137,7 @@ export const ToolSettingsPanel: React.FC<Props> = ({
                 <textarea
                   className="text-input"
                   value={v}
+                  disabled={disabled}
                   onChange={(e) => onUpdateToolProp(key as any, e.target.value as any)}
                 />
               </div>

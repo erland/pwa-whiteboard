@@ -2,11 +2,13 @@
 import React from 'react';
 import type { DrawingTool } from '../../whiteboard/WhiteboardCanvas';
 import type { WhiteboardObject } from '../../domain/types';
+import type { BoardTypeDefinition } from '../../whiteboard/boardTypes';
 import { useSelectionDetails } from './useSelectionDetails';
 import { ToolSettingsPanel } from './panels/ToolSettingsPanel';
 import { SelectionToolPanel } from './panels/SelectionToolPanel';
 
 type ToolAndSelectionPanelProps = {
+  boardTypeDef: BoardTypeDefinition;
   activeTool: DrawingTool;
   strokeColor: string;
   strokeWidth: number;
@@ -26,6 +28,7 @@ type ToolAndSelectionPanelProps = {
 };
 
 export const ToolAndSelectionPanel: React.FC<ToolAndSelectionPanelProps> = ({
+  boardTypeDef,
   activeTool,
   strokeColor,
   strokeWidth,
@@ -37,7 +40,7 @@ export const ToolAndSelectionPanel: React.FC<ToolAndSelectionPanelProps> = ({
   onDeleteSelection,
   updateSelectionProp
 }) => {
-  const selection = useSelectionDetails(selectedObjects);
+  const selection = useSelectionDetails(selectedObjects, boardTypeDef);
 
   return (
     <div className="panel">
@@ -45,6 +48,7 @@ export const ToolAndSelectionPanel: React.FC<ToolAndSelectionPanelProps> = ({
 
       {activeTool !== 'select' && (
         <ToolSettingsPanel
+          boardTypeDef={boardTypeDef}
           activeTool={activeTool}
           strokeColor={strokeColor}
           strokeWidth={strokeWidth}

@@ -9,6 +9,7 @@ import React, {
 import { applyEvent, createEmptyWhiteboardState } from '../domain/whiteboardState';
 import type { BoardEvent, WhiteboardMeta, WhiteboardState, Viewport } from '../domain/types';
 import { getWhiteboardRepository } from '../infrastructure/localStorageWhiteboardRepository';
+import { getBoardType, getLockedObjectProps } from './boardTypes';
 
 type WhiteboardAction =
   | { type: 'RESET_BOARD'; state: WhiteboardState }
@@ -52,8 +53,12 @@ function ensureHistory(state: WhiteboardState) {
  */
 function rebuildStateFromHistory(meta: WhiteboardMeta, pastEvents: BoardEvent[]): WhiteboardState {
   let state = createEmptyWhiteboardState(meta);
+  const boardTypeDef = getBoardType(meta.boardType);
   for (const ev of pastEvents) {
-    state = applyEvent(state, ev);
+    const enforced = enforcePolicyOnEvent(boardTypeDef, state, ev);
+    if (enforced) {
+      state = applyEvent(state, enforced);
+    }
   }
 
   const updatedAt =
@@ -72,6 +77,62 @@ function rebuildStateFromHistory(meta: WhiteboardMeta, pastEvents: BoardEvent[])
   };
 }
 
+function hasOwn(obj: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+/**
+ * Enforces board-type locked properties in the reducer.
+ * - objectCreated: locked props are applied (override the created object)
+ * - objectUpdated: patch is filtered to remove locked keys (no-op if empty)
+ */
+function enforcePolicyOnEvent(
+  boardTypeDef: ReturnType<typeof getBoardType>,
+  state: WhiteboardState,
+  event: BoardEvent
+): BoardEvent | null {
+  if (event.type === 'objectCreated') {
+    const obj = event.payload.object;
+    const locked = getLockedObjectProps(boardTypeDef, obj.type);
+    if (!locked || Object.keys(locked).length === 0) return event;
+    return {
+      ...event,
+      payload: {
+        ...event.payload,
+        object: {
+          ...obj,
+          ...locked
+        }
+      }
+    } as BoardEvent;
+  }
+
+  if (event.type === 'objectUpdated') {
+    const target = state.objects.find((o) => o.id === event.payload.objectId);
+    if (!target) return event;
+    const locked = getLockedObjectProps(boardTypeDef, target.type);
+    if (!locked || Object.keys(locked).length === 0) return event;
+
+    const nextPatch: any = {};
+    for (const [k, v] of Object.entries(event.payload.patch ?? {})) {
+      if (hasOwn(locked, k)) continue; // locked wins
+      nextPatch[k] = v;
+    }
+
+    if (Object.keys(nextPatch).length === 0) return null;
+
+    return {
+      ...event,
+      payload: {
+        ...event.payload,
+        patch: nextPatch
+      }
+    } as BoardEvent;
+  }
+
+  return event;
+}
+
 function reducer(state: WhiteboardState | null, action: WhiteboardAction): WhiteboardState | null {
   switch (action.type) {
     case 'RESET_BOARD':
@@ -80,11 +141,15 @@ function reducer(state: WhiteboardState | null, action: WhiteboardAction): White
     case 'APPLY_EVENT': {
       if (!state) return state;
 
+      const boardTypeDef = getBoardType(state.meta.boardType);
+      const enforcedEvent = enforcePolicyOnEvent(boardTypeDef, state, action.event);
+      if (!enforcedEvent) return state;
+
       const history = ensureHistory(state);
-      const applied = applyEvent(state, action.event);
+      const applied = applyEvent(state, enforcedEvent);
 
       // We don't want viewport-only changes to affect undo/redo history.
-      if (action.event.type === 'viewportChanged') {
+      if (enforcedEvent.type === 'viewportChanged') {
         return {
           ...applied,
           history
@@ -94,7 +159,7 @@ function reducer(state: WhiteboardState | null, action: WhiteboardAction): White
       return {
         ...applied,
         history: {
-          pastEvents: [...history.pastEvents, action.event],
+          pastEvents: [...history.pastEvents, enforcedEvent],
           futureEvents: []
         }
       };
@@ -124,10 +189,22 @@ function reducer(state: WhiteboardState | null, action: WhiteboardAction): White
       if (history.futureEvents.length === 0) return state;
 
       const [next, ...restFuture] = history.futureEvents;
-      const applied = applyEvent(state, next);
+      const boardTypeDef = getBoardType(state.meta.boardType);
+      const enforcedNext = enforcePolicyOnEvent(boardTypeDef, state, next) ?? null;
+      if (!enforcedNext) {
+        // No-op redo: drop it from future events.
+        return {
+          ...state,
+          history: {
+            pastEvents: history.pastEvents,
+            futureEvents: restFuture
+          }
+        };
+      }
+      const applied = applyEvent(state, enforcedNext);
 
       // Again, viewport changes are not tracked in history
-      if (next.type === 'viewportChanged') {
+      if (enforcedNext.type === 'viewportChanged') {
         return {
           ...applied,
           history: {
@@ -140,7 +217,7 @@ function reducer(state: WhiteboardState | null, action: WhiteboardAction): White
       return {
         ...applied,
         history: {
-          pastEvents: [...history.pastEvents, next],
+          pastEvents: [...history.pastEvents, enforcedNext],
           futureEvents: restFuture
         }
       };

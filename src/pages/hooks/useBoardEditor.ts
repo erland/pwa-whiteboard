@@ -9,7 +9,12 @@ import type {
 import { getWhiteboardRepository } from '../../infrastructure/localStorageWhiteboardRepository';
 import { getBoardsRepository } from '../../infrastructure/localStorageBoardsRepository';
 import type { DrawingTool } from '../../whiteboard/WhiteboardCanvas';
-import { getBoardType } from '../../whiteboard/boardTypes';
+import {
+  getBoardType,
+  getLockedToolProps,
+  getLockedEditableKeys,
+  isEditablePropLocked,
+} from '../../whiteboard/boardTypes';
 import { generateEventId } from './boardEvents';
 import { useBoardViewport } from './useBoardViewport';
 import { useBoardSelection } from './useBoardSelection';
@@ -55,10 +60,27 @@ export function useBoardEditor(id: string | undefined) {
   const activeTool: DrawingTool =
     (toolInstanceById[activeToolInstanceId]?.baseToolId ?? 'select') as DrawingTool;
 
-  const strokeColor = strokeByToolInstance[activeToolInstanceId]?.strokeColor ?? '#38bdf8';
-  const strokeWidth = strokeByToolInstance[activeToolInstanceId]?.strokeWidth ?? 3;
+  // ---- Board type policy: locked tool props ----
+  const lockedForActiveTool = useMemo(() => {
+    // DrawingTool is a superset; boardTypes helpers accept ToolId.
+    return getLockedToolProps(boardTypeDef, activeTool as any);
+  }, [boardTypeDef, activeTool]);
+  const lockedEditableKeys = useMemo(() => getLockedEditableKeys(lockedForActiveTool), [lockedForActiveTool]);
+
+  const rawStrokeColor = strokeByToolInstance[activeToolInstanceId]?.strokeColor ?? '#38bdf8';
+  const rawStrokeWidth = strokeByToolInstance[activeToolInstanceId]?.strokeWidth ?? 3;
+
+  const strokeColor =
+    isEditablePropLocked(lockedForActiveTool, 'strokeColor') && typeof lockedForActiveTool.strokeColor === 'string'
+      ? lockedForActiveTool.strokeColor
+      : rawStrokeColor;
+  const strokeWidth =
+    isEditablePropLocked(lockedForActiveTool, 'strokeWidth') && typeof lockedForActiveTool.strokeWidth === 'number'
+      ? lockedForActiveTool.strokeWidth
+      : rawStrokeWidth;
 
   const setStrokeColor = (color: string) => {
+    if (lockedEditableKeys.has('strokeColor')) return;
     setStrokeByToolInstance((prev) => {
       const current = prev[activeToolInstanceId] ?? { strokeColor: '#38bdf8', strokeWidth: 3 };
       return { ...prev, [activeToolInstanceId]: { ...current, strokeColor: color } };
@@ -66,6 +88,7 @@ export function useBoardEditor(id: string | undefined) {
   };
 
   const setStrokeWidth = (value: number) => {
+    if (lockedEditableKeys.has('strokeWidth')) return;
     setStrokeByToolInstance((prev) => {
       const current = prev[activeToolInstanceId] ?? { strokeColor: '#38bdf8', strokeWidth: 3 };
       return { ...prev, [activeToolInstanceId]: { ...current, strokeWidth: value } };
@@ -76,6 +99,7 @@ export function useBoardEditor(id: string | undefined) {
     key: K,
     value: WhiteboardObject[K]
   ) => {
+    if (lockedEditableKeys.has(key as any)) return;
     setToolPropsByToolInstance((prev) => {
       const current = prev[activeToolInstanceId] ?? {};
       return {
@@ -251,6 +275,7 @@ export function useBoardEditor(id: string | undefined) {
 
   return {
     state,
+    boardTypeDef,
     activeTool,
     toolbox,
     activeToolInstanceId,
@@ -259,7 +284,10 @@ export function useBoardEditor(id: string | undefined) {
     setStrokeColor,
     strokeWidth,
     setStrokeWidth,
-    toolProps: toolPropsByToolInstance[activeToolInstanceId] ?? {},
+    toolProps: {
+      ...(toolPropsByToolInstance[activeToolInstanceId] ?? {}),
+      ...lockedForActiveTool,
+    },
     updateActiveToolProp,
     canvasEl,
     setCanvasEl,

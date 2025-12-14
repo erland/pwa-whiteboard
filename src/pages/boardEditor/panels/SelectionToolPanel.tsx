@@ -20,6 +20,7 @@ function hasValue<T>(v: T | undefined | null): v is T {
 function renderEditablePropControl(
   key: EditablePropKey,
   value: unknown,
+  disabled: boolean,
   updateSelectionProp: <K extends keyof WhiteboardObject>(
     k: K,
     v: WhiteboardObject[K]
@@ -37,6 +38,7 @@ function renderEditablePropControl(
             className="color-input"
             type="color"
             value={v}
+            disabled={disabled}
             onChange={(e) => updateSelectionProp(key as any, e.target.value as any)}
             aria-label={def.label}
           />
@@ -59,6 +61,7 @@ function renderEditablePropControl(
           max={def.control.max}
           step={def.control.step}
           value={n}
+          disabled={disabled}
           onChange={(e) => updateSelectionProp(key as any, Number(e.target.value) as any)}
           style={{ width: '100%' }}
           aria-label={def.label}
@@ -78,6 +81,10 @@ export const SelectionToolPanel: React.FC<Props> = ({
 }) => {
   const hasSelection = selection.selectedCount > 0;
   const singleObj = selection.singleAnySelectedObject;
+
+  // Policy-derived locked keys are provided by useSelectionDetails.
+  // Hidden keys are already filtered out from selection.commonEditableProps.
+  const lockedKeys = new Set(selection.lockedEditableProps);
 
   const singleCanEditText =
     selection.selectedCount === 1 &&
@@ -111,7 +118,7 @@ export const SelectionToolPanel: React.FC<Props> = ({
         .map((key) => {
           const shared = selection.sharedEditableValues[key];
           if (!hasValue(shared as any)) return null;
-          return renderEditablePropControl(key, shared, updateSelectionProp);
+          return renderEditablePropControl(key, shared, lockedKeys.has(key), updateSelectionProp);
         })}
 
       {/* Capability-driven text editing (only for single selection, to preserve v1 UX) */}
@@ -124,6 +131,7 @@ export const SelectionToolPanel: React.FC<Props> = ({
             <textarea
               className="text-input"
               value={(singleObj?.text ?? '') as string}
+              disabled={lockedKeys.has('text')}
               onChange={(e) => updateSelectionProp('text' as any, e.target.value as any)}
             />
           </div>

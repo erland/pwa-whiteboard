@@ -18,6 +18,7 @@ export const BoardEditorPage: React.FC = () => {
 
   const {
     state,
+    boardTypeDef,
     activeTool,
     toolbox,
     activeToolInstanceId,
@@ -70,6 +71,7 @@ export const BoardEditorPage: React.FC = () => {
 
           {/* Then Tools & Selection */}
           <ToolAndSelectionPanel
+            boardTypeDef={boardTypeDef}
             activeTool={activeTool}
             strokeColor={strokeColor}
             strokeWidth={strokeWidth}

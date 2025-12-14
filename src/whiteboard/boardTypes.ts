@@ -29,10 +29,29 @@ export type ToolInstanceDefinition = {
 };
 
 export type BoardTypePolicy = {
-  /** Hide settings for a tool (panel). UI-only in Step 4. */
+  /**
+   * Hide settings for a tool (panel).
+   * If a property is hidden, the control will not be shown.
+   */
   hiddenToolProps?: Partial<Record<ToolId, readonly EditablePropKey[]>>;
-  /** Hide settings in selection panel by object type. UI-only in Step 4. */
+
+  /**
+   * Lock settings for a tool (panel).
+   * Locked properties are forced to the provided value and cannot be edited.
+   */
+  lockedToolProps?: Partial<Record<ToolId, Partial<WhiteboardObject>>>;
+
+  /**
+   * Hide settings in selection panel by object type.
+   * If multiple object types are selected, any hidden key for any selected type will be hidden.
+   */
   hiddenSelectionProps?: Partial<Record<WhiteboardObjectType, readonly EditablePropKey[]>>;
+
+  /**
+   * Lock object properties by object type.
+   * Enforced in the reducer (objectCreated/objectUpdated).
+   */
+  lockedObjectProps?: Partial<Record<WhiteboardObjectType, Partial<WhiteboardObject>>>;
 };
 
 export type BoardTypeDefinition = {
@@ -78,9 +97,19 @@ export const BOARD_TYPES: Record<BoardTypeId, BoardTypeDefinition> = {
     description: 'Simplified tools for ideation (sticky notes + freehand + selection).',
     toolbox: [tool('stickyNote', 'Sticky note', '🗒'), tool('freehand', 'Freehand', '✏️'), tool('select', 'Select', '🖱')],
     policy: {
-      // Example policy scaffolding (not wired yet in Step 4).
+      // Example policy: simplify sticky notes by hiding and locking some style controls.
       hiddenToolProps: {
         stickyNote: ['strokeColor', 'textColor'],
+      },
+      hiddenSelectionProps: {
+        stickyNote: ['strokeColor', 'textColor'],
+      },
+      lockedObjectProps: {
+        stickyNote: {
+          // Dark text/border suitable for bright note colors.
+          strokeColor: '#0f172a',
+          textColor: '#0f172a',
+        },
       },
     },
   },
@@ -98,4 +127,49 @@ export function getBoardType(id: BoardTypeId | string | undefined | null): Board
 /** Ensures a board type's toolbox always includes selection. */
 export function boardTypeHasSelection(def: BoardTypeDefinition): boolean {
   return def.toolbox.some((t) => t.baseToolId === 'select');
+}
+
+function toSet(keys: readonly EditablePropKey[] | undefined): Set<EditablePropKey> {
+  return new Set((keys ?? []) as EditablePropKey[]);
+}
+
+function hasOwn(obj: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+/** Hidden tool prop keys for this board type + tool id. */
+export function getHiddenToolPropKeys(def: BoardTypeDefinition, toolId: ToolId): Set<EditablePropKey> {
+  return toSet(def.policy?.hiddenToolProps?.[toolId]);
+}
+
+/** Locked tool props for this board type + tool id. */
+export function getLockedToolProps(def: BoardTypeDefinition, toolId: ToolId): Partial<WhiteboardObject> {
+  const fromTool = def.policy?.lockedToolProps?.[toolId] ?? {};
+  // For creation tools, tool id === object type; allow reuse of lockedObjectProps.
+  const fromObj = (def.policy?.lockedObjectProps as any)?.[toolId] ?? {};
+  return { ...(fromTool as any), ...(fromObj as any) } as Partial<WhiteboardObject>;
+}
+
+/** Hidden selection prop keys for this board type + object type. */
+export function getHiddenSelectionPropKeys(def: BoardTypeDefinition, objectType: WhiteboardObjectType): Set<EditablePropKey> {
+  return toSet(def.policy?.hiddenSelectionProps?.[objectType]);
+}
+
+/** Locked object props for this board type + object type (enforced in reducer). */
+export function getLockedObjectProps(def: BoardTypeDefinition, objectType: WhiteboardObjectType): Partial<WhiteboardObject> {
+  return (def.policy?.lockedObjectProps?.[objectType] ?? {}) as Partial<WhiteboardObject>;
+}
+
+/** Extracts which editable keys are locked by a locked-props object. */
+export function getLockedEditableKeys(locked: Partial<WhiteboardObject>): Set<EditablePropKey> {
+  const keys: EditablePropKey[] = [];
+  (['strokeColor', 'strokeWidth', 'fillColor', 'textColor', 'fontSize', 'cornerRadius', 'text'] as const).forEach((k) => {
+    if (hasOwn(locked, k)) keys.push(k);
+  });
+  return new Set(keys);
+}
+
+/** True if a given editable prop is locked (even if the locked value is undefined). */
+export function isEditablePropLocked(locked: Partial<WhiteboardObject>, key: EditablePropKey): boolean {
+  return hasOwn(locked, key);
 }

@@ -149,9 +149,24 @@ export const BOARD_TYPE_IDS = Object.keys(BOARD_TYPES) as BoardTypeId[];
 
 /** Safe getter with fallback to 'advanced'. */
 export function getBoardType(id: BoardTypeId | string | undefined | null): BoardTypeDefinition {
-  if (!id) return BOARD_TYPES.advanced;
-  const candidate = (BOARD_TYPES as Record<string, BoardTypeDefinition>)[id];
-  return candidate ?? BOARD_TYPES.advanced;
+  const base = (() => {
+    if (!id) return BOARD_TYPES.advanced;
+    const candidate = (BOARD_TYPES as Record<string, BoardTypeDefinition>)[id];
+    return candidate ?? BOARD_TYPES.advanced;
+  })();
+
+  // Safety: ensure every returned board type has at least the Selection tool in its toolbox.
+  // This prevents "empty toolbox" or "no selection tool" states from breaking the editor.
+  if (base.toolbox.length > 0 && boardTypeHasSelection(base)) {
+    return base;
+  }
+
+  const normalizedToolbox = [
+    ...base.toolbox,
+    tool('select', 'Select', '🖱', 'select'),
+  ].filter((t, idx, arr) => arr.findIndex((x) => x.id === t.id) === idx);
+
+  return { ...base, toolbox: normalizedToolbox };
 }
 
 /** Ensures a board type's toolbox always includes selection. */

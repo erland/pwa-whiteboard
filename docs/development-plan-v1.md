@@ -359,3 +359,21 @@ Tech stack: TypeScript, React, Jest, PWA, hosted on GitHub Pages
 - GitHub Actions (if configured) runs tests and build without errors.
 - GitHub Pages deployment is stable; the app is reachable via repository URL.
 - README provides enough information for another developer (or future you) to understand and extend the project.
+
+---
+
+## Add-on – Board Types, Tool Presets, and Policies
+
+This add-on introduces a configuration-driven layer that controls which tools are available per board and can simplify the UI.
+
+- Add `boardType` to board metadata and migration (default `advanced`).
+- Define board types in a single module (toolbox + hidden/locked policies).
+- Render the toolbox from board type “tool instances” (supports presets like filled vs outline rectangle).
+- Apply hidden/locked policies in:
+  - tool settings panel,
+  - selection settings panel,
+  - reducer/state transitions (locks enforced on create/update).
+- Import behavior recommendation:
+  - importing a JSON file imports objects and viewport, but keeps the current board’s `boardType` so creation tools remain consistent with the board.
+
+

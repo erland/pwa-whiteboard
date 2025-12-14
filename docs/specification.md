@@ -80,6 +80,22 @@ On a whiteboard, the user should be able to:
   - Delete objects
 - Undo / redo at the board level
 
+
+### 3.2.1 Board Types and Tool Presets (v1+)
+
+A whiteboard has a **board type** that controls the editing experience.
+
+- A board type defines which tools are available in the toolbox.
+  - The **Selection** tool must be available in all board types.
+  - Example board types:
+    - **Advanced**: all tools available.
+    - **Freehand**: only Freehand + Selection.
+    - **Brainstorming**: focused toolbox (e.g., Sticky Notes + Selection) with simplified settings.
+- A board type may define **tool presets** (multiple toolbox entries that share the same base tool but with different default settings),
+  for example:
+  - “Rectangle (outline)” and “Rectangle (filled)”.
+- A board type may hide and/or lock certain settings to simplify the UI and ensure consistent styling.
+
 ### 3.3 Whiteboard Navigation
 
 - Pan (move the view) over an area larger than the visible screen  
@@ -232,6 +248,18 @@ This flow is not part of the first version but is specified because it affects t
 - If there is insufficient storage space, the application should ask the user what to do (e.g., delete older boards).
 
 ---
+
+
+### 5.5 Board Types, Tool Presets, and Policies
+
+- Each board must have a `boardType` value.
+- The toolbox must be rendered from the board type definition (not hard-coded).
+- The Selection tool must be available in all board types.
+- Tool presets must be supported (multiple toolbox entries pointing to the same base tool but with different default settings).
+- A board type may hide settings in tool/selection panels and may lock certain properties so that:
+  - newly created objects always get the locked values, and
+  - updates that try to change locked values are ignored.
+
 
 ## 6. Non-Functional Requirements (High-Level)
 

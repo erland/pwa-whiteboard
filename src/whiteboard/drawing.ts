@@ -257,6 +257,14 @@ export function drawDraftShape(
       ctx.stroke();
     }
   } else {
+    const draftType = (draft.toolType ?? draft.kind) as any;
+    const shape = getShape(draftType);
+    if (shape?.drawDraft) {
+      shape.drawDraft(ctx, draft, viewport, { fallbackStrokeColor: draft.strokeColor });
+      ctx.restore();
+      return;
+    }
+
     const { startX, startY, currentX, currentY } = draft;
     const x1 = Math.min(startX, currentX);
     const y1 = Math.min(startY, currentY);

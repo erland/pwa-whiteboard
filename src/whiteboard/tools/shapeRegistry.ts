@@ -23,7 +23,7 @@ import type { DrawingTool } from '../whiteboardTypes';
 import { drawFreehandObject } from './freehand/draw';
 import { drawRectangleObject } from './rectangle/draw';
 import { drawEllipseObject } from './ellipse/draw';
-import { drawDiamondObject } from './diamond/draw';
+import { drawDiamondObject, drawDiamondDraft } from './diamond/draw';
 import { drawTextObject } from './text/draw';
 import { drawStickyNoteObject } from './stickyNote/draw';
 import { drawConnectorObject } from './connector/draw';
@@ -135,6 +135,7 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
     type: 'diamond',
     connectorAttachmentPolicy: 'portsOnly',
     draw: (ctx, obj, viewport) => drawDiamondObject(ctx, obj, viewport),
+    drawDraft: (ctx, draft, viewport, _env) => drawDiamondDraft(ctx, draft, viewport),
     getBoundingBox: (obj) => getDiamondBoundingBox(obj),
     resize: (obj, newBounds) => resizeBoxObjectByBounds(obj, newBounds),
     hitTest: (obj, worldX, worldY) => hitTestDiamond(obj, worldX, worldY),

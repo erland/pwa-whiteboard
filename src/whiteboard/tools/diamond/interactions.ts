@@ -14,7 +14,7 @@ import {
  * The owning tool is tracked via draft.toolType by the core dispatcher.
  */
 export function startDiamondDraft(args: BoxStartArgs): DraftShape {
-  return startBoxDraft(args, 'rectangle');
+  return { ...startBoxDraft(args, 'rectangle'), toolType: 'diamond' };
 }
 
 export function updateDiamondDraft(draft: DraftShape, pos: Point): DraftShape {

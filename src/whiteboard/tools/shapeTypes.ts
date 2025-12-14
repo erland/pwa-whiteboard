@@ -70,6 +70,17 @@ export interface ShapeDefinition<TObj extends WhiteboardObject = WhiteboardObjec
   ) => void;
 
   /**
+   * Optional draw for in-progress draft (while drawing/dragging).
+   * If omitted, core falls back to generic dashed previews for common draft kinds.
+   */
+  drawDraft?: (
+    ctx: CanvasRenderingContext2D,
+    draft: DraftShape,
+    viewport: Viewport,
+    env: ShapeDrawEnv
+  ) => void;
+
+  /**
    * Compute the object's bounding box in world coordinates.
    * Return null for objects that are not box-addressable.
    */

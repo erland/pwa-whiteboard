@@ -12,6 +12,7 @@ export type EditablePropKey =
   | 'fillColor'
   | 'textColor'
   | 'fontSize'
+  | 'cornerRadius'
   | 'text';
 
 export type SelectionCapabilities = {

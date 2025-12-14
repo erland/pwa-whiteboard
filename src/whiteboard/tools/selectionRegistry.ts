@@ -43,6 +43,11 @@ export const EDITABLE_PROP_DEFS: Record<EditablePropKey, EditablePropDefinition>
     label: 'Font size',
     control: { kind: 'range', min: 8, max: 64, step: 1 },
   },
+  cornerRadius: {
+    key: 'cornerRadius',
+    label: 'Corner radius',
+    control: { kind: 'range', min: 0, max: 64, step: 1 },
+  },
   text: { key: 'text', label: 'Text', control: { kind: 'textarea' } },
 };
 

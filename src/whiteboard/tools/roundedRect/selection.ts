@@ -1,4 +1,4 @@
 // src/whiteboard/tools/roundedRect/selection.ts
-import { BOX_WITH_FILL } from '../_shared/selectionCaps';
+import { ROUNDED_BOX_WITH_FILL } from '../_shared/selectionCaps';
 
-export const roundedRectSelectionCapabilities = BOX_WITH_FILL;
+export const roundedRectSelectionCapabilities = ROUNDED_BOX_WITH_FILL;

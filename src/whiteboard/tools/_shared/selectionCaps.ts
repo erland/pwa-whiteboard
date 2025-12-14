@@ -12,6 +12,10 @@ export const BOX_WITH_FILL: SelectionCapabilities = {
   editableProps: ['strokeColor', 'strokeWidth', 'fillColor'] as const,
 };
 
+export const ROUNDED_BOX_WITH_FILL: SelectionCapabilities = {
+  editableProps: ['strokeColor', 'strokeWidth', 'fillColor', 'cornerRadius'] as const,
+};
+
 export const TEXT_ONLY: SelectionCapabilities = {
   editableProps: ['textColor', 'fontSize', 'text'] as const,
 };

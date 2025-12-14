@@ -22,6 +22,7 @@ import type { DrawingTool } from '../whiteboardTypes';
 /* ===== draw ===== */
 import { drawFreehandObject } from './freehand/draw';
 import { drawRectangleObject } from './rectangle/draw';
+import { drawRoundedRectObject, drawRoundedRectDraft } from './roundedRect/draw';
 import { drawEllipseObject } from './ellipse/draw';
 import { drawDiamondObject, drawDiamondDraft } from './diamond/draw';
 import { drawTextObject } from './text/draw';
@@ -31,6 +32,7 @@ import { drawConnectorObject } from './connector/draw';
 /* ===== geometry / ports ===== */
 import { getFreehandBoundingBox, translateFreehandObject, resizeFreehandObject } from './freehand/geometry';
 import { getRectangleBoundingBox, getRectanglePorts } from './rectangle/geometry';
+import { getRoundedRectBoundingBox, getRoundedRectPorts } from './roundedRect/geometry';
 import { getEllipseBoundingBox, getEllipsePorts } from './ellipse/geometry';
 import { getDiamondBoundingBox, getDiamondPorts, hitTestDiamond } from './diamond/geometry';
 import { getTextBoundingBox, getTextPorts } from './text/geometry';
@@ -40,6 +42,7 @@ import { resizeBoxObjectByBounds } from './_shared/resizeByBounds';
 
 /* ===== selection capabilities ===== */
 import { rectangleSelectionCapabilities } from './rectangle/selection';
+import { roundedRectSelectionCapabilities } from './roundedRect/selection';
 import { ellipseSelectionCapabilities } from './ellipse/selection';
 import { diamondSelectionCapabilities } from './diamond/selection';
 import { freehandSelectionCapabilities } from './freehand/selection';
@@ -50,6 +53,7 @@ import { connectorSelectionCapabilities } from './connector/selection';
 /* ===== interactions ===== */
 import { startFreehandDraft, updateFreehandDraft, finishFreehandDraft } from './freehand/interactions';
 import { startRectangleDraft, updateRectangleDraft, finishRectangleDraft } from './rectangle/interactions';
+import { startRoundedRectDraft, updateRoundedRectDraft, finishRoundedRectDraft } from './roundedRect/interactions';
 import { startEllipseDraft, updateEllipseDraft, finishEllipseDraft } from './ellipse/interactions';
 import { startDiamondDraft, updateDiamondDraft, finishDiamondDraft } from './diamond/interactions';
 import { createTextObject } from './text/interactions';
@@ -102,6 +106,31 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
         updateRectangleDraft(draft, pos),
       finishDraft: (draft: DraftShape): ToolCreateResult | null => {
         const { object, selectIds } = finishRectangleDraft(draft);
+        return object && selectIds ? { object, selectIds } : null;
+      },
+    },
+  },
+  roundedRect: {
+    type: 'roundedRect',
+    draw: (ctx, obj, viewport) => drawRoundedRectObject(ctx, obj, viewport),
+    drawDraft: (ctx, draft, viewport) => drawRoundedRectDraft(ctx, draft, viewport),
+    getBoundingBox: (obj) => getRoundedRectBoundingBox(obj),
+    resize: (obj, newBounds) => resizeBoxObjectByBounds(obj, newBounds),
+    getPorts: (obj): ObjectPort[] =>
+      getRoundedRectPorts(obj).map((p) => ({ id: p.portId, point: p.point })),
+    selectionCaps: roundedRectSelectionCapabilities,
+    draft: {
+      startDraft: (ctx: ToolPointerContext, pos: Point) =>
+        startRoundedRectDraft({
+          pos,
+          strokeColor: ctx.strokeColor,
+          strokeWidth: ctx.strokeWidth,
+          generateObjectId: ctx.generateObjectId,
+        }),
+      updateDraft: (draft: DraftShape, _ctx: ToolPointerContext, pos: Point) =>
+        updateRoundedRectDraft(draft, pos),
+      finishDraft: (draft: DraftShape): ToolCreateResult | null => {
+        const { object, selectIds } = finishRoundedRectDraft(draft);
         return object && selectIds ? { object, selectIds } : null;
       },
     },

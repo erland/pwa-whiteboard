@@ -14,6 +14,7 @@ export type WhiteboardObjectType =
   | 'rectangle'
   | 'ellipse'
   | 'diamond'
+  | 'roundedRect'
   | 'text'
   | 'stickyNote'
   | 'connector';
@@ -73,6 +74,7 @@ export interface WhiteboardObject {
   // Style
   strokeColor?: string;
   fillColor?: string;
+  cornerRadius?: number;
   strokeWidth?: number;
 
   // Text content (for text / sticky notes)

@@ -1,4 +1,4 @@
-import type { WhiteboardMeta, WhiteboardState, WhiteboardId } from './types';
+import type { BoardTypeId, WhiteboardMeta, WhiteboardState, WhiteboardId } from './types';
 
 /**
  * Simple index of boards for the board list page.
@@ -10,7 +10,7 @@ export type BoardsIndex = WhiteboardMeta[];
  */
 export interface BoardsRepository {
   listBoards(): Promise<BoardsIndex>;
-  createBoard(name: string): Promise<WhiteboardMeta>;
+  createBoard(name: string, boardType?: BoardTypeId): Promise<WhiteboardMeta>;
   renameBoard(id: WhiteboardId, name: string): Promise<void>;
   deleteBoard(id: WhiteboardId): Promise<void>;
 }

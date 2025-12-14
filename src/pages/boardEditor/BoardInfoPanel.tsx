@@ -1,5 +1,6 @@
 import React from 'react';
 import type { WhiteboardMeta } from '../../domain/types';
+import { getBoardType } from '../../whiteboard/boardTypes';
 
 type BoardInfoPanelProps = {
   meta: WhiteboardMeta;
@@ -15,6 +16,10 @@ export const BoardInfoPanel: React.FC<BoardInfoPanelProps> = ({
     <div className="panel-row">
       <span className="field-label-inline">Name</span>
       <span className="field-value">{meta.name}</span>
+    </div>
+    <div className="panel-row">
+      <span className="field-label-inline">Type</span>
+      <span className="field-value">{getBoardType(meta.boardType).label}</span>
     </div>
     <div className="panel-row">
       <span className="field-label-inline">Objects</span>

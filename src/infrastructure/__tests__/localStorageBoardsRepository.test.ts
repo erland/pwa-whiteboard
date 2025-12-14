@@ -10,7 +10,7 @@ describe('LocalStorageBoardsRepository', () => {
     const before = await repo.listBoards();
     expect(before).toHaveLength(0);
 
-    const meta = await repo.createBoard('My board');
+    const meta = await repo.createBoard('My board', 'advanced');
     expect(meta.id).toBeTruthy();
     expect((meta as any).boardType).toBe('advanced');
 
@@ -48,7 +48,7 @@ it('migrates legacy boards index entries missing boardType', async () => {
 
   it('renames and deletes boards', async () => {
     const repo = getBoardsRepository();
-    const meta = await repo.createBoard('Old name');
+    const meta = await repo.createBoard('Old name', 'advanced');
 
     await repo.renameBoard(meta.id, 'New name');
     let list = await repo.listBoards();

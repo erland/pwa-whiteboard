@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { WhiteboardMeta } from '../domain/types';
 import { getBoardsRepository } from '../infrastructure/localStorageBoardsRepository';
+import type { BoardTypeId } from '../domain/types';
+import { BOARD_TYPE_IDS, getBoardType } from '../whiteboard/boardTypes';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
@@ -32,9 +34,25 @@ export const BoardListPage: React.FC = () => {
   const handleCreateBoard = async () => {
     const name = window.prompt('Name for the new board:', 'New board');
     if (name === null) return;
+
+    const optionsText = BOARD_TYPE_IDS.map((id) => `${id} — ${getBoardType(id).label}`).join('\n');
+    const typeInput = window.prompt(
+      `Board type (enter one of: ${BOARD_TYPE_IDS.join(', ')}):\n\n${optionsText}`,
+      'advanced'
+    );
+    if (typeInput === null) return;
+
+    const trimmed = typeInput.trim().toLowerCase();
+    const boardType: BoardTypeId = (BOARD_TYPE_IDS.includes(trimmed as BoardTypeId)
+      ? (trimmed as BoardTypeId)
+      : 'advanced');
+
+    if (trimmed && boardType !== trimmed) {
+      window.alert(`Unknown board type "${typeInput}". Using "advanced".`);
+    }
     const repo = getBoardsRepository();
     try {
-      const meta = await repo.createBoard(name);
+      const meta = await repo.createBoard(name, boardType);
       // Navigate directly to the newly created board
       navigate(`/board/${meta.id}`);
     } catch (err) {
@@ -101,6 +119,7 @@ export const BoardListPage: React.FC = () => {
               >
                 <div className="board-list-name">{board.name}</div>
                 <div className="board-list-meta">
+                  <span>Type: {getBoardType(board.boardType).label}</span>
                   <span>Created: {new Date(board.createdAt).toLocaleString()}</span>
                   <span>Updated: {new Date(board.updatedAt).toLocaleString()}</span>
                 </div>

@@ -84,13 +84,14 @@ class LocalStorageBoardsRepository implements BoardsRepository {
     return [...index].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
   }
 
-  async createBoard(name: string): Promise<WhiteboardMeta> {
+  async createBoard(name: string, boardType?: BoardTypeId): Promise<WhiteboardMeta> {
     const now = new Date().toISOString();
     const id = generateId();
+    const nextType = isBoardType(boardType) ? boardType : DEFAULT_BOARD_TYPE;
     const meta: WhiteboardMeta = {
       id,
       name: name.trim() || 'Untitled board',
-      boardType: DEFAULT_BOARD_TYPE,
+      boardType: nextType,
       createdAt: now,
       updatedAt: now
     };

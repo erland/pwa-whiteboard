@@ -98,6 +98,13 @@ export interface ShapeDefinition<TObj extends WhiteboardObject = WhiteboardObjec
   // ...existing
 
   /**
+   * Translate (move) the object by dx/dy.
+   * - Return a partial patch to apply via onUpdateObject().
+   * - Return null to indicate the object should not be moved (e.g., semantic connectors).
+   */
+  translate?: (obj: TObj, dx: number, dy: number) => Partial<TObj> | null;
+
+  /**
    * Controls how connector endpoints may attach while dragging/creating.
    * - 'free'      => can compute continuous attachments (edgeT/perimeterAngle)
    * - 'portsOnly' => always snap to nearest port (type:'port')
@@ -158,4 +165,3 @@ export type ShapeToolDefinition<
    */
   pointerDownCreate?: (ctx: ToolPointerContext, pos: Point) => ToolCreateResult | null;
 };
-

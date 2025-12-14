@@ -22,7 +22,7 @@ import {
 } from './geometry';
 import type { DraftShape } from './drawing';
 import type { DrawingTool } from './whiteboardTypes';
-import { toolPointerDown, toolPointerMove, toolPointerUp } from './tools/shapeRegistry';
+import { toolPointerDown, toolPointerMove, toolPointerUp, translateObject } from './tools/shapeRegistry';
 import { pickAttachmentForObject } from './tools/connector/interactions';
 
 type ResizeDragState = {
@@ -373,13 +373,15 @@ export function useCanvasInteractions({
       const obj = objects.find((o) => o.id === drag.objectId);
       if (!obj) return;
 
-      // Do not move connectors (they are attached semantically)
-      if (obj.type === 'connector') {
+      const patch = translateObject(obj, dx, dy);
+
+      // If a shape opts out of moving (e.g., semantic connectors), still advance the drag cursor.
+      if (!patch) {
         setDrag({ ...drag, lastX: pos.x, lastY: pos.y });
         return;
       }
 
-      onUpdateObject(obj.id, { x: obj.x + dx, y: obj.y + dy });
+      onUpdateObject(obj.id, patch);
       setDrag({ ...drag, lastX: pos.x, lastY: pos.y });
       return;
     }

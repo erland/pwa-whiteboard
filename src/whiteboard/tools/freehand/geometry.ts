@@ -33,3 +33,21 @@ export function getFreehandBoundingBox(obj: WhiteboardObject): Bounds | null {
     height
   };
 }
+
+/**
+ * Translate a freehand object by dx/dy.
+ * - Freehand rendering uses absolute points, so we must shift points as well as x/y.
+ */
+export function translateFreehandObject(
+  obj: WhiteboardObject,
+  dx: number,
+  dy: number
+): Partial<WhiteboardObject> | null {
+  if (obj.type !== 'freehand') return null;
+  const points = obj.points ? obj.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) : obj.points;
+  return {
+    x: obj.x + dx,
+    y: obj.y + dy,
+    points,
+  };
+}

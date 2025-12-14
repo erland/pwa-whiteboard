@@ -28,7 +28,7 @@ import { drawStickyNoteObject } from './stickyNote/draw';
 import { drawConnectorObject } from './connector/draw';
 
 /* ===== geometry / ports ===== */
-import { getFreehandBoundingBox } from './freehand/geometry';
+import { getFreehandBoundingBox, translateFreehandObject } from './freehand/geometry';
 import { getRectangleBoundingBox, getRectanglePorts } from './rectangle/geometry';
 import { getEllipseBoundingBox, getEllipsePorts } from './ellipse/geometry';
 import { getDiamondBoundingBox, getDiamondPorts, hitTestDiamond } from './diamond/geometry';
@@ -60,6 +60,7 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
     type: 'freehand',
     draw: (ctx, obj, viewport) => drawFreehandObject(ctx, obj, viewport),
     getBoundingBox: (obj) => getFreehandBoundingBox(obj),
+    translate: (obj, dx, dy) => translateFreehandObject(obj, dx, dy),
     draft: {
       startDraft: (ctx: ToolPointerContext, pos: Point) =>
         startFreehandDraft({
@@ -187,6 +188,7 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
 
   connector: {
     type: 'connector',
+    translate: () => null,
     draw: (ctx, obj, viewport, env) => {
       const objects = env.objects ?? [];
       drawConnectorObject(ctx, obj, objects, viewport);
@@ -323,4 +325,22 @@ export function toolPointerUp(
   return res
     ? { kind: 'create', object: res.object, selectIds: res.selectIds }
     : { kind: 'noop' };
+}
+
+/**
+ * Translate an object by dx/dy using per-shape behavior.
+ * - Shapes may override translate() (e.g., freehand shifts points; connector returns null).
+ * - Default behavior: translate x/y only.
+ */
+export function translateObject(
+  obj: WhiteboardObject,
+  dx: number,
+  dy: number
+): Partial<WhiteboardObject> | null {
+  const def = SHAPES[obj.type as WhiteboardObjectType];
+  if (def?.translate) {
+    return def.translate(obj as any, dx, dy) as any;
+  }
+  if (typeof obj.x !== 'number' || typeof obj.y !== 'number') return null;
+  return { x: obj.x + dx, y: obj.y + dy };
 }

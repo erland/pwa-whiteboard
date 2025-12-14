@@ -5,114 +5,62 @@
  * - Which tools appear in the toolbox for a board
  * - Which settings are visible (and later: locked) for tool/selection panels
  *
- * Step 2 creates the single source of truth, but does not yet wire any runtime
- * behavior to it. Later steps will progressively delegate UI and state updates
- * to these definitions.
+ * Step 2 introduced this module as a single source of truth.
+ * Step 4 wires toolbox rendering + active tool instance selection to these definitions.
  */
 
 import type { BoardTypeId, WhiteboardObject, WhiteboardObjectType } from '../domain/types';
-import type { ToolId } from './tools/registry';
+import { TOOL_REGISTRY, type ToolId } from './tools/registry';
 import type { EditablePropKey } from './tools/selection/types';
 
 export type ToolInstanceId = string;
 
-/**
- * A tool instance is what the toolbox renders.
- * Multiple instances can point to the same base tool (e.g. filled vs outline rectangle).
- */
-export interface ToolInstanceDefinition {
-  /** Unique id within the toolbox, persisted in UI state in later steps. */
+export type ToolInstanceDefinition = {
+  /** Unique id for this entry in the toolbox (enables presets, duplicates, etc.). */
   id: ToolInstanceId;
-
-  /** Which underlying tool implementation this instance uses. */
+  /** The underlying tool implementation used by canvas interactions. */
   baseToolId: ToolId;
-
-  /** UI label. */
+  /** Label shown in the tool selector UI. */
   label: string;
-
-  /** Optional icon for UI (kept as a simple string, e.g., emoji). */
+  /** Optional icon/emoji. */
   icon?: string;
-
-  /** Defaults applied when this tool instance becomes active. */
+  /** Optional defaults for this tool instance (used in later steps). */
   defaults?: Partial<WhiteboardObject>;
+};
 
-  /** Optional per-instance hidden tool-setting keys (UI-only). */
-  hiddenToolProps?: readonly EditablePropKey[];
+export type BoardTypePolicy = {
+  /** Hide settings for a tool (panel). UI-only in Step 4. */
+  hiddenToolProps?: Partial<Record<ToolId, readonly EditablePropKey[]>>;
+  /** Hide settings in selection panel by object type. UI-only in Step 4. */
+  hiddenSelectionProps?: Partial<Record<WhiteboardObjectType, readonly EditablePropKey[]>>;
+};
 
-  /** Optional per-instance locked tool-setting values (enforced later). */
-  lockedToolProps?: Partial<Pick<WhiteboardObject, EditablePropKey>>;
-}
-
-/**
- * Board-level policies.
- *
- * NOTE: These are not enforced in Step 2. They are defined now so later steps
- * can wire them in without changing the config shape.
- */
-export interface BoardTypePolicy {
-  /** Hidden tool-setting keys per base tool id. */
-  hiddenToolPropsByTool?: Partial<Record<ToolId, readonly EditablePropKey[]>>;
-
-  /** Locked tool-setting values per base tool id (wins over user edits). */
-  lockedToolPropsByTool?: Partial<
-    Record<ToolId, Partial<Pick<WhiteboardObject, EditablePropKey>>>
-  >;
-
-  /** Hidden selection-setting keys per object type. */
-  hiddenSelectionPropsByObjectType?: Partial<
-    Record<WhiteboardObjectType, readonly EditablePropKey[]>
-  >;
-
-  /** Locked object properties per object type (enforced on create/update later). */
-  lockedObjectPropsByObjectType?: Partial<
-    Record<WhiteboardObjectType, Partial<Pick<WhiteboardObject, EditablePropKey>>>
-  >;
-}
-
-export interface BoardTypeDefinition {
+export type BoardTypeDefinition = {
   id: BoardTypeId;
   label: string;
-  description?: string;
-
-  /** Toolbox entries for this board type, in display order. */
+  description: string;
   toolbox: readonly ToolInstanceDefinition[];
-
-  /** Optional policy rules for tool/selection settings. */
   policy?: BoardTypePolicy;
-}
+};
 
-function tool(
-  baseToolId: ToolId,
-  label: string,
-  icon?: string,
-  extras?: Omit<ToolInstanceDefinition, 'id' | 'baseToolId' | 'label' | 'icon'>
-): ToolInstanceDefinition {
-  return {
-    id: baseToolId,
-    baseToolId,
-    label,
-    icon,
-    ...extras,
-  };
+function tool(baseToolId: ToolId, label: string, icon?: string, instanceId?: string): ToolInstanceDefinition {
+  return { id: instanceId ?? baseToolId, baseToolId, label, icon };
 }
 
 /**
- * Single source of truth for available board types.
+ * Single source of truth for board types.
+ *
+ * NOTE: For now, each toolbox entry maps 1:1 to the underlying tool id.
+ * Later we will add duplicates/presets (e.g. rect-filled vs rect-outline).
  */
 export const BOARD_TYPES: Record<BoardTypeId, BoardTypeDefinition> = {
   advanced: {
     id: 'advanced',
     label: 'Advanced',
-    description: 'All tools available (matches current behavior).',
+    description: 'All tools available.',
     toolbox: [
-      tool('freehand', 'Freehand', '✏️'),
-      tool('rectangle', 'Rectangle', '▭'),
-      tool('roundedRect', 'Rounded rect', '▢'),
-      tool('ellipse', 'Ellipse', '⬭'),
-      tool('diamond', 'Diamond', '◇'),
-      tool('connector', 'Connector', '🔗'),
-      tool('text', 'Text', '🔤'),
-      tool('stickyNote', 'Sticky note', '🗒'),
+      // Keep order aligned with TOOL_REGISTRY to match current toolbar ordering.
+      ...TOOL_REGISTRY.filter((t) => t.id !== 'select').map((t) => tool(t.id, t.label, t.icon)),
       tool('select', 'Select', '🖱'),
     ],
   },
@@ -127,19 +75,11 @@ export const BOARD_TYPES: Record<BoardTypeId, BoardTypeDefinition> = {
   brainstorming: {
     id: 'brainstorming',
     label: 'Brainstorming',
-    description: 'Simplified tools for ideation (sticky notes + selection).',
-    toolbox: [
-      tool('stickyNote', 'Sticky note', '🗒'),
-      tool('freehand', 'Freehand', '✏️'),
-      tool('select', 'Select', '🖱'),
-    ],
+    description: 'Simplified tools for ideation (sticky notes + freehand + selection).',
+    toolbox: [tool('stickyNote', 'Sticky note', '🗒'), tool('freehand', 'Freehand', '✏️'), tool('select', 'Select', '🖱')],
     policy: {
-      // Example: hide some sticky note style controls to keep the UI simple.
-      // (Enforcement will come in later steps.)
-      hiddenToolPropsByTool: {
-        stickyNote: ['strokeColor', 'textColor'],
-      },
-      hiddenSelectionPropsByObjectType: {
+      // Example policy scaffolding (not wired yet in Step 4).
+      hiddenToolProps: {
         stickyNote: ['strokeColor', 'textColor'],
       },
     },
@@ -148,20 +88,14 @@ export const BOARD_TYPES: Record<BoardTypeId, BoardTypeDefinition> = {
 
 export const BOARD_TYPE_IDS = Object.keys(BOARD_TYPES) as BoardTypeId[];
 
-/**
- * Get the board type definition for a given id.
- * Falls back to 'advanced' for any unexpected value.
- */
+/** Safe getter with fallback to 'advanced'. */
 export function getBoardType(id: BoardTypeId | string | undefined | null): BoardTypeDefinition {
   if (!id) return BOARD_TYPES.advanced;
   const candidate = (BOARD_TYPES as Record<string, BoardTypeDefinition>)[id];
   return candidate ?? BOARD_TYPES.advanced;
 }
 
-/**
- * Convenience: ensures a board type's toolbox always includes selection.
- * Helpful as a guardrail in tests and future runtime wiring.
- */
+/** Ensures a board type's toolbox always includes selection. */
 export function boardTypeHasSelection(def: BoardTypeDefinition): boolean {
   return def.toolbox.some((t) => t.baseToolId === 'select');
 }

@@ -1,5 +1,5 @@
 // src/pages/hooks/useBoardEditor.ts
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useWhiteboard } from '../../whiteboard/WhiteboardStore';
 import type {
   WhiteboardMeta,
@@ -9,6 +9,7 @@ import type {
 import { getWhiteboardRepository } from '../../infrastructure/localStorageWhiteboardRepository';
 import { getBoardsRepository } from '../../infrastructure/localStorageBoardsRepository';
 import type { DrawingTool } from '../../whiteboard/WhiteboardCanvas';
+import { getBoardType } from '../../whiteboard/boardTypes';
 import { generateEventId } from './boardEvents';
 import { useBoardViewport } from './useBoardViewport';
 import { useBoardSelection } from './useBoardSelection';
@@ -16,45 +17,74 @@ import { useBoardImportExport } from './useBoardImportExport';
 
 export function useBoardEditor(id: string | undefined) {
   const { state, resetBoard, dispatchEvent, undo, redo, setViewport } = useWhiteboard();
+  const boardTypeDef = getBoardType(state?.meta.boardType ?? 'advanced');
+  const toolbox = boardTypeDef.toolbox;
+  const toolboxKey = useMemo(() => toolbox.map((t) => t.id).join('|'), [toolbox]);
 
-  const [activeTool, setActiveTool] = useState<DrawingTool>('freehand');
-  const [strokeColor, setStrokeColor] = useState<string>('#38bdf8');
-  const [strokeWidth, setStrokeWidth] = useState<number>(3);
+  const toolInstanceById = useMemo(() => {
+    const map: Record<string, (typeof toolbox)[number]> = {};
+    toolbox.forEach((t) => {
+      map[t.id] = t;
+    });
+    return map;
+  }, [toolboxKey]);
 
-  // Per-tool settings beyond strokeColor/strokeWidth.
+  const defaultToolInstanceId = useMemo(() => {
+    const firstNonSelect = toolbox.find((t) => t.baseToolId !== 'select');
+    return (firstNonSelect ?? toolbox[0] ?? { id: 'select' }).id;
+  }, [toolboxKey]);
+
+  const [activeToolInstanceId, setActiveToolInstanceId] = useState<string>(() => defaultToolInstanceId);
+
+  // Stroke settings are tracked per tool instance (enables presets like filled/outline later).
+  const [strokeByToolInstance, setStrokeByToolInstance] = useState<
+    Record<string, { strokeColor: string; strokeWidth: number }>
+  >({});
+
+  // Per-tool-instance settings beyond strokeColor/strokeWidth.
   // These drive both tool UI and defaults applied when creating new objects.
-  const [toolPropsByTool, setToolPropsByTool] = useState<
-    Record<DrawingTool, Partial<WhiteboardObject>>
-  >(() => ({
-    select: {},
-    freehand: {},
-    rectangle: {},
-    ellipse: {},
-    diamond: {},
-    roundedRect: { cornerRadius: 12 },
-    connector: {},
-    text: { textColor: '#38bdf8', fontSize: 18, text: 'Text' },
-    stickyNote: {
-      fillColor: '#facc15',
-      textColor: '#38bdf8',
-      fontSize: 16,
-      text: 'Sticky note',
-    },
-  }));
+  const [toolPropsByToolInstance, setToolPropsByToolInstance] = useState<Record<string, Partial<WhiteboardObject>>>({});
+
+  // Ensure the active tool instance is valid for the current board type.
+  useEffect(() => {
+    if (!toolInstanceById[activeToolInstanceId]) {
+      setActiveToolInstanceId(defaultToolInstanceId);
+    }
+  }, [toolInstanceById, activeToolInstanceId, defaultToolInstanceId, toolboxKey]);
+
+  const activeTool: DrawingTool =
+    (toolInstanceById[activeToolInstanceId]?.baseToolId ?? 'select') as DrawingTool;
+
+  const strokeColor = strokeByToolInstance[activeToolInstanceId]?.strokeColor ?? '#38bdf8';
+  const strokeWidth = strokeByToolInstance[activeToolInstanceId]?.strokeWidth ?? 3;
+
+  const setStrokeColor = (color: string) => {
+    setStrokeByToolInstance((prev) => {
+      const current = prev[activeToolInstanceId] ?? { strokeColor: '#38bdf8', strokeWidth: 3 };
+      return { ...prev, [activeToolInstanceId]: { ...current, strokeColor: color } };
+    });
+  };
+
+  const setStrokeWidth = (value: number) => {
+    setStrokeByToolInstance((prev) => {
+      const current = prev[activeToolInstanceId] ?? { strokeColor: '#38bdf8', strokeWidth: 3 };
+      return { ...prev, [activeToolInstanceId]: { ...current, strokeWidth: value } };
+    });
+  };
 
   const updateActiveToolProp = <K extends keyof WhiteboardObject>(
     key: K,
     value: WhiteboardObject[K]
   ) => {
-    setToolPropsByTool((prev) => {
-      const current = prev[activeTool] ?? {};
+    setToolPropsByToolInstance((prev) => {
+      const current = prev[activeToolInstanceId] ?? {};
       return {
         ...prev,
-        [activeTool]: {
+        [activeToolInstanceId]: {
           ...current,
           [key]: value,
         },
-      } as Record<DrawingTool, Partial<WhiteboardObject>>;
+      };
     });
   };
   const [canvasEl, setCanvasEl] = useState<HTMLCanvasElement | null>(null);
@@ -222,12 +252,14 @@ export function useBoardEditor(id: string | undefined) {
   return {
     state,
     activeTool,
-    setActiveTool,
+    toolbox,
+    activeToolInstanceId,
+    setActiveToolInstanceId,
     strokeColor,
     setStrokeColor,
     strokeWidth,
     setStrokeWidth,
-    toolProps: toolPropsByTool[activeTool] ?? {},
+    toolProps: toolPropsByToolInstance[activeToolInstanceId] ?? {},
     updateActiveToolProp,
     canvasEl,
     setCanvasEl,

@@ -19,7 +19,9 @@ export const BoardEditorPage: React.FC = () => {
   const {
     state,
     activeTool,
-    setActiveTool,
+    toolbox,
+    activeToolInstanceId,
+    setActiveToolInstanceId,
     strokeColor,
     setStrokeColor,
     strokeWidth,
@@ -61,8 +63,9 @@ export const BoardEditorPage: React.FC = () => {
         <aside className="board-editor-sidebar">
           {/* Tools first */}
           <ToolSelectorPanel
-            activeTool={activeTool}
-            onChangeTool={setActiveTool}
+            toolbox={toolbox}
+            activeToolInstanceId={activeToolInstanceId}
+            onChangeToolInstance={setActiveToolInstanceId}
           />
 
           {/* Then Tools & Selection */}

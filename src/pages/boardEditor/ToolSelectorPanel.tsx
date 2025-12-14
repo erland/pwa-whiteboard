@@ -1,27 +1,28 @@
 import React from 'react';
-import type { DrawingTool } from '../../whiteboard/whiteboardTypes';
-import { TOOL_REGISTRY } from '../../whiteboard/tools/registry';
+import type { ToolInstanceDefinition, ToolInstanceId } from '../../whiteboard/boardTypes';
 
 type ToolSelectorPanelProps = {
-  activeTool: DrawingTool;
-  onChangeTool: (tool: DrawingTool) => void;
+  toolbox: readonly ToolInstanceDefinition[];
+  activeToolInstanceId: ToolInstanceId;
+  onChangeToolInstance: (id: ToolInstanceId) => void;
 };
 
 export const ToolSelectorPanel: React.FC<ToolSelectorPanelProps> = ({
-  activeTool,
-  onChangeTool,
+  toolbox,
+  activeToolInstanceId,
+  onChangeToolInstance,
 }) => (
   <div className="panel">
     <h2 className="panel-title panel-title-tools">Tools</h2>
 
-    <div className="tool-buttons">
-      {TOOL_REGISTRY.map((tool) => (
+    <div className="tool-grid">
+      {toolbox.map((tool) => (
         <button
           key={tool.id}
           type="button"
-          className={`tool-button ${activeTool === tool.id ? 'active' : ''}`}
-          onClick={() => onChangeTool(tool.id as DrawingTool)}
-          aria-pressed={activeTool === tool.id}
+          className={`tool-button ${activeToolInstanceId === tool.id ? 'active' : ''}`}
+          onClick={() => onChangeToolInstance(tool.id)}
+          aria-pressed={activeToolInstanceId === tool.id}
         >
           {tool.icon ? `${tool.icon} ` : ''}
           {tool.label}

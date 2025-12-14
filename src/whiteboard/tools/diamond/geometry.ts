@@ -1,42 +1,20 @@
 // src/whiteboard/tools/diamond/geometry.ts
 import type { WhiteboardObject, Point } from '../../../domain/types';
 import type { Bounds } from '../../geometry/types';
+import { getBoxBoundingBox, getBoxPorts } from '../_shared/boxGeometry';
 
 /**
  * Bounding box for diamond is the same as its declared (x,y,w,h).
  */
 export function getDiamondBoundingBox(obj: WhiteboardObject): Bounds | null {
-  if (obj.type !== 'diamond') return null;
-
-  const w = obj.width ?? 0;
-  const h = obj.height ?? 0;
-  return { x: obj.x, y: obj.y, width: w, height: h };
+  return getBoxBoundingBox(obj, 'diamond');
 }
 
 export function getDiamondPorts(
   obj: WhiteboardObject
 ): Array<{ portId: string; point: Point }> {
-  if (obj.type !== 'diamond') return [];
-
-  const w = obj.width ?? 0;
-  const h = obj.height ?? 0;
-
-  // If we don't have meaningful dimensions, expose a single anchor port.
-  if (w <= 0 || h <= 0) {
-    return [{ portId: 'center', point: { x: obj.x, y: obj.y } }];
-  }
-
-  const cx = obj.x + w / 2;
-  const cy = obj.y + h / 2;
-
-  // Vertices of the diamond (midpoints of each side of the bounding box).
-  return [
-    { portId: 'center', point: { x: cx, y: cy } },
-    { portId: 'top', point: { x: cx, y: obj.y } },
-    { portId: 'right', point: { x: obj.x + w, y: cy } },
-    { portId: 'bottom', point: { x: cx, y: obj.y + h } },
-    { portId: 'left', point: { x: obj.x, y: cy } },
-  ];
+  // Ports are the midpoints of each side of the bounding box (same as box ports).
+  return getBoxPorts(obj, 'diamond');
 }
 
 /**

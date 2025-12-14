@@ -1,7 +1,5 @@
 // src/whiteboard/tools/text/selection.ts
 
-import type { SelectionCapabilities } from '../selection/types';
+import { TEXT_ONLY } from '../_shared/selectionCaps';
 
-export const textSelectionCapabilities: SelectionCapabilities = {
-  editableProps: ['textColor', 'fontSize', 'text'] as const,
-};
+export const textSelectionCapabilities = TEXT_ONLY;

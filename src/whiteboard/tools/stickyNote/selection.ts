@@ -1,7 +1,5 @@
 // src/whiteboard/tools/stickyNote/selection.ts
 
-import type { SelectionCapabilities } from '../selection/types';
+import { STICKY_NOTE } from '../_shared/selectionCaps';
 
-export const stickyNoteSelectionCapabilities: SelectionCapabilities = {
-  editableProps: ['strokeColor', 'strokeWidth', 'fillColor', 'textColor', 'fontSize', 'text'] as const,
-};
+export const stickyNoteSelectionCapabilities = STICKY_NOTE;

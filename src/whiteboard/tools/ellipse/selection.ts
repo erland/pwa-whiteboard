@@ -1,7 +1,5 @@
 // src/whiteboard/tools/ellipse/selection.ts
 
-import type { SelectionCapabilities } from '../selection/types';
+import { BOX_WITH_FILL } from '../_shared/selectionCaps';
 
-export const ellipseSelectionCapabilities: SelectionCapabilities = {
-  editableProps: ['strokeColor', 'strokeWidth', 'fillColor'] as const,
-};
+export const ellipseSelectionCapabilities = BOX_WITH_FILL;

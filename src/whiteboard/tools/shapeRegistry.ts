@@ -42,6 +42,7 @@ import { resizeBoxObjectByBounds } from './_shared/resizeByBounds';
 import { rectangleSelectionCapabilities } from './rectangle/selection';
 import { ellipseSelectionCapabilities } from './ellipse/selection';
 import { diamondSelectionCapabilities } from './diamond/selection';
+import { freehandSelectionCapabilities } from './freehand/selection';
 import { stickyNoteSelectionCapabilities } from './stickyNote/selection';
 import { textSelectionCapabilities } from './text/selection';
 import { connectorSelectionCapabilities } from './connector/selection';
@@ -64,6 +65,7 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
     getBoundingBox: (obj) => getFreehandBoundingBox(obj),
     translate: (obj, dx, dy) => translateFreehandObject(obj, dx, dy),
     resize: (obj, newBounds) => resizeFreehandObject(obj, newBounds),
+    selectionCaps: freehandSelectionCapabilities,
     draft: {
       startDraft: (ctx: ToolPointerContext, pos: Point) =>
         startFreehandDraft({

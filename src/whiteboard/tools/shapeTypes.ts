@@ -142,6 +142,8 @@ export type ToolPointerContext = {
   viewport: Viewport;
   strokeColor: string;
   strokeWidth: number;
+  /** Extra per-tool settings (e.g. roundedRect.cornerRadius, text.fontSize). */
+  toolProps?: Partial<WhiteboardObject>;
   generateObjectId: () => ObjectId;
 };
 

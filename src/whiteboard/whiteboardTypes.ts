@@ -14,6 +14,8 @@ export interface WhiteboardCanvasProps {
   activeTool: DrawingTool;
   strokeColor: string;
   strokeWidth: number;
+  /** Extra per-tool settings (e.g. roundedRect.cornerRadius, text.fontSize). */
+  toolProps?: Partial<WhiteboardObject>;
   onCreateObject: (object: WhiteboardObject) => void;
   onSelectionChange: (selectedIds: ObjectId[]) => void;
   onUpdateObject: (objectId: ObjectId, patch: Partial<WhiteboardObject>) => void;

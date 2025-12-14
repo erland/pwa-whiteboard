@@ -1,0 +1,136 @@
+// src/pages/boardEditor/panels/ToolSettingsPanel.tsx
+import React from 'react';
+import type { WhiteboardObject } from '../../../domain/types';
+import type { DrawingTool } from '../../../whiteboard/WhiteboardCanvas';
+import {
+  EDITABLE_PROP_DEFS,
+  getSelectionCapabilities,
+  type EditablePropKey,
+} from '../../../whiteboard/tools/selectionRegistry';
+
+type Props = {
+  activeTool: DrawingTool;
+  strokeColor: string;
+  strokeWidth: number;
+  toolProps: Partial<WhiteboardObject>;
+  onStrokeColorChange: (color: string) => void;
+  onStrokeWidthChange: (value: number) => void;
+  onUpdateToolProp: <K extends keyof WhiteboardObject>(
+    key: K,
+    value: WhiteboardObject[K]
+  ) => void;
+};
+
+function getToolPropValue(
+  key: EditablePropKey,
+  strokeColor: string,
+  strokeWidth: number,
+  toolProps: Partial<WhiteboardObject>
+): unknown {
+  if (key === 'strokeColor') return strokeColor;
+  if (key === 'strokeWidth') return strokeWidth;
+  return (toolProps as any)[key];
+}
+
+export const ToolSettingsPanel: React.FC<Props> = ({
+  activeTool,
+  strokeColor,
+  strokeWidth,
+  toolProps,
+  onStrokeColorChange,
+  onStrokeWidthChange,
+  onUpdateToolProp,
+}) => {
+  if (activeTool === 'select') return null;
+
+  // Tool ids match object types for all creation tools.
+  const caps = getSelectionCapabilities(activeTool as any);
+  const editableProps = caps.editableProps ?? [];
+
+  if (editableProps.length === 0) {
+    return (
+      <div className="panel-row">
+        <span className="field-value">No settings for this tool.</span>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {editableProps.map((key) => {
+        const def = EDITABLE_PROP_DEFS[key];
+        const value = getToolPropValue(key, strokeColor, strokeWidth, toolProps);
+
+        if (def.control.kind === 'color') {
+          // Match current selection UI behavior: don't show fill controls unless a fill is set.
+          if (key === 'fillColor' && typeof value !== 'string') return null;
+
+          const v = typeof value === 'string' ? value : '#000000';
+          return (
+            <div className="panel-row" key={key}>
+              <label className="field-label">
+                <span className="field-label-inline">{def.label}</span>
+                <input
+                  className="color-input"
+                  type="color"
+                  value={v}
+                  onChange={(e) => {
+                    if (key === 'strokeColor') onStrokeColorChange(e.target.value);
+                    else onUpdateToolProp(key as any, e.target.value as any);
+                  }}
+                  aria-label={def.label}
+                />
+              </label>
+            </div>
+          );
+        }
+
+        if (def.control.kind === 'range') {
+          const n = typeof value === 'number' ? value : def.control.min;
+          return (
+            <div className="panel-row" key={key}>
+              <label className="field-label">
+                <span className="field-label-inline">{def.label}</span>
+                <span className="field-value">{n}</span>
+              </label>
+              <input
+                type="range"
+                min={def.control.min}
+                max={def.control.max}
+                step={def.control.step}
+                value={n}
+                onChange={(e) => {
+                  const next = Number(e.target.value);
+                  if (key === 'strokeWidth') onStrokeWidthChange(next);
+                  else onUpdateToolProp(key as any, next as any);
+                }}
+                style={{ width: '100%' }}
+                aria-label={def.label}
+              />
+            </div>
+          );
+        }
+
+        if (def.control.kind === 'textarea') {
+          const v = typeof value === 'string' ? value : '';
+          return (
+            <div className="panel-row" key={key}>
+              <div style={{ width: '100%' }}>
+                <div className="field-label-inline" style={{ marginBottom: 6 }}>
+                  {def.label}
+                </div>
+                <textarea
+                  className="text-input"
+                  value={v}
+                  onChange={(e) => onUpdateToolProp(key as any, e.target.value as any)}
+                />
+              </div>
+            </div>
+          );
+        }
+
+        return null;
+      })}
+    </>
+  );
+};

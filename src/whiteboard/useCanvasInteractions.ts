@@ -101,6 +101,7 @@ export type CanvasInteractionsParams = {
   activeTool: DrawingTool;
   strokeColor: string;
   strokeWidth: number;
+  toolProps?: Partial<WhiteboardObject>;
   onCreateObject: (object: WhiteboardObject) => void;
   onSelectionChange: (selectedIds: ObjectId[]) => void;
   onUpdateObject: (objectId: ObjectId, patch: Partial<WhiteboardObject>) => void;
@@ -124,6 +125,7 @@ export function useCanvasInteractions({
   activeTool,
   strokeColor,
   strokeWidth,
+  toolProps,
   onCreateObject,
   onSelectionChange,
   onUpdateObject,
@@ -187,6 +189,7 @@ export function useCanvasInteractions({
     viewport,
     strokeColor,
     strokeWidth,
+    toolProps,
     generateObjectId,
   };
 

@@ -30,6 +30,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = (props) => {
     activeTool: props.activeTool,
     strokeColor: props.strokeColor,
     strokeWidth: props.strokeWidth,
+    toolProps: props.toolProps,
     onCreateObject: props.onCreateObject,
     onSelectionChange: props.onSelectionChange,
     onUpdateObject: props.onUpdateObject,

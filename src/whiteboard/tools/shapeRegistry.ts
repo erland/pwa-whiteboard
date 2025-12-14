@@ -104,9 +104,17 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
         }),
       updateDraft: (draft: DraftShape, _ctx: ToolPointerContext, pos: Point) =>
         updateRectangleDraft(draft, pos),
-      finishDraft: (draft: DraftShape): ToolCreateResult | null => {
+      finishDraft: (draft: DraftShape, ctx: ToolPointerContext): ToolCreateResult | null => {
         const { object, selectIds } = finishRectangleDraft(draft);
-        return object && selectIds ? { object, selectIds } : null;
+        if (!object || !selectIds) return null;
+        const fillColor = ctx.toolProps?.fillColor;
+        return {
+          object:
+            typeof fillColor === 'string'
+              ? ({ ...object, fillColor } as WhiteboardObject)
+              : object,
+          selectIds,
+        };
       },
     },
   },
@@ -129,9 +137,17 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
         }),
       updateDraft: (draft: DraftShape, _ctx: ToolPointerContext, pos: Point) =>
         updateRoundedRectDraft(draft, pos),
-      finishDraft: (draft: DraftShape): ToolCreateResult | null => {
+      finishDraft: (draft: DraftShape, ctx: ToolPointerContext): ToolCreateResult | null => {
         const { object, selectIds } = finishRoundedRectDraft(draft);
-        return object && selectIds ? { object, selectIds } : null;
+        if (!object || !selectIds) return null;
+
+        const fillColor = ctx.toolProps?.fillColor;
+        const cornerRadius = ctx.toolProps?.cornerRadius;
+        let next: WhiteboardObject = object;
+        if (typeof fillColor === 'string') next = { ...next, fillColor };
+        if (typeof cornerRadius === 'number') next = { ...next, cornerRadius };
+
+        return { object: next, selectIds };
       },
     },
   },
@@ -153,9 +169,17 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
         }),
       updateDraft: (draft: DraftShape, _ctx: ToolPointerContext, pos: Point) =>
         updateEllipseDraft(draft, pos),
-      finishDraft: (draft: DraftShape): ToolCreateResult | null => {
+      finishDraft: (draft: DraftShape, ctx: ToolPointerContext): ToolCreateResult | null => {
         const { object, selectIds } = finishEllipseDraft(draft);
-        return object && selectIds ? { object, selectIds } : null;
+        if (!object || !selectIds) return null;
+        const fillColor = ctx.toolProps?.fillColor;
+        return {
+          object:
+            typeof fillColor === 'string'
+              ? ({ ...object, fillColor } as WhiteboardObject)
+              : object,
+          selectIds,
+        };
       },
     },
   },
@@ -180,9 +204,17 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
         }),
       updateDraft: (draft: DraftShape, _ctx: ToolPointerContext, pos: Point) =>
         updateDiamondDraft(draft, pos),
-      finishDraft: (draft: DraftShape): ToolCreateResult | null => {
+      finishDraft: (draft: DraftShape, ctx: ToolPointerContext): ToolCreateResult | null => {
         const { object, selectIds } = finishDiamondDraft(draft);
-        return object && selectIds ? { object, selectIds } : null;
+        if (!object || !selectIds) return null;
+        const fillColor = ctx.toolProps?.fillColor;
+        return {
+          object:
+            typeof fillColor === 'string'
+              ? ({ ...object, fillColor } as WhiteboardObject)
+              : object,
+          selectIds,
+        };
       },
     },
   },
@@ -201,6 +233,9 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
         pos,
         strokeColor: ctx.strokeColor,
         strokeWidth: ctx.strokeWidth,
+        textColor: (ctx.toolProps?.textColor as any) ?? undefined,
+        fontSize: (ctx.toolProps?.fontSize as any) ?? undefined,
+        text: (ctx.toolProps?.text as any) ?? undefined,
         generateObjectId: ctx.generateObjectId,
       });
       return object && selectIds ? { object, selectIds } : null;
@@ -220,6 +255,10 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
         pos,
         strokeColor: ctx.strokeColor,
         strokeWidth: ctx.strokeWidth,
+        fillColor: (ctx.toolProps?.fillColor as any) ?? undefined,
+        textColor: (ctx.toolProps?.textColor as any) ?? undefined,
+        fontSize: (ctx.toolProps?.fontSize as any) ?? undefined,
+        text: (ctx.toolProps?.text as any) ?? undefined,
         generateObjectId: ctx.generateObjectId,
       });
       return object && selectIds ? { object, selectIds } : null;

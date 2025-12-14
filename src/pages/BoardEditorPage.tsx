@@ -23,7 +23,9 @@ export const BoardEditorPage: React.FC = () => {
     strokeColor,
     setStrokeColor,
     strokeWidth,
-    handleStrokeWidthChange,
+    updateStrokeWidth,
+    toolProps,
+    updateActiveToolProp,
     canvasEl,
     setCanvasEl,
     fileInputRef,
@@ -68,10 +70,11 @@ export const BoardEditorPage: React.FC = () => {
             activeTool={activeTool}
             strokeColor={strokeColor}
             strokeWidth={strokeWidth}
+            toolProps={toolProps}
             onStrokeColorChange={setStrokeColor}
-            onStrokeWidthChange={handleStrokeWidthChange}
+            onStrokeWidthChange={updateStrokeWidth}
+            onUpdateToolProp={updateActiveToolProp}
             selectedObjects={selectedObjects}
-            onUpdateObject={handleUpdateObject}
             onDeleteSelection={handleDeleteSelection}
             updateSelectionProp={updateSelectionProp}
           />
@@ -119,6 +122,7 @@ export const BoardEditorPage: React.FC = () => {
                 activeTool={activeTool}
                 strokeColor={strokeColor}
                 strokeWidth={strokeWidth}
+                toolProps={toolProps}
                 onCreateObject={handleCreateObject}
                 onSelectionChange={handleSelectionChange}
                 onUpdateObject={handleUpdateObject}

@@ -4,6 +4,10 @@ export type StickyNoteStartArgs = {
   pos: Point;
   strokeColor: string;
   strokeWidth: number;
+  fillColor?: string;
+  textColor?: string;
+  fontSize?: number;
+  text?: string;
   generateObjectId: () => ObjectId;
 };
 
@@ -11,6 +15,10 @@ export function createStickyNoteObject({
   pos,
   strokeColor,
   strokeWidth,
+  fillColor,
+  textColor,
+  fontSize,
+  text,
   generateObjectId,
 }: StickyNoteStartArgs): {
   object: WhiteboardObject;
@@ -26,10 +34,10 @@ export function createStickyNoteObject({
     height: 140,
     strokeColor,
     strokeWidth,
-    fillColor: '#facc15',
-    fontSize: 16,
-    textColor: strokeColor,
-    text: 'Sticky note',
+    fillColor: fillColor ?? '#facc15',
+    fontSize: fontSize ?? 16,
+    textColor: textColor ?? strokeColor,
+    text: text ?? 'Sticky note',
   };
 
   return { object: obj, selectIds: [id] };

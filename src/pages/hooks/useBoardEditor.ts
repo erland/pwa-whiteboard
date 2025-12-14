@@ -20,6 +20,43 @@ export function useBoardEditor(id: string | undefined) {
   const [activeTool, setActiveTool] = useState<DrawingTool>('freehand');
   const [strokeColor, setStrokeColor] = useState<string>('#38bdf8');
   const [strokeWidth, setStrokeWidth] = useState<number>(3);
+
+  // Per-tool settings beyond strokeColor/strokeWidth.
+  // These drive both tool UI and defaults applied when creating new objects.
+  const [toolPropsByTool, setToolPropsByTool] = useState<
+    Record<DrawingTool, Partial<WhiteboardObject>>
+  >(() => ({
+    select: {},
+    freehand: {},
+    rectangle: {},
+    ellipse: {},
+    diamond: {},
+    roundedRect: { cornerRadius: 12 },
+    connector: {},
+    text: { textColor: '#38bdf8', fontSize: 18, text: 'Text' },
+    stickyNote: {
+      fillColor: '#facc15',
+      textColor: '#38bdf8',
+      fontSize: 16,
+      text: 'Sticky note',
+    },
+  }));
+
+  const updateActiveToolProp = <K extends keyof WhiteboardObject>(
+    key: K,
+    value: WhiteboardObject[K]
+  ) => {
+    setToolPropsByTool((prev) => {
+      const current = prev[activeTool] ?? {};
+      return {
+        ...prev,
+        [activeTool]: {
+          ...current,
+          [key]: value,
+        },
+      } as Record<DrawingTool, Partial<WhiteboardObject>>;
+    });
+  };
   const [canvasEl, setCanvasEl] = useState<HTMLCanvasElement | null>(null);
 
   // ---- Board loading / initialization ----
@@ -134,6 +171,12 @@ export function useBoardEditor(id: string | undefined) {
     }
   };
 
+  const updateStrokeWidth = (value: number) => {
+    if (!Number.isNaN(value) && value > 0 && value <= 20) {
+      setStrokeWidth(value);
+    }
+  };
+
   // ---- Sub-hooks ----
 
   const {
@@ -181,6 +224,8 @@ export function useBoardEditor(id: string | undefined) {
     setStrokeColor,
     strokeWidth,
     setStrokeWidth,
+    toolProps: toolPropsByTool[activeTool] ?? {},
+    updateActiveToolProp,
     canvasEl,
     setCanvasEl,
     fileInputRef,
@@ -189,6 +234,7 @@ export function useBoardEditor(id: string | undefined) {
     handleUpdateObject,
     handleDeleteSelection,
     handleStrokeWidthChange,
+    updateStrokeWidth,
     handleViewportChange,
     zoomPercent,
     handleZoomChange,

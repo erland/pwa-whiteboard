@@ -3,19 +3,21 @@ import React from 'react';
 import type { DrawingTool } from '../../whiteboard/WhiteboardCanvas';
 import type { WhiteboardObject } from '../../domain/types';
 import { useSelectionDetails } from './useSelectionDetails';
-import { DrawingToolStrokeSettings } from './panels/DrawingToolStrokeSettings';
-import { TextToolPanel } from './panels/TextToolPanel';
-import { StickyNoteToolPanel } from './panels/StickyNoteToolPanel';
+import { ToolSettingsPanel } from './panels/ToolSettingsPanel';
 import { SelectionToolPanel } from './panels/SelectionToolPanel';
 
 type ToolAndSelectionPanelProps = {
   activeTool: DrawingTool;
   strokeColor: string;
   strokeWidth: number;
+  toolProps: Partial<WhiteboardObject>;
   onStrokeColorChange: (color: string) => void;
-  onStrokeWidthChange: React.ChangeEventHandler<HTMLInputElement>;
+  onStrokeWidthChange: (value: number) => void;
+  onUpdateToolProp: <K extends keyof WhiteboardObject>(
+    key: K,
+    value: WhiteboardObject[K]
+  ) => void;
   selectedObjects: WhiteboardObject[];
-  onUpdateObject: (objectId: string, patch: Partial<WhiteboardObject>) => void;
   onDeleteSelection: () => void;
   updateSelectionProp: <K extends keyof WhiteboardObject>(
     key: K,
@@ -27,10 +29,11 @@ export const ToolAndSelectionPanel: React.FC<ToolAndSelectionPanelProps> = ({
   activeTool,
   strokeColor,
   strokeWidth,
+  toolProps,
   onStrokeColorChange,
   onStrokeWidthChange,
+  onUpdateToolProp,
   selectedObjects,
-  onUpdateObject,
   onDeleteSelection,
   updateSelectionProp
 }) => {
@@ -40,29 +43,15 @@ export const ToolAndSelectionPanel: React.FC<ToolAndSelectionPanelProps> = ({
     <div className="panel">
       <h2 className="panel-title">Tool &amp; Selection</h2>
 
-      {activeTool !== 'select' && activeTool !== 'text' && activeTool !== 'stickyNote' && (
-        <DrawingToolStrokeSettings
+      {activeTool !== 'select' && (
+        <ToolSettingsPanel
+          activeTool={activeTool}
           strokeColor={strokeColor}
           strokeWidth={strokeWidth}
+          toolProps={toolProps}
           onStrokeColorChange={onStrokeColorChange}
           onStrokeWidthChange={onStrokeWidthChange}
-        />
-      )}
-
-      {activeTool === 'text' && (
-        <TextToolPanel
-          selection={selection}
-          strokeColor={strokeColor}
-          onUpdateObject={onUpdateObject}
-        />
-      )}
-
-      {activeTool === 'stickyNote' && (
-        <StickyNoteToolPanel
-          selection={selection}
-          strokeColor={strokeColor}
-          onStrokeColorChange={onStrokeColorChange}
-          onUpdateObject={onUpdateObject}
+          onUpdateToolProp={onUpdateToolProp}
         />
       )}
 

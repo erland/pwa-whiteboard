@@ -12,6 +12,7 @@ export interface BoardsRepository {
   listBoards(): Promise<BoardsIndex>;
   createBoard(name: string, boardType?: BoardTypeId): Promise<WhiteboardMeta>;
   renameBoard(id: WhiteboardId, name: string): Promise<void>;
+  setBoardType(id: WhiteboardId, boardType: BoardTypeId): Promise<void>;
   deleteBoard(id: WhiteboardId): Promise<void>;
 }
 

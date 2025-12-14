@@ -21,6 +21,7 @@ export const BoardEditorPage: React.FC = () => {
     boardTypeDef,
     activeTool,
     toolbox,
+    setBoardType,
     activeToolInstanceId,
     setActiveToolInstanceId,
     strokeColor,
@@ -100,6 +101,7 @@ export const BoardEditorPage: React.FC = () => {
               meta={state.meta}
               objectCount={state.objects.length}
               eventCount={state.history?.pastEvents.length ?? 0}
+              onChangeBoardType={setBoardType}
             />
           )}
         </aside>

@@ -12,6 +12,7 @@ import type { DrawingTool } from '../../whiteboard/WhiteboardCanvas';
 import {
   getBoardType,
   getLockedToolProps,
+  getLockedObjectProps,
   getLockedEditableKeys,
   isEditablePropLocked,
 } from '../../whiteboard/boardTypes';
@@ -289,11 +290,47 @@ export function useBoardEditor(id: string | undefined) {
   const canUndo = !!state && state.history.pastEvents.length > 0;
   const canRedo = !!state && state.history.futureEvents.length > 0;
 
+  // ---- Board type changes ----
+  const setBoardType = async (nextType: WhiteboardMeta['boardType']) => {
+    if (!state) return;
+    if (state.meta.boardType === nextType) return;
+
+    const now = new Date().toISOString();
+    const nextBoardTypeDef = getBoardType(nextType);
+
+    // Apply locked object props immediately so the board becomes consistent with the new type.
+    const nextObjects = state.objects.map((o) => {
+      const locked = getLockedObjectProps(nextBoardTypeDef, o.type);
+      if (!locked || Object.keys(locked).length === 0) return o;
+      return { ...o, ...locked };
+    });
+
+    // Update the boards index so the list page shows the new type.
+    try {
+      const boardsRepo = getBoardsRepository();
+      await boardsRepo.setBoardType(state.meta.id, nextType);
+    } catch (err) {
+      console.error('Failed to persist boardType to boards index', err);
+    }
+
+    // Update in-memory state + persisted board state.
+    resetBoard({
+      ...state,
+      meta: {
+        ...state.meta,
+        boardType: nextType,
+        updatedAt: now,
+      },
+      objects: nextObjects,
+    });
+  };
+
   return {
     state,
     boardTypeDef,
     activeTool,
     toolbox,
+    setBoardType,
     activeToolInstanceId,
     setActiveToolInstanceId,
     strokeColor,

@@ -115,6 +115,21 @@ class LocalStorageBoardsRepository implements BoardsRepository {
     writeIndex(next);
   }
 
+  async setBoardType(id: WhiteboardId, boardType: BoardTypeId): Promise<void> {
+    const nextType = isBoardType(boardType) ? boardType : DEFAULT_BOARD_TYPE;
+    const index = readIndex();
+    const next = index.map((meta) =>
+      meta.id === id
+        ? {
+            ...meta,
+            boardType: nextType,
+            updatedAt: new Date().toISOString()
+          }
+        : meta
+    );
+    writeIndex(next);
+  }
+
   async deleteBoard(id: WhiteboardId): Promise<void> {
     const index = readIndex();
     const next = index.filter((meta) => meta.id !== id);

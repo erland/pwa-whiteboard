@@ -58,4 +58,14 @@ it('migrates legacy boards index entries missing boardType', async () => {
     list = await repo.listBoards();
     expect(list).toHaveLength(0);
   });
+
+  it('updates board type', async () => {
+    const repo = getBoardsRepository();
+    const meta = await repo.createBoard('Type board', 'advanced');
+
+    await repo.setBoardType(meta.id, 'freehand');
+    const list = await repo.listBoards();
+    const updated = list.find((b) => b.id === meta.id);
+    expect(updated?.boardType).toBe('freehand');
+  });
 });

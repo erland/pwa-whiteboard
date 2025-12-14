@@ -436,6 +436,15 @@ a:hover {
   opacity: 0.9;
 }
 
+.field-value select {
+  border: 1px solid var(--color-border);
+  background: var(--color-panel-stronger);
+  color: var(--color-text);
+  border-radius: 8px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.85rem;
+}
+
 .field-suffix {
   font-size: 0.8rem;
   opacity: 0.8;

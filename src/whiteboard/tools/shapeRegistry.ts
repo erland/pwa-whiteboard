@@ -29,7 +29,7 @@ import { drawStickyNoteObject } from './stickyNote/draw';
 import { drawConnectorObject } from './connector/draw';
 
 /* ===== geometry / ports ===== */
-import { getFreehandBoundingBox, translateFreehandObject } from './freehand/geometry';
+import { getFreehandBoundingBox, translateFreehandObject, resizeFreehandObject } from './freehand/geometry';
 import { getRectangleBoundingBox, getRectanglePorts } from './rectangle/geometry';
 import { getEllipseBoundingBox, getEllipsePorts } from './ellipse/geometry';
 import { getDiamondBoundingBox, getDiamondPorts, hitTestDiamond } from './diamond/geometry';
@@ -63,6 +63,7 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
     draw: (ctx, obj, viewport) => drawFreehandObject(ctx, obj, viewport),
     getBoundingBox: (obj) => getFreehandBoundingBox(obj),
     translate: (obj, dx, dy) => translateFreehandObject(obj, dx, dy),
+    resize: (obj, newBounds) => resizeFreehandObject(obj, newBounds),
     draft: {
       startDraft: (ctx: ToolPointerContext, pos: Point) =>
         startFreehandDraft({

@@ -51,3 +51,63 @@ export function translateFreehandObject(
     points,
   };
 }
+/**
+ * Resize a freehand object to fit new axis-aligned bounds.
+ *
+ * Strategy:
+ * - Treat the current object bounds as the source rectangle.
+ * - Scale each point proportionally into the destination rectangle.
+ * - Keep x/y/width/height consistent with the new bounds.
+ */
+export function resizeFreehandObject(
+  obj: WhiteboardObject,
+  newBounds: Bounds
+): Partial<WhiteboardObject> | null {
+  if (obj.type !== 'freehand') return null;
+
+  const old = getFreehandBoundingBox(obj);
+  if (!old) return null;
+
+  const points = obj.points ?? [];
+
+  // If we have no points, just update the loose bounds.
+  if (points.length === 0) {
+    return {
+      x: newBounds.x,
+      y: newBounds.y,
+      width: newBounds.width,
+      height: newBounds.height,
+    };
+  }
+
+  const oldW = old.width;
+  const oldH = old.height;
+
+  const mapX = (px: number) => {
+    if (oldW === 0) {
+      // Collapse to the horizontal center of the new bounds.
+      return newBounds.x + newBounds.width / 2;
+    }
+    const t = (px - old.x) / oldW;
+    return newBounds.x + t * newBounds.width;
+  };
+
+  const mapY = (py: number) => {
+    if (oldH === 0) {
+      // Collapse to the vertical center of the new bounds.
+      return newBounds.y + newBounds.height / 2;
+    }
+    const t = (py - old.y) / oldH;
+    return newBounds.y + t * newBounds.height;
+  };
+
+  const nextPoints = points.map((p) => ({ x: mapX(p.x), y: mapY(p.y) }));
+
+  return {
+    x: newBounds.x,
+    y: newBounds.y,
+    width: newBounds.width,
+    height: newBounds.height,
+    points: nextPoints,
+  };
+}

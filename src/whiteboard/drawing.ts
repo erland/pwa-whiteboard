@@ -157,10 +157,10 @@ export function drawSelectionOutlineAndHandles(
   ctx.strokeRect(tl.x, tl.y, wDraw, hDraw);
   ctx.restore();
 
-  // Resize handles for non-freehand objects
-  if (obj.type === 'freehand') {
-    return;
-  }
+  // Resize handles for shapes that support resize.
+  // This is registry-driven so the core drawing code does not need to special-case types.
+  const shape = getShape(obj.type);
+  if (!shape.resize) return;
 
   const HANDLE_SIZE = 10;
   const handlePositions = getHandlePositions(bounds);

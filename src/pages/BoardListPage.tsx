@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { WhiteboardMeta } from '../domain/types';
 import { getBoardsRepository } from '../infrastructure/localStorageBoardsRepository';
@@ -11,6 +11,14 @@ export const BoardListPage: React.FC = () => {
   const [boards, setBoards] = useState<WhiteboardMeta[]>([]);
   const [loadState, setLoadState] = useState<LoadState>('idle');
   const [error, setError] = useState<string | null>(null);
+
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [createName, setCreateName] = useState('New board');
+  const [createType, setCreateType] = useState<BoardTypeId>('advanced');
+  const [isCreating, setIsCreating] = useState(false);
+
+  const createNameRef = useRef<HTMLInputElement | null>(null);
+
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -31,33 +39,66 @@ export const BoardListPage: React.FC = () => {
       });
   }, []);
 
+  const boardTypeOptions = useMemo(
+    () =>
+      BOARD_TYPE_IDS.map((id) => ({
+        id,
+        label: getBoardType(id).label,
+        description: getBoardType(id).description,
+      })),
+    []
+  );
+
+  useEffect(() => {
+    if (!isCreateOpen) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isCreating) setIsCreateOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+
+    // Small UX: focus and select default name.
+    const t = window.setTimeout(() => {
+      createNameRef.current?.focus();
+      createNameRef.current?.select();
+    }, 0);
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.clearTimeout(t);
+    };
+  }, [isCreateOpen, isCreating]);
+
+  const openCreateDialog = () => {
+    setCreateName('New board');
+    setCreateType('advanced');
+    setIsCreateOpen(true);
+  };
+
+  const closeCreateDialog = () => {
+    if (isCreating) return;
+    setIsCreateOpen(false);
+  };
+
   const handleCreateBoard = async () => {
-    const name = window.prompt('Name for the new board:', 'New board');
-    if (name === null) return;
-
-    const optionsText = BOARD_TYPE_IDS.map((id) => `${id} — ${getBoardType(id).label}`).join('\n');
-    const typeInput = window.prompt(
-      `Board type (enter one of: ${BOARD_TYPE_IDS.join(', ')}):\n\n${optionsText}`,
-      'advanced'
-    );
-    if (typeInput === null) return;
-
-    const trimmed = typeInput.trim().toLowerCase();
-    const boardType: BoardTypeId = (BOARD_TYPE_IDS.includes(trimmed as BoardTypeId)
-      ? (trimmed as BoardTypeId)
-      : 'advanced');
-
-    if (trimmed && boardType !== trimmed) {
-      window.alert(`Unknown board type "${typeInput}". Using "advanced".`);
+    const name = createName.trim();
+    if (!name) {
+      window.alert('Please enter a board name.');
+      createNameRef.current?.focus();
+      return;
     }
+
+    setIsCreating(true);
     const repo = getBoardsRepository();
     try {
-      const meta = await repo.createBoard(name, boardType);
-      // Navigate directly to the newly created board
+      const meta = await repo.createBoard(name, createType);
+      setIsCreateOpen(false);
       navigate(`/board/${meta.id}`);
     } catch (err) {
       console.error('Failed to create board', err);
       window.alert('Failed to create board. Please try again.');
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -96,10 +137,70 @@ export const BoardListPage: React.FC = () => {
     <section className="page page-board-list">
       <header className="page-header">
         <h1>Your Boards</h1>
-        <button type="button" onClick={handleCreateBoard}>
+        <button type="button" onClick={openCreateDialog}>
           + New board
         </button>
       </header>
+
+      {isCreateOpen && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={(e) => {
+            // click outside closes
+            if (e.target === e.currentTarget) closeCreateDialog();
+          }}
+        >
+          <div className="modal" role="dialog" aria-modal="true" aria-label="Create board">
+            <div className="modal-header">
+              <h2>Create board</h2>
+            </div>
+
+            <div className="modal-body">
+              <label className="form-field">
+                <span className="form-label">Name</span>
+                <input
+                  ref={createNameRef}
+                  type="text"
+                  value={createName}
+                  onChange={(e) => setCreateName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleCreateBoard();
+                  }}
+                  disabled={isCreating}
+                />
+              </label>
+
+              <label className="form-field">
+                <span className="form-label">Board type</span>
+                <select
+                  value={createType}
+                  onChange={(e) => setCreateType(e.target.value as BoardTypeId)}
+                  disabled={isCreating}
+                >
+                  {boardTypeOptions.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="form-help">
+                  {boardTypeOptions.find((o) => o.id === createType)?.description ?? ''}
+                </div>
+              </label>
+            </div>
+
+            <div className="modal-footer">
+              <button type="button" onClick={closeCreateDialog} disabled={isCreating}>
+                Cancel
+              </button>
+              <button type="button" onClick={handleCreateBoard} disabled={isCreating}>
+                {isCreating ? 'Creating…' : 'Create'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {loadState === 'loading' && <p>Loading boards…</p>}
       {loadState === 'error' && <p className="error-text">{error}</p>}

@@ -20,6 +20,7 @@ export type { EditablePropKey, SelectionCapabilities };
 export type PropControl =
   | { kind: 'color' }
   | { kind: 'range'; min: number; max: number; step: number }
+  | { kind: 'boolean' }
   | { kind: 'text' }
   | { kind: 'textarea' };
 
@@ -37,6 +38,8 @@ export const EDITABLE_PROP_DEFS: Record<EditablePropKey, EditablePropDefinition>
     control: { kind: 'range', min: 1, max: 12, step: 1 },
   },
   fillColor: { key: 'fillColor', label: 'Fill color', control: { kind: 'color' } },
+  arrowStart: { key: 'arrowStart', label: 'Arrow start', control: { kind: 'boolean' } },
+  arrowEnd: { key: 'arrowEnd', label: 'Arrow end', control: { kind: 'boolean' } },
   textColor: { key: 'textColor', label: 'Text color', control: { kind: 'color' } },
   fontSize: {
     key: 'fontSize',

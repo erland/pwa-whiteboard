@@ -70,6 +70,24 @@ function renderEditablePropControl(
     );
   }
 
+  if (def.control.kind === 'boolean') {
+    const checked = Boolean(value);
+    return (
+      <div className="panel-row" key={key}>
+        <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <input
+            type="checkbox"
+            checked={checked}
+            disabled={disabled}
+            onChange={(e) => updateSelectionProp(key as any, e.target.checked as any)}
+            aria-label={def.label}
+          />
+          <span className="field-label-inline">{def.label}</span>
+        </label>
+      </div>
+    );
+  }
+
   // textarea is handled separately (we only show it for single selection)
   return null;
 }

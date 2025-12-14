@@ -19,6 +19,7 @@
 export const TOOL_IDS = [
   'select',
   'freehand',
+  'line',
   'rectangle',
   'roundedRect',
   'ellipse',
@@ -36,6 +37,7 @@ export type ToolId = (typeof TOOL_IDS)[number];
  */
 export const OBJECT_TYPES = [
   'freehand',
+  'line',
   'rectangle',
   'roundedRect',
   'ellipse',
@@ -80,6 +82,7 @@ export interface ToolRegistryEntry {
  */
 export const TOOL_REGISTRY: readonly ToolRegistryEntry[] = [
   { id: 'freehand', kind: 'draw', label: 'Freehand', icon: '✏️', objectType: 'freehand' },
+  { id: 'line', kind: 'draw', label: 'Line', icon: '／', objectType: 'line' },
   { id: 'rectangle', kind: 'draw', label: 'Rectangle', icon: '▭', objectType: 'rectangle' },
   { id: 'roundedRect', kind: 'draw', label: 'Rounded rect', icon: '▢', objectType: 'roundedRect' },
   { id: 'ellipse', kind: 'draw', label: 'Ellipse', icon: '⬭', objectType: 'ellipse' },

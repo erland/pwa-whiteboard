@@ -21,6 +21,7 @@ import type { DrawingTool } from '../whiteboardTypes';
 
 /* ===== draw ===== */
 import { drawFreehandObject } from './freehand/draw';
+import { drawLineObject, drawLineDraft } from './line/draw';
 import { drawRectangleObject } from './rectangle/draw';
 import { drawRoundedRectObject, drawRoundedRectDraft } from './roundedRect/draw';
 import { drawEllipseObject } from './ellipse/draw';
@@ -31,6 +32,7 @@ import { drawConnectorObject } from './connector/draw';
 
 /* ===== geometry / ports ===== */
 import { getFreehandBoundingBox, translateFreehandObject, resizeFreehandObject } from './freehand/geometry';
+import { getLineBoundingBox, hitTestLine, translateLineObject, resizeLineObject } from './line/geometry';
 import { getRectangleBoundingBox, getRectanglePorts } from './rectangle/geometry';
 import { getRoundedRectBoundingBox, getRoundedRectPorts } from './roundedRect/geometry';
 import { getEllipseBoundingBox, getEllipsePorts } from './ellipse/geometry';
@@ -46,12 +48,14 @@ import { roundedRectSelectionCapabilities } from './roundedRect/selection';
 import { ellipseSelectionCapabilities } from './ellipse/selection';
 import { diamondSelectionCapabilities } from './diamond/selection';
 import { freehandSelectionCapabilities } from './freehand/selection';
+import { lineSelectionCapabilities } from './line/selection';
 import { stickyNoteSelectionCapabilities } from './stickyNote/selection';
 import { textSelectionCapabilities } from './text/selection';
 import { connectorSelectionCapabilities } from './connector/selection';
 
 /* ===== interactions ===== */
 import { startFreehandDraft, updateFreehandDraft, finishFreehandDraft } from './freehand/interactions';
+import { startLineDraft, updateLineDraft, finishLineDraft } from './line/interactions';
 import { startRectangleDraft, updateRectangleDraft, finishRectangleDraft } from './rectangle/interactions';
 import { startRoundedRectDraft, updateRoundedRectDraft, finishRoundedRectDraft } from './roundedRect/interactions';
 import { startEllipseDraft, updateEllipseDraft, finishEllipseDraft } from './ellipse/interactions';
@@ -82,6 +86,33 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
         updateFreehandDraft(draft, pos),
       finishDraft: (draft: DraftShape): ToolCreateResult | null => {
         const { object, selectIds } = finishFreehandDraft(draft);
+        return object && selectIds ? { object, selectIds } : null;
+      },
+    },
+  },
+
+  line: {
+    type: 'line',
+    draw: (ctx, obj, viewport) => drawLineObject(ctx, obj, viewport),
+    drawDraft: (ctx, draft, viewport) => drawLineDraft(ctx, draft, viewport),
+    getBoundingBox: (obj) => getLineBoundingBox(obj),
+    hitTest: (obj, worldX, worldY) => hitTestLine(obj, worldX, worldY),
+    translate: (obj, dx, dy) => translateLineObject(obj, dx, dy),
+    resize: (obj, newBounds) => resizeLineObject(obj, newBounds),
+    selectionCaps: lineSelectionCapabilities,
+    draft: {
+      startDraft: (ctx: ToolPointerContext, pos: Point) =>
+        startLineDraft({
+          pos,
+          strokeColor: ctx.strokeColor,
+          strokeWidth: ctx.strokeWidth,
+          arrowStart: Boolean((ctx.toolProps as any)?.arrowStart),
+          arrowEnd: Boolean((ctx.toolProps as any)?.arrowEnd),
+          generateObjectId: ctx.generateObjectId,
+        }),
+      updateDraft: (draft: DraftShape, _ctx: ToolPointerContext, pos: Point) => updateLineDraft(draft, pos),
+      finishDraft: (draft: DraftShape): ToolCreateResult | null => {
+        const { object, selectIds } = finishLineDraft(draft);
         return object && selectIds ? { object, selectIds } : null;
       },
     },

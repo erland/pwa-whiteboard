@@ -145,6 +145,24 @@ export const ToolSettingsPanel: React.FC<Props> = ({
           );
         }
 
+        if (def.control.kind === 'boolean') {
+          const checked = Boolean(value);
+          return (
+            <div className="panel-row" key={key}>
+              <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={disabled}
+                  onChange={(e) => onUpdateToolProp(key as any, e.target.checked as any)}
+                  aria-label={def.label}
+                />
+                <span className="field-label-inline">{def.label}</span>
+              </label>
+            </div>
+          );
+        }
+
         return null;
       })}
     </>

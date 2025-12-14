@@ -10,6 +10,8 @@ export type EditablePropKey =
   | 'strokeColor'
   | 'strokeWidth'
   | 'fillColor'
+  | 'arrowStart'
+  | 'arrowEnd'
   | 'textColor'
   | 'fontSize'
   | 'cornerRadius'

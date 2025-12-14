@@ -92,6 +92,8 @@ export const BOARD_TYPES: Record<BoardTypeId, BoardTypeDefinition> = {
       // but replace the single "Rectangle" tool with two presets.
       tool('freehand', 'Freehand', '✏️'),
 
+      tool('line', 'Line', '／'),
+
       // Presets
       preset('rect-outline', 'rectangle', 'Rectangle (outline)', '▭', {
         // No fill by default (outline-only)
@@ -208,7 +210,19 @@ export function getLockedObjectProps(def: BoardTypeDefinition, objectType: White
 /** Extracts which editable keys are locked by a locked-props object. */
 export function getLockedEditableKeys(locked: Partial<WhiteboardObject>): Set<EditablePropKey> {
   const keys: EditablePropKey[] = [];
-  (['strokeColor', 'strokeWidth', 'fillColor', 'textColor', 'fontSize', 'cornerRadius', 'text'] as const).forEach((k) => {
+  (
+    [
+      'strokeColor',
+      'strokeWidth',
+      'fillColor',
+      'textColor',
+      'fontSize',
+      'cornerRadius',
+      'text',
+      'arrowStart',
+      'arrowEnd',
+    ] as const
+  ).forEach((k) => {
     if (hasOwn(locked, k)) keys.push(k);
   });
   return new Set(keys);

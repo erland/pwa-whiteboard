@@ -14,6 +14,7 @@ export interface WhiteboardMeta {
 
 export type WhiteboardObjectType =
   | 'freehand'
+  | 'line'
   | 'rectangle'
   | 'ellipse'
   | 'diamond'
@@ -70,6 +71,13 @@ export interface WhiteboardObject {
   x: number;
   y: number;
 
+  /**
+   * Secondary end point, used by straight lines.
+   * (When undefined, tools may treat it as equal to x/y.)
+   */
+  x2?: number;
+  y2?: number;
+
   // Size (for rectangle/ellipse/stickyNote). Freehand uses this as a loose bounding box.
   width?: number;
   height?: number;
@@ -79,6 +87,10 @@ export interface WhiteboardObject {
   fillColor?: string;
   cornerRadius?: number;
   strokeWidth?: number;
+
+  /** Line arrowheads (only for type === 'line'). */
+  arrowStart?: boolean;
+  arrowEnd?: boolean;
 
   // Text content (for text / sticky notes)
   text?: string;

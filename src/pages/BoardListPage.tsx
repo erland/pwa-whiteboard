@@ -2,8 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { WhiteboardMeta } from '../domain/types';
 import { getBoardsRepository } from '../infrastructure/localStorageBoardsRepository';
+import { getWhiteboardRepository } from '../infrastructure/localStorageWhiteboardRepository';
 import type { BoardTypeId } from '../domain/types';
 import { BOARD_TYPE_IDS, getBoardType } from '../whiteboard/boardTypes';
+import { createEmptyWhiteboardState } from '../domain/whiteboardState';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
@@ -133,6 +135,56 @@ export const BoardListPage: React.FC = () => {
     }
   };
 
+  const handleDuplicateBoard = async (board: WhiteboardMeta) => {
+    const suggested = `${board.name} (copy)`;
+    const name = window.prompt('Name for the duplicated board:', suggested);
+    if (name === null) return;
+    const trimmed = name.trim();
+    if (!trimmed) {
+      window.alert('Please enter a board name.');
+      return;
+    }
+
+    const boardsRepo = getBoardsRepository();
+    const wbRepo = getWhiteboardRepository();
+
+    let newMeta: WhiteboardMeta | null = null;
+    try {
+      // Create new board metadata first (new id, timestamps, same boardType).
+      newMeta = await boardsRepo.createBoard(trimmed, board.boardType);
+
+      // Load source board state (if any). If missing, duplicate just creates an empty board.
+      const srcState = await wbRepo.loadBoard(board.id);
+
+      const baseState = srcState
+        ? {
+            ...srcState,
+            meta: newMeta,
+            selectedObjectIds: [],
+            // Do not carry undo/redo across boards.
+            history: { pastEvents: [], futureEvents: [] },
+          }
+        : createEmptyWhiteboardState(newMeta);
+
+      await wbRepo.saveBoard(newMeta.id, baseState);
+
+      // Optimistic UI update if user stays on list (we navigate right away).
+      setBoards((prev) => [newMeta!, ...prev]);
+      navigate(`/board/${newMeta.id}`);
+    } catch (err) {
+      console.error('Failed to duplicate board', err);
+      window.alert('Failed to duplicate board. Please try again.');
+      // Best effort cleanup if we created meta but failed to copy/save the state.
+      if (newMeta) {
+        try {
+          await boardsRepo.deleteBoard(newMeta.id);
+        } catch {
+          // ignore
+        }
+      }
+    }
+  };
+
   return (
     <section className="page page-board-list">
       <header className="page-header">
@@ -226,6 +278,9 @@ export const BoardListPage: React.FC = () => {
                 </div>
               </button>
               <div className="board-list-actions">
+                <button type="button" onClick={() => handleDuplicateBoard(board)}>
+                  Duplicate
+                </button>
                 <button type="button" onClick={() => handleRenameBoard(board)}>
                   Rename
                 </button>

@@ -66,6 +66,16 @@ function tool(baseToolId: ToolId, label: string, icon?: string, instanceId?: str
   return { id: instanceId ?? baseToolId, baseToolId, label, icon };
 }
 
+function preset(
+  instanceId: ToolInstanceId,
+  baseToolId: ToolId,
+  label: string,
+  icon: string | undefined,
+  defaults: Partial<WhiteboardObject>
+): ToolInstanceDefinition {
+  return { id: instanceId, baseToolId, label, icon, defaults };
+}
+
 /**
  * Single source of truth for board types.
  *
@@ -78,8 +88,27 @@ export const BOARD_TYPES: Record<BoardTypeId, BoardTypeDefinition> = {
     label: 'Advanced',
     description: 'All tools available.',
     toolbox: [
-      // Keep order aligned with TOOL_REGISTRY to match current toolbar ordering.
-      ...TOOL_REGISTRY.filter((t) => t.id !== 'select').map((t) => tool(t.id, t.label, t.icon)),
+      // Keep order aligned with TOOL_REGISTRY to match current toolbar ordering,
+      // but replace the single "Rectangle" tool with two presets.
+      tool('freehand', 'Freehand', '✏️'),
+
+      // Presets
+      preset('rect-outline', 'rectangle', 'Rectangle (outline)', '▭', {
+        // No fill by default (outline-only)
+        fillColor: undefined,
+      }),
+      preset('rect-filled', 'rectangle', 'Rectangle (filled)', '▮', {
+        // Default fill color; user can change it per preset via tool settings.
+        fillColor: '#ffffff',
+      }),
+
+      // Remaining tools
+      tool('roundedRect', 'Rounded rect', '▢'),
+      tool('ellipse', 'Ellipse', '⬭'),
+      tool('diamond', 'Diamond', '◇'),
+      tool('connector', 'Connector', '🔗'),
+      tool('text', 'Text', '🔤'),
+      tool('stickyNote', 'Sticky note', '🗒'),
       tool('select', 'Select', '🖱'),
     ],
   },
@@ -99,14 +128,15 @@ export const BOARD_TYPES: Record<BoardTypeId, BoardTypeDefinition> = {
     policy: {
       // Example policy: simplify sticky notes by hiding and locking some style controls.
       hiddenToolProps: {
-        stickyNote: ['strokeColor', 'textColor'],
+        stickyNote: ['strokeColor', 'textColor', 'fillColor'],
       },
       hiddenSelectionProps: {
-        stickyNote: ['strokeColor', 'textColor'],
+        stickyNote: ['strokeColor', 'textColor', 'fillColor'],
       },
       lockedObjectProps: {
         stickyNote: {
-          // Dark text/border suitable for bright note colors.
+          // Fixed "brainstorm" style: bright note + dark text/border.
+          fillColor: '#fef08a', // soft yellow
           strokeColor: '#0f172a',
           textColor: '#0f172a',
         },

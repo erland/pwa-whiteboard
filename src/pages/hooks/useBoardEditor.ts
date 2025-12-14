@@ -50,6 +50,21 @@ export function useBoardEditor(id: string | undefined) {
   // These drive both tool UI and defaults applied when creating new objects.
   const [toolPropsByToolInstance, setToolPropsByToolInstance] = useState<Record<string, Partial<WhiteboardObject>>>({});
 
+  // Ensure presets/tool-instance defaults are available even before the user touches settings.
+  // We intentionally only seed missing entries (never overwrite user-changed values).
+  useEffect(() => {
+    setToolPropsByToolInstance((prev) => {
+      let next = prev;
+      for (const ti of toolbox) {
+        if (!ti.defaults) continue;
+        if (prev[ti.id] !== undefined) continue;
+        if (next === prev) next = { ...prev };
+        next[ti.id] = { ...(ti.defaults as any) };
+      }
+      return next;
+    });
+  }, [toolboxKey]);
+
   // Ensure the active tool instance is valid for the current board type.
   useEffect(() => {
     if (!toolInstanceById[activeToolInstanceId]) {
@@ -101,7 +116,8 @@ export function useBoardEditor(id: string | undefined) {
   ) => {
     if (lockedEditableKeys.has(key as any)) return;
     setToolPropsByToolInstance((prev) => {
-      const current = prev[activeToolInstanceId] ?? {};
+      const seededDefaults = (toolInstanceById[activeToolInstanceId]?.defaults ?? {}) as Partial<WhiteboardObject>;
+      const current = prev[activeToolInstanceId] ?? seededDefaults;
       return {
         ...prev,
         [activeToolInstanceId]: {
@@ -285,6 +301,7 @@ export function useBoardEditor(id: string | undefined) {
     strokeWidth,
     setStrokeWidth,
     toolProps: {
+      ...((toolInstanceById[activeToolInstanceId]?.defaults ?? {}) as any),
       ...(toolPropsByToolInstance[activeToolInstanceId] ?? {}),
       ...lockedForActiveTool,
     },

@@ -92,6 +92,8 @@ export function useBoardImportExport({
       const newMeta: WhiteboardMeta = {
         ...state.meta,
         ...importedMeta,
+        boardType:
+          (importedMeta as any).boardType ?? state.meta.boardType ?? 'advanced',
         id: state.meta.id,
         updatedAt: now
       };

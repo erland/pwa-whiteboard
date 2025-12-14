@@ -12,11 +12,39 @@ describe('LocalStorageBoardsRepository', () => {
 
     const meta = await repo.createBoard('My board');
     expect(meta.id).toBeTruthy();
+    expect((meta as any).boardType).toBe('advanced');
 
     const after = await repo.listBoards();
     expect(after).toHaveLength(1);
     expect(after[0].name).toBe('My board');
   });
+
+
+
+it('migrates legacy boards index entries missing boardType', async () => {
+  // Simulate an old index entry (pre-boardType)
+  window.localStorage.setItem(
+    'pwa-whiteboard.boardsIndex',
+    JSON.stringify([
+      {
+        id: 'b_legacy',
+        name: 'Legacy board',
+        createdAt: '2020-01-01T00:00:00.000Z',
+        updatedAt: '2020-01-02T00:00:00.000Z'
+      }
+    ])
+  );
+
+  const repo = getBoardsRepository();
+  const list = await repo.listBoards();
+  expect(list).toHaveLength(1);
+  expect(list[0].id).toBe('b_legacy');
+  expect((list[0] as any).boardType).toBe('advanced');
+
+  // And ensure we persisted the migrated index
+  const raw = window.localStorage.getItem('pwa-whiteboard.boardsIndex');
+  expect(raw).toContain('"boardType":"advanced"');
+});
 
   it('renames and deletes boards', async () => {
     const repo = getBoardsRepository();

@@ -1,5 +1,5 @@
 import type { BoardsIndex, BoardsRepository } from '../domain/boardsIndex';
-import type { WhiteboardId, WhiteboardMeta } from '../domain/types';
+import type { BoardTypeId, WhiteboardId, WhiteboardMeta } from '../domain/types';
 
 const BOARDS_INDEX_KEY = 'pwa-whiteboard.boardsIndex';
 const BOARD_STATE_PREFIX = 'pwa-whiteboard.board.';
@@ -14,6 +14,51 @@ function generateId(): string {
   );
 }
 
+
+const DEFAULT_BOARD_TYPE: BoardTypeId = 'advanced';
+
+function isBoardType(value: unknown): value is BoardTypeId {
+  return value === 'advanced' || value === 'freehand' || value === 'brainstorming';
+}
+
+function migrateIndex(rawIndex: unknown[]): BoardsIndex {
+  let changed = false;
+  const next: BoardsIndex = [];
+
+  for (const item of rawIndex) {
+    if (!item || typeof item !== 'object') continue;
+    const m = item as any;
+
+    const id = typeof m.id === 'string' ? m.id : null;
+    if (!id) continue;
+
+    const name = typeof m.name === 'string' ? m.name : 'Untitled board';
+    const createdAt = typeof m.createdAt === 'string' ? m.createdAt : new Date().toISOString();
+    const updatedAt = typeof m.updatedAt === 'string' ? m.updatedAt : createdAt;
+    const boardType = isBoardType(m.boardType) ? m.boardType : DEFAULT_BOARD_TYPE;
+
+    if (m.name !== name) changed = true;
+    if (m.createdAt !== createdAt) changed = true;
+    if (m.updatedAt !== updatedAt) changed = true;
+    if (m.boardType !== boardType) changed = true;
+
+    next.push({
+      id,
+      name,
+      boardType,
+      createdAt,
+      updatedAt
+    });
+  }
+
+  // Persist the migrated index so we don't keep doing it every load.
+  if (changed) {
+    writeIndex(next);
+  }
+
+  return next;
+}
+
 function readIndex(): BoardsIndex {
   if (typeof window === 'undefined') return [];
   try {
@@ -21,7 +66,7 @@ function readIndex(): BoardsIndex {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed;
+    return migrateIndex(parsed);
   } catch {
     return [];
   }
@@ -45,6 +90,7 @@ class LocalStorageBoardsRepository implements BoardsRepository {
     const meta: WhiteboardMeta = {
       id,
       name: name.trim() || 'Untitled board',
+      boardType: DEFAULT_BOARD_TYPE,
       createdAt: now,
       updatedAt: now
     };

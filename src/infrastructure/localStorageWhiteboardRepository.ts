@@ -1,8 +1,33 @@
 // src/infrastructure/localStorageWhiteboardRepository.ts
-import type { WhiteboardId, WhiteboardState } from '../domain/types';
+import type { BoardTypeId, WhiteboardId, WhiteboardState } from '../domain/types';
 import type { WhiteboardRepository } from '../domain/boardsIndex';
 
 const BOARD_STATE_PREFIX = 'pwa-whiteboard.board.';
+
+
+const DEFAULT_BOARD_TYPE: BoardTypeId = 'advanced';
+
+function isBoardType(value: unknown): value is BoardTypeId {
+  return value === 'advanced' || value === 'freehand' || value === 'brainstorming';
+}
+
+function migrateLoadedState(state: WhiteboardState): WhiteboardState {
+  const metaAny = (state as any).meta ?? {};
+  const boardType = isBoardType(metaAny.boardType) ? metaAny.boardType : DEFAULT_BOARD_TYPE;
+
+  if (metaAny.boardType === boardType) {
+    return state;
+  }
+
+  return {
+    ...state,
+    meta: {
+      ...state.meta,
+      boardType,
+    },
+  };
+}
+
 
 class LocalStorageWhiteboardRepository implements WhiteboardRepository {
   async loadBoard(id: WhiteboardId): Promise<WhiteboardState | null> {
@@ -20,12 +45,12 @@ class LocalStorageWhiteboardRepository implements WhiteboardRepository {
 
       // Normal case: we stored the raw WhiteboardState
       if (parsed && typeof parsed === 'object' && 'meta' in parsed && 'objects' in parsed) {
-        return parsed as WhiteboardState;
+        return migrateLoadedState(parsed as WhiteboardState);
       }
 
       // Fallback: if we ever decide to wrap it as { state: ... }
       if (parsed && typeof parsed === 'object' && 'state' in parsed) {
-        return (parsed as any).state as WhiteboardState;
+        return migrateLoadedState((parsed as any).state as WhiteboardState);
       }
 
       return null;

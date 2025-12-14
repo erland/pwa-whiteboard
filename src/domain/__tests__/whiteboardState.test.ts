@@ -6,6 +6,7 @@ function makeMeta(): WhiteboardMeta {
   return {
     id: 'test-board',
     name: 'Test Board',
+    boardType: 'advanced',
     createdAt: now,
     updatedAt: now
   };

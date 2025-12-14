@@ -188,7 +188,7 @@ describe('whiteboard/geometry (Step 2 primitives)', () => {
       const connector: WhiteboardObject = { id: 'c1', type: 'connector', x: 0, y: 0 };
 
       const state: WhiteboardState = {
-        meta: { id: 'b1', name: 'Board', createdAt: 't', updatedAt: 't' },
+        meta: { id: 'b1', name: 'Board', boardType: 'advanced', createdAt: 't', updatedAt: 't' },
         objects: [rect1, rect2, connector],
         selectedObjectIds: [],
         viewport: { offsetX: 0, offsetY: 0, zoom: 1 },
@@ -231,7 +231,7 @@ describe('whiteboard/geometry (Step 2 primitives)', () => {
       };
 
       const state: WhiteboardState = {
-        meta: { id: 'b1', name: 'Board', createdAt: 't', updatedAt: 't' },
+        meta: { id: 'b1', name: 'Board', boardType: 'advanced', createdAt: 't', updatedAt: 't' },
         objects: [rect1, rect2, connector],
         selectedObjectIds: [],
         viewport: { offsetX: 0, offsetY: 0, zoom: 1 },
@@ -274,7 +274,7 @@ describe('whiteboard/geometry (Step 2 primitives)', () => {
       };
 
       const state: WhiteboardState = {
-        meta: { id: 'b1', name: 'Board', createdAt: 't', updatedAt: 't' },
+        meta: { id: 'b1', name: 'Board', boardType: 'advanced', createdAt: 't', updatedAt: 't' },
         objects: [freehand, rect2, connector],
         selectedObjectIds: [],
         viewport: { offsetX: 0, offsetY: 0, zoom: 1 },
@@ -485,7 +485,7 @@ describe('whiteboard/geometry (Step 2+3 primitives)', () => {
       };
 
       const state: WhiteboardState = {
-        meta: { id: 'b1', name: 'Board', createdAt: 't', updatedAt: 't' },
+        meta: { id: 'b1', name: 'Board', boardType: 'advanced', createdAt: 't', updatedAt: 't' },
         objects: [rect1, rect2, connector],
         selectedObjectIds: [],
         viewport: { offsetX: 0, offsetY: 0, zoom: 1 },

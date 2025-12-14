@@ -91,6 +91,7 @@ export function useBoardEditor(id: string | undefined) {
         const meta: WhiteboardMeta = {
           id,
           name: indexMeta?.name ?? 'Untitled board',
+          boardType: indexMeta?.boardType ?? 'advanced',
           createdAt: indexMeta?.createdAt ?? now,
           updatedAt: now,
         };
@@ -108,6 +109,7 @@ export function useBoardEditor(id: string | undefined) {
           const meta: WhiteboardMeta = {
             id,
             name: indexMeta?.name ?? 'Untitled board',
+            boardType: indexMeta?.boardType ?? 'advanced',
             createdAt: indexMeta?.createdAt ?? now,
             updatedAt: now,
           };
@@ -122,6 +124,7 @@ export function useBoardEditor(id: string | undefined) {
             const meta: WhiteboardMeta = {
               id,
               name: 'Untitled board',
+              boardType: 'advanced',
               createdAt: now,
               updatedAt: now,
             };

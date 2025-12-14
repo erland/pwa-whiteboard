@@ -2,9 +2,12 @@ export type WhiteboardId = string;
 export type ObjectId = string;
 export type BoardEventId = string;
 
+export type BoardTypeId = 'advanced' | 'freehand' | 'brainstorming';
+
 export interface WhiteboardMeta {
   id: WhiteboardId;
   name: string;
+  boardType: BoardTypeId;
   createdAt: string; // ISO timestamp
   updatedAt: string; // ISO timestamp
 }

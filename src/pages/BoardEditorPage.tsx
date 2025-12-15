@@ -40,7 +40,7 @@ export const BoardEditorPage: React.FC = () => {
     handleViewportChange,
     zoomPercent,
     handleZoomChange,
-    handleResetView,
+    handleFitView,
     handleExportJson,
     handleExportPng,
     handleImportClick,
@@ -115,7 +115,7 @@ export const BoardEditorPage: React.FC = () => {
             onUndo={undo}
             onRedo={redo}
             onZoomChange={handleZoomChange}
-            onResetView={handleResetView}
+            onFitView={handleFitView}
           />
 
           <div className="board-editor-canvas-wrapper">

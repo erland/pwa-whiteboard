@@ -253,14 +253,23 @@ export function useBoardEditor(id: string | undefined) {
 
   // ---- Sub-hooks ----
 
+  const dpr =
+  typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
+
+  const logicalCanvasWidth = canvasEl ? canvasEl.width / dpr : undefined;
+  const logicalCanvasHeight = canvasEl ? canvasEl.height / dpr : undefined;
+
   const {
     zoomPercent,
     handleViewportChange,
     handleZoomChange,
-    handleResetView
+    handleFitView
   } = useBoardViewport({
     viewport: state?.viewport,
-    setViewport
+    setViewport,
+    objects: state?.objects,
+    canvasWidth: logicalCanvasWidth,
+    canvasHeight: logicalCanvasHeight
   });
 
   const {
@@ -355,7 +364,7 @@ export function useBoardEditor(id: string | undefined) {
     handleViewportChange,
     zoomPercent,
     handleZoomChange,
-    handleResetView,
+    handleFitView,
     handleExportJson,
     handleExportPng,
     handleImportClick,

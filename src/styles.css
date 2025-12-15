@@ -336,8 +336,8 @@ a:hover {
   font-size: 0.9rem;
 }
 
-/* Reset button: slightly emphasized but still compact */
-.board-editor-reset-button {
+/* Fit button: slightly emphasized but still compact */
+.board-editor-fit-button {
   font-weight: 500;
 }
 
@@ -592,6 +592,31 @@ a:hover {
 
   .page-header-actions {
     gap: 0.5rem;
+  }
+  /* Let the top controls wrap so Fit doesn't get pushed off-screen */
+  .board-editor-top-controls {
+    flex-wrap: wrap;
+    row-gap: 0.5rem;
+  }
+
+  /* Put left and right groups on their own rows */
+  .board-editor-top-controls-left,
+  .board-editor-top-controls-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  /* Allow the zoom slider to shrink */
+  .board-editor-zoom-range {
+    width: auto;
+    flex: 1;
+    min-width: 110px;
+  }
+
+  /* Slightly smaller buttons to fit comfortably */
+  .board-editor-top-button {
+    padding: 0.25rem 0.7rem;
+    font-size: 0.85rem;
   }
 }
 

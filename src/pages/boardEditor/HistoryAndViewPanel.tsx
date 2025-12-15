@@ -7,7 +7,7 @@ type HistoryAndViewPanelProps = {
   onUndo: () => void;
   onRedo: () => void;
   onZoomChange: React.ChangeEventHandler<HTMLInputElement>;
-  onResetView: () => void;
+  onFitView: () => void;
 };
 
 /**
@@ -21,7 +21,7 @@ export const HistoryAndViewPanel: React.FC<HistoryAndViewPanelProps> = ({
   onUndo,
   onRedo,
   onZoomChange,
-  onResetView,
+  onFitView,
 }) => {
   return (
     <div className="board-editor-top-controls">
@@ -45,12 +45,12 @@ export const HistoryAndViewPanel: React.FC<HistoryAndViewPanelProps> = ({
         </button>
       </div>
 
-      {/* Right side: zoom + reset, still compact */}
+      {/* Right side: zoom + fit, still compact */}
       <div className="board-editor-top-controls-right">
         <span className="board-editor-zoom-icon">−</span>
         <input
           type="range"
-          min={25}
+          min={5}
           max={200}
           step={5}
           value={zoomPercent}
@@ -61,10 +61,10 @@ export const HistoryAndViewPanel: React.FC<HistoryAndViewPanelProps> = ({
         <span className="board-editor-zoom-icon">+</span>
         <button
           type="button"
-          className="tool-button board-editor-top-button board-editor-reset-button"
-          onClick={onResetView}
+          className="tool-button board-editor-top-button board-editor-fit-button"
+          onClick={onFitView}
         >
-          Reset
+          Fit
         </button>
       </div>
     </div>

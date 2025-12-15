@@ -145,7 +145,34 @@ export const ToolSettingsPanel: React.FC<Props> = ({
           );
         }
 
-        if (def.control.kind === 'boolean') {
+        
+        if (def.control.kind === 'select') {
+          const opts = def.control.options;
+          const v =
+            typeof value === 'string'
+              ? value
+              : (opts[0]?.value ?? '');
+          return (
+            <div className="panel-row" key={key}>
+              <label className="field-label">
+                <span className="field-label-inline">{def.label}</span>
+                <select
+                  className="text-input"
+                  value={v}
+                  disabled={disabled}
+                  onChange={(e) => onUpdateToolProp(key as any, e.target.value as any)}
+                  aria-label={def.label}
+                >
+                  {opts.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          );
+        }        if (def.control.kind === 'boolean') {
           const checked = Boolean(value);
           return (
             <div className="panel-row" key={key}>

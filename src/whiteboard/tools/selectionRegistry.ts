@@ -21,6 +21,7 @@ export type PropControl =
   | { kind: 'color' }
   | { kind: 'range'; min: number; max: number; step: number }
   | { kind: 'boolean' }
+  | { kind: 'select'; options: readonly { value: string; label: string }[] }
   | { kind: 'text' }
   | { kind: 'textarea' };
 
@@ -38,8 +39,32 @@ export const EDITABLE_PROP_DEFS: Record<EditablePropKey, EditablePropDefinition>
     control: { kind: 'range', min: 1, max: 12, step: 1 },
   },
   fillColor: { key: 'fillColor', label: 'Fill color', control: { kind: 'color' } },
-  arrowStart: { key: 'arrowStart', label: 'Arrow start', control: { kind: 'boolean' } },
-  arrowEnd: { key: 'arrowEnd', label: 'Arrow end', control: { kind: 'boolean' } },
+  arrowStart: {
+    key: 'arrowStart',
+    label: 'Arrow start',
+    control: {
+      kind: 'select',
+      options: [
+        { value: 'none', label: 'None' },
+        { value: 'open', label: 'Open' },
+        { value: 'closed', label: 'Closed' },
+        { value: 'filled', label: 'Filled' },
+      ] as const,
+    },
+  },
+  arrowEnd: {
+    key: 'arrowEnd',
+    label: 'Arrow end',
+    control: {
+      kind: 'select',
+      options: [
+        { value: 'none', label: 'None' },
+        { value: 'open', label: 'Open' },
+        { value: 'closed', label: 'Closed' },
+        { value: 'filled', label: 'Filled' },
+      ] as const,
+    },
+  },
   textColor: { key: 'textColor', label: 'Text color', control: { kind: 'color' } },
   fontSize: {
     key: 'fontSize',

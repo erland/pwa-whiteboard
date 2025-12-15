@@ -23,6 +23,16 @@ export type WhiteboardObjectType =
   | 'stickyNote'
   | 'connector';
 
+/**
+ * Arrow head type for line ends.
+ *
+ * - none: no arrow head
+ * - open: open V-shaped arrow
+ * - closed: outlined (stroked) triangle
+ * - filled: filled triangle (legacy "closed" behavior)
+ */
+export type ArrowType = 'none' | 'open' | 'closed' | 'filled';
+
 export interface Point {
   x: number;
   y: number;
@@ -89,8 +99,8 @@ export interface WhiteboardObject {
   strokeWidth?: number;
 
   /** Line arrowheads (only for type === 'line'). */
-  arrowStart?: boolean;
-  arrowEnd?: boolean;
+  arrowStart?: ArrowType;
+  arrowEnd?: ArrowType;
 
   // Text content (for text / sticky notes)
   text?: string;

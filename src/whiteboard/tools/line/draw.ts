@@ -1,6 +1,6 @@
 // src/whiteboard/tools/line/draw.ts
 
-import type { WhiteboardObject, Viewport } from '../../../domain/types';
+import type { WhiteboardObject, Viewport, ArrowType } from '../../../domain/types';
 import type { DraftShape } from '../../drawing';
 import { worldToCanvas } from '../../geometry';
 
@@ -10,6 +10,7 @@ function drawArrowHead(
   tipY: number,
   tailX: number,
   tailY: number,
+  arrowType: ArrowType,
   color: string,
   strokeWidthPx: number
 ): void {
@@ -21,19 +22,53 @@ function drawArrowHead(
   const ux = dx / len;
   const uy = dy / len;
 
-  const headLen = Math.max(10, strokeWidthPx * 3);
+  // Arrow size (in canvas pixels). Keep proportional to stroke width, with a minimum.
+  // Requested: make arrows ~2x larger than previous.
+  const headLen = Math.max(20, strokeWidthPx * 6);
   const backX = tipX - ux * headLen;
   const backY = tipY - uy * headLen;
 
   const px = -uy;
   const py = ux;
-  const halfWidth = Math.max(4, strokeWidthPx * 1.5);
+  const halfWidth = Math.max(8, strokeWidthPx * 3);
 
   const leftX = backX + px * halfWidth;
   const leftY = backY + py * halfWidth;
   const rightX = backX - px * halfWidth;
   const rightY = backY - py * halfWidth;
 
+  if (arrowType === 'open') {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = strokeWidthPx;
+    ctx.lineJoin = 'miter';
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(leftX, leftY);
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(rightX, rightY);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  if (arrowType === 'closed') {
+    // Outlined triangle
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = strokeWidthPx;
+    ctx.lineJoin = 'miter';
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(leftX, leftY);
+    ctx.lineTo(rightX, rightY);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  // 'filled' arrow head (legacy filled triangle)
   ctx.save();
   ctx.fillStyle = color;
   ctx.beginPath();
@@ -43,6 +78,7 @@ function drawArrowHead(
   ctx.closePath();
   ctx.fill();
   ctx.restore();
+
 }
 
 export function drawLineObject(
@@ -74,16 +110,16 @@ export function drawLineObject(
   ctx.lineTo(b.x, b.y);
   ctx.stroke();
 
-  const arrowStart = Boolean(obj.arrowStart);
-  const arrowEnd = Boolean(obj.arrowEnd);
+  const arrowStart = (obj.arrowStart ?? 'none') as ArrowType;
+  const arrowEnd = (obj.arrowEnd ?? 'none') as ArrowType;
 
-  if (arrowStart) {
+  if (arrowStart !== 'none') {
     // Tip at A, pointing towards B
-    drawArrowHead(ctx, a.x, a.y, b.x, b.y, stroke, widthPx);
+    drawArrowHead(ctx, a.x, a.y, b.x, b.y, arrowStart, stroke, widthPx);
   }
-  if (arrowEnd) {
+  if (arrowEnd !== 'none') {
     // Tip at B, pointing towards A
-    drawArrowHead(ctx, b.x, b.y, a.x, a.y, stroke, widthPx);
+    drawArrowHead(ctx, b.x, b.y, a.x, a.y, arrowEnd, stroke, widthPx);
   }
 
   ctx.restore();
@@ -130,14 +166,14 @@ export function drawLineDraft(
 
   // Arrowheads preview (solid)
   ctx.setLineDash([]);
-  const arrowStart = Boolean(d.arrowStart);
-  const arrowEnd = Boolean(d.arrowEnd);
+  const arrowStart = ((d as any).arrowStart ?? 'none') as ArrowType;
+  const arrowEnd = ((d as any).arrowEnd ?? 'none') as ArrowType;
 
-  if (arrowStart) {
-    drawArrowHead(ctx, a.x, a.y, b.x, b.y, stroke, widthPx);
+  if (arrowStart !== 'none') {
+    drawArrowHead(ctx, a.x, a.y, b.x, b.y, arrowStart, stroke, widthPx);
   }
-  if (arrowEnd) {
-    drawArrowHead(ctx, b.x, b.y, a.x, a.y, stroke, widthPx);
+  if (arrowEnd !== 'none') {
+    drawArrowHead(ctx, b.x, b.y, a.x, a.y, arrowEnd, stroke, widthPx);
   }
 
   ctx.restore();

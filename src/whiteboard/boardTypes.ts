@@ -92,7 +92,7 @@ export const BOARD_TYPES: Record<BoardTypeId, BoardTypeDefinition> = {
       // but replace the single "Rectangle" tool with two presets.
       tool('freehand', 'Freehand', '✏️'),
 
-      tool('line', 'Line', '／'),
+      preset('line', 'line', 'Line', '／', { arrowStart: 'none', arrowEnd: 'none' }),
 
       // Presets
       preset('rect-outline', 'rectangle', 'Rectangle (outline)', '▭', {

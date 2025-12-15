@@ -1,14 +1,14 @@
 // src/whiteboard/tools/line/interactions.ts
 
-import type { WhiteboardObject, ObjectId, Point } from '../../../domain/types';
+import type { WhiteboardObject, ObjectId, Point, ArrowType } from '../../../domain/types';
 import type { DraftShape } from '../../drawing';
 
 export type LineStartArgs = {
   pos: Point;
   strokeColor: string;
   strokeWidth: number;
-  arrowStart: boolean;
-  arrowEnd: boolean;
+  arrowStart: ArrowType;
+  arrowEnd: ArrowType;
   generateObjectId: () => ObjectId;
 };
 
@@ -63,9 +63,9 @@ export function finishLineDraft(draft: DraftShape): { object?: WhiteboardObject;
     y2: currentY,
     strokeColor: d.strokeColor,
     strokeWidth: d.strokeWidth,
-    // Important: store explicit booleans (not undefined) so selection UI can show unchecked states.
-    arrowStart: Boolean(d.arrowStart),
-    arrowEnd: Boolean(d.arrowEnd),
+    // Important: store explicit values (not undefined) so selection UI can show 'None' explicitly.
+    arrowStart: (d as any).arrowStart ?? 'none',
+    arrowEnd: (d as any).arrowEnd ?? 'none',
   };
 
   return { object: obj, selectIds: [obj.id] };

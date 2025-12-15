@@ -18,7 +18,7 @@ function generateId(): string {
 const DEFAULT_BOARD_TYPE: BoardTypeId = 'advanced';
 
 function isBoardType(value: unknown): value is BoardTypeId {
-  return value === 'advanced' || value === 'freehand' || value === 'brainstorming';
+  return value === 'advanced' || value === 'freehand' || value === 'mindmap';
 }
 
 function migrateIndex(rawIndex: unknown[]): BoardsIndex {

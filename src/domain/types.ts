@@ -2,7 +2,7 @@ export type WhiteboardId = string;
 export type ObjectId = string;
 export type BoardEventId = string;
 
-export type BoardTypeId = 'advanced' | 'freehand' | 'brainstorming';
+export type BoardTypeId = 'advanced' | 'freehand' | 'mindmap';
 
 export interface WhiteboardMeta {
   id: WhiteboardId;

@@ -122,11 +122,11 @@ export const BOARD_TYPES: Record<BoardTypeId, BoardTypeDefinition> = {
     toolbox: [tool('freehand', 'Freehand', '✏️'), tool('select', 'Select', '🖱')],
   },
 
-  brainstorming: {
-    id: 'brainstorming',
-    label: 'Brainstorming',
-    description: 'Simplified tools for ideation (sticky notes + freehand + selection).',
-    toolbox: [tool('stickyNote', 'Sticky note', '🗒'), tool('freehand', 'Freehand', '✏️'), tool('select', 'Select', '🖱')],
+  mindmap: {
+    id: 'mindmap',
+    label: 'Mindmap',
+    description: 'Simplified tools for ideation (sticky notes + connector + selection).',
+    toolbox: [tool('stickyNote', 'Sticky note', '🗒'), tool('connector', 'Connector', '🔗'), tool('select', 'Select', '🖱')],
     policy: {
       // Example policy: simplify sticky notes by hiding and locking some style controls.
       hiddenToolProps: {
@@ -137,7 +137,7 @@ export const BOARD_TYPES: Record<BoardTypeId, BoardTypeDefinition> = {
       },
       lockedObjectProps: {
         stickyNote: {
-          // Fixed "brainstorm" style: bright note + dark text/border.
+          // Fixed "mindmap" style: bright note + dark text/border.
           fillColor: '#fef08a', // soft yellow
           strokeColor: '#0f172a',
           textColor: '#0f172a',

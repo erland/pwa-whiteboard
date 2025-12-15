@@ -90,7 +90,7 @@ A whiteboard has a **board type** that controls the editing experience.
   - Example board types:
     - **Advanced**: all tools available.
     - **Freehand**: only Freehand + Selection.
-    - **Brainstorming**: focused toolbox (e.g., Sticky Notes + Selection) with simplified settings.
+    - **Mindmap**: focused toolbox (e.g., Sticky Notes + Connectors + Selection) with simplified settings.
 - A board type may define **tool presets** (multiple toolbox entries that share the same base tool but with different default settings),
   for example:
   - “Rectangle (outline)” and “Rectangle (filled)”.

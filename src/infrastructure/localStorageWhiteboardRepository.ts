@@ -116,7 +116,7 @@ function isPersistedV2(v: any): v is PersistedBoardStateV2 {
 
 
 function isBoardType(value: unknown): value is BoardTypeId {
-  return value === 'advanced' || value === 'freehand' || value === 'brainstorming';
+  return value === 'advanced' || value === 'freehand' || value === 'mindmap';
 }
 
 function migrateLoadedState(state: WhiteboardState): WhiteboardState {

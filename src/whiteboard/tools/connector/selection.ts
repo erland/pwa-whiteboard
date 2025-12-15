@@ -1,5 +1,7 @@
 // src/whiteboard/tools/connector/selection.ts
 
-import { STROKE_ONLY } from '../_shared/selectionCaps';
+import type { SelectionCapabilities } from '../selection/types';
 
-export const connectorSelectionCapabilities = STROKE_ONLY;
+export const connectorSelectionCapabilities: SelectionCapabilities = {
+  editableProps: ['strokeColor', 'strokeWidth', 'arrowStart', 'arrowEnd'] as const,
+};

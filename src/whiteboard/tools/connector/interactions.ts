@@ -1,5 +1,6 @@
 import type {
   Attachment,
+  ArrowType,
   ObjectId,
   Point,
   Viewport,
@@ -130,6 +131,8 @@ export type ConnectorStartArgs = {
   viewport: Viewport;
   strokeColor: string;
   strokeWidth: number;
+  arrowStart: ArrowType;
+  arrowEnd: ArrowType;
   generateObjectId: () => ObjectId;
 };
 
@@ -139,6 +142,8 @@ export function startConnectorDraft({
   viewport,
   strokeColor,
   strokeWidth,
+  arrowStart,
+  arrowEnd,
   generateObjectId,
 }: ConnectorStartArgs): DraftShape | null {
   const hitObj = hitTest(objects, pos.x, pos.y);
@@ -152,6 +157,8 @@ export function startConnectorDraft({
     id: generateObjectId(),
     strokeColor,
     strokeWidth,
+    arrowStart,
+    arrowEnd,
     fromObjectId: hitObj.id,
     fromAttachment,
     fromPoint,
@@ -240,6 +247,8 @@ export function finishConnectorDraft({ draft, pos, objects, viewport }: Connecto
     y: 0,
     strokeColor: draft.strokeColor,
     strokeWidth: draft.strokeWidth,
+    arrowStart: (draft as any).arrowStart ?? 'none',
+    arrowEnd: (draft as any).arrowEnd ?? 'none',
     from: { objectId: draft.fromObjectId, attachment: draft.fromAttachment },
     to: { objectId: toObj.id, attachment: toAttachment },
     routing: 'straight',

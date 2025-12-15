@@ -1,5 +1,5 @@
 // src/whiteboard/drawing.ts
-import type {WhiteboardObject, Viewport, Point, ObjectId, Attachment, WhiteboardObjectType} from '../domain/types';
+import type {WhiteboardObject, Viewport, Point, ObjectId, Attachment, WhiteboardObjectType, ArrowType} from '../domain/types';
 import {
   worldToCanvas,
   getBoundingBox,
@@ -13,6 +13,10 @@ export type DraftBase = {
   id: ObjectId;
   strokeColor: string;
   strokeWidth: number;
+
+  // Optional arrowhead settings (used by line and connector tools).
+  arrowStart?: ArrowType;
+  arrowEnd?: ArrowType;
 
   /**
    * Optional "owner" tool/object type for this draft.

@@ -98,7 +98,7 @@ export interface WhiteboardObject {
   cornerRadius?: number;
   strokeWidth?: number;
 
-  /** Line arrowheads (only for type === 'line'). */
+  /** Line/connector arrowheads (used by type === 'line' | 'connector'). */
   arrowStart?: ArrowType;
   arrowEnd?: ArrowType;
 

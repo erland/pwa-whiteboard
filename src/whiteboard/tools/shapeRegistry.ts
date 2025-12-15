@@ -320,6 +320,8 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
           viewport: ctx.viewport,
           strokeColor: ctx.strokeColor,
           strokeWidth: ctx.strokeWidth,
+          arrowStart: (((ctx.toolProps as any)?.arrowStart ?? 'none') as any),
+          arrowEnd: (((ctx.toolProps as any)?.arrowEnd ?? 'none') as any),
           generateObjectId: ctx.generateObjectId,
         }),
       updateDraft: (draft: DraftShape, ctx: ToolPointerContext, pos: Point) =>

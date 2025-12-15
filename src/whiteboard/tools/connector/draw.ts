@@ -1,6 +1,7 @@
 // src/whiteboard/tools/connector/draw.ts
-import type { WhiteboardObject, Viewport } from '../../../domain/types';
+import type { WhiteboardObject, Viewport, ArrowType } from '../../../domain/types';
 import { worldToCanvas, resolveConnectorEndpoints } from '../../geometry';
+import { drawArrowHead } from '../_shared/arrowHeads';
 
 export function drawConnectorObject(
   ctx: CanvasRenderingContext2D,
@@ -29,6 +30,18 @@ export function drawConnectorObject(
   ctx.moveTo(a.x, a.y);
   ctx.lineTo(b.x, b.y);
   ctx.stroke();
+
+  const arrowStart = (obj.arrowStart ?? 'none') as ArrowType;
+  const arrowEnd = (obj.arrowEnd ?? 'none') as ArrowType;
+
+  if (arrowStart !== 'none') {
+    // Tip at A, pointing towards B
+    drawArrowHead(ctx, a.x, a.y, b.x, b.y, arrowStart, stroke, widthPx);
+  }
+  if (arrowEnd !== 'none') {
+    // Tip at B, pointing towards A
+    drawArrowHead(ctx, b.x, b.y, a.x, a.y, arrowEnd, stroke, widthPx);
+  }
 
   ctx.restore();
 }

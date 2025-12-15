@@ -56,7 +56,18 @@ type ConnectorEndpointDragState = {
   endpoint: 'from' | 'to';
 };
 
-type DragState = MoveDragState | PanDragState | ResizeDragState | ConnectorEndpointDragState;
+type LineEndpointDragState = {
+  kind: 'lineEndpoint';
+  lineId: ObjectId;
+  endpoint: 'start' | 'end';
+};
+
+type DragState =
+  | MoveDragState
+  | PanDragState
+  | ResizeDragState
+  | ConnectorEndpointDragState
+  | LineEndpointDragState;
 
 
 function getConnectorEndpointHit(
@@ -92,6 +103,39 @@ function getConnectorEndpointHit(
 
   // Both: pick the closest.
   return dA2 <= dB2 ? 'from' : 'to';
+}
+
+function getLineEndpointHit(
+  line: WhiteboardObject,
+  viewport: Viewport,
+  pointerCanvasX: number,
+  pointerCanvasY: number
+): 'start' | 'end' | null {
+  if (line.type !== 'line') return null;
+
+  const a = worldToCanvas(line.x, line.y, viewport);
+  const b = worldToCanvas(line.x2 ?? line.x, line.y2 ?? line.y, viewport);
+
+  const dxA = pointerCanvasX - a.x;
+  const dyA = pointerCanvasY - a.y;
+  const dxB = pointerCanvasX - b.x;
+  const dyB = pointerCanvasY - b.y;
+
+  const dA2 = dxA * dxA + dyA * dyA;
+  const dB2 = dxB * dxB + dyB * dyB;
+
+  // Match the visual endpoint handle (~5px) but make it easier to grab.
+  const HIT_R = 10;
+  const hit2 = HIT_R * HIT_R;
+
+  const hitA = dA2 <= hit2;
+  const hitB = dB2 <= hit2;
+  if (!hitA && !hitB) return null;
+  if (hitA && !hitB) return 'start';
+  if (!hitA && hitB) return 'end';
+
+  // Both: pick the closest.
+  return dA2 <= dB2 ? 'start' : 'end';
 }
 
 export type CanvasInteractionsParams = {
@@ -250,6 +294,32 @@ export function useCanvasInteractions({
     // 2) Move selection or pan
     const hitObj = hitTest(objects, pos.x, pos.y);
     if (hitObj) {
+      // Straight lines: show endpoint anchors and allow dragging endpoints (no resize handles).
+      if (hitObj.type === 'line') {
+        onSelectionChange([hitObj.id]);
+
+        const endpoint = getLineEndpointHit(hitObj, viewport, canvasX, canvasY);
+        if (endpoint) {
+          setDrag({
+            kind: 'lineEndpoint',
+            lineId: hitObj.id,
+            endpoint,
+          });
+          setPointerCaptureSafe(evt);
+          return;
+        }
+
+        // Clicked the line body, not an endpoint: move the whole line.
+        setDrag({
+          kind: 'move',
+          objectId: hitObj.id,
+          lastX: pos.x,
+          lastY: pos.y,
+        });
+        setPointerCaptureSafe(evt);
+        return;
+      }
+
       // Special-case connectors: allow dragging endpoints to retarget / move anchors.
       if (hitObj.type === 'connector') {
         onSelectionChange([hitObj.id]);
@@ -306,6 +376,18 @@ export function useCanvasInteractions({
     if (!drag || activeTool !== 'select') return;
 
     const { canvasX, canvasY } = getCanvasXY(evt);
+
+    if (drag.kind === 'lineEndpoint') {
+      const line = objects.find((o) => o.id === drag.lineId);
+      if (!line || line.type !== 'line') return;
+
+      if (drag.endpoint === 'start') {
+        onUpdateObject(line.id, { x: pos.x, y: pos.y });
+      } else {
+        onUpdateObject(line.id, { x2: pos.x, y2: pos.y });
+      }
+      return;
+    }
 
     if (drag.kind === 'connectorEndpoint') {
       const connector = objects.find((o) => o.id === drag.connectorId);

@@ -32,7 +32,7 @@ import { drawConnectorObject } from './connector/draw';
 
 /* ===== geometry / ports ===== */
 import { getFreehandBoundingBox, translateFreehandObject, resizeFreehandObject } from './freehand/geometry';
-import { getLineBoundingBox, hitTestLine, translateLineObject, resizeLineObject } from './line/geometry';
+import { getLineBoundingBox, hitTestLine, translateLineObject } from './line/geometry';
 import { getRectangleBoundingBox, getRectanglePorts } from './rectangle/geometry';
 import { getRoundedRectBoundingBox, getRoundedRectPorts } from './roundedRect/geometry';
 import { getEllipseBoundingBox, getEllipsePorts } from './ellipse/geometry';
@@ -98,7 +98,6 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
     getBoundingBox: (obj) => getLineBoundingBox(obj),
     hitTest: (obj, worldX, worldY) => hitTestLine(obj, worldX, worldY),
     translate: (obj, dx, dy) => translateLineObject(obj, dx, dy),
-    resize: (obj, newBounds) => resizeLineObject(obj, newBounds),
     selectionCaps: lineSelectionCapabilities,
     draft: {
       startDraft: (ctx: ToolPointerContext, pos: Point) =>

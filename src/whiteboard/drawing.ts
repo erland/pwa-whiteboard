@@ -123,6 +123,51 @@ function drawConnectorSelection(
   ctx.restore();
 }
 
+function drawLineSelection(
+  ctx: CanvasRenderingContext2D,
+  obj: WhiteboardObject,
+  viewport: Viewport
+): void {
+  if (obj.type !== 'line') return;
+
+  const ax = obj.x;
+  const ay = obj.y;
+  const bx = obj.x2 ?? obj.x;
+  const by = obj.y2 ?? obj.y;
+
+  const a = worldToCanvas(ax, ay, viewport);
+  const b = worldToCanvas(bx, by, viewport);
+
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  // Highlight line (no bounding box for lines)
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = Math.max(3, (obj.strokeWidth ?? 2) + 2);
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.stroke();
+
+  // Endpoint anchors
+  ctx.setLineDash([]);
+  const r = 5;
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 1;
+
+  for (const p of [a, b]) {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 /**
  * Draw selection rectangle + resize handles for a given object (if applicable).
  */
@@ -136,6 +181,12 @@ export function drawSelectionOutlineAndHandles(
   if (obj.type === 'connector') {
     if (!allObjects) return;
     drawConnectorSelection(ctx, obj, allObjects, viewport);
+    return;
+  }
+
+  // Special-case straight lines: highlight the line + endpoints (no bounding box, no resize handles).
+  if (obj.type === 'line') {
+    drawLineSelection(ctx, obj, viewport);
     return;
   }
 

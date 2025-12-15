@@ -21,6 +21,19 @@ export const BoardListPage: React.FC = () => {
 
   const createNameRef = useRef<HTMLInputElement | null>(null);
 
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importName, setImportName] = useState('Imported board');
+  const [importType, setImportType] = useState<BoardTypeId>('advanced');
+  const [importData, setImportData] = useState<{
+    objects: unknown[];
+    viewport?: unknown;
+    meta?: Partial<WhiteboardMeta>;
+  } | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+
+  const importNameRef = useRef<HTMLInputElement | null>(null);
+  const importFileInputRef = useRef<HTMLInputElement | null>(null);
+
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -71,6 +84,28 @@ export const BoardListPage: React.FC = () => {
     };
   }, [isCreateOpen, isCreating]);
 
+  useEffect(() => {
+    if (!isImportOpen) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isImporting) {
+        setIsImportOpen(false);
+        setImportData(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+
+    const t = window.setTimeout(() => {
+      importNameRef.current?.focus();
+      importNameRef.current?.select();
+    }, 0);
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.clearTimeout(t);
+    };
+  }, [isImportOpen, isImporting]);
+
   const openCreateDialog = () => {
     setCreateName('New board');
     setCreateType('advanced');
@@ -80,6 +115,112 @@ export const BoardListPage: React.FC = () => {
   const closeCreateDialog = () => {
     if (isCreating) return;
     setIsCreateOpen(false);
+  };
+
+  const handleImportClick = () => {
+    importFileInputRef.current?.click();
+  };
+
+  const handleImportFileChange: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const data: any = JSON.parse(text);
+
+      if (!data || typeof data !== 'object') throw new Error('Invalid JSON');
+      if (!Array.isArray(data.objects)) throw new Error('File does not contain a valid objects array');
+
+      const importedMeta = (data.meta ?? {}) as Partial<WhiteboardMeta>;
+      const suggestedName =
+        typeof importedMeta.name === 'string' && importedMeta.name.trim()
+          ? `${importedMeta.name.trim()} (import)`
+          : 'Imported board';
+
+      const nextType: BoardTypeId =
+        typeof importedMeta.boardType === 'string' && (BOARD_TYPE_IDS as readonly string[]).includes(importedMeta.boardType)
+          ? (importedMeta.boardType as BoardTypeId)
+          : 'advanced';
+
+      setImportName(suggestedName);
+      setImportType(nextType);
+      setImportData({
+        objects: data.objects as unknown[],
+        viewport: data.viewport,
+        meta: importedMeta,
+      });
+      setIsImportOpen(true);
+    } catch (err) {
+      console.error('Failed to import board JSON', err);
+      window.alert('Could not import board JSON. Please check the file format.');
+    } finally {
+      // Allow selecting the same file again.
+      e.target.value = '';
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    if (!importData) return;
+
+    const name = importName.trim();
+    if (!name) {
+      window.alert('Please enter a board name.');
+      importNameRef.current?.focus();
+      return;
+    }
+
+    setIsImporting(true);
+    const boardsRepo = getBoardsRepository();
+    const wbRepo = getWhiteboardRepository();
+
+    let newMeta: WhiteboardMeta | null = null;
+    try {
+      newMeta = await boardsRepo.createBoard(name, importType);
+
+      const base = createEmptyWhiteboardState(newMeta);
+      const now = new Date().toISOString();
+
+      const importedViewport = importData.viewport && typeof importData.viewport === 'object' ? importData.viewport : null;
+
+      const nextState = {
+        ...base,
+        meta: {
+          ...base.meta,
+          // Ensure updatedAt reflects the import moment.
+          updatedAt: now,
+        },
+        objects: importData.objects as any,
+        selectedObjectIds: [],
+        viewport: importedViewport ? (importedViewport as any) : base.viewport,
+        history: { pastEvents: [], futureEvents: [] },
+      };
+
+      await wbRepo.saveBoard(newMeta.id, nextState as any);
+
+      setBoards((prev) => [newMeta!, ...prev]);
+      setIsImportOpen(false);
+      setImportData(null);
+      navigate(`/board/${newMeta.id}`);
+    } catch (err) {
+      console.error('Failed to import board', err);
+      window.alert('Failed to import board. Please try again.');
+      if (newMeta) {
+        try {
+          await boardsRepo.deleteBoard(newMeta.id);
+        } catch {
+          // ignore
+        }
+      }
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const closeImportDialog = () => {
+    if (isImporting) return;
+    setIsImportOpen(false);
+    setImportData(null);
   };
 
   const handleCreateBoard = async () => {
@@ -189,9 +330,21 @@ export const BoardListPage: React.FC = () => {
     <section className="page page-board-list">
       <header className="page-header">
         <h1>Your Boards</h1>
-        <button type="button" onClick={openCreateDialog}>
-          + New board
-        </button>
+        <div className="page-header-actions">
+          <button type="button" onClick={handleImportClick}>
+            Import
+          </button>
+          <button type="button" onClick={openCreateDialog}>
+            + New board
+          </button>
+          <input
+            ref={importFileInputRef}
+            type="file"
+            accept="application/json"
+            style={{ display: 'none' }}
+            onChange={handleImportFileChange}
+          />
+        </div>
       </header>
 
       {isCreateOpen && (
@@ -248,6 +401,51 @@ export const BoardListPage: React.FC = () => {
               </button>
               <button type="button" onClick={handleCreateBoard} disabled={isCreating}>
                 {isCreating ? 'Creating…' : 'Create'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isImportOpen && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeImportDialog();
+          }}
+        >
+          <div className="modal" role="dialog" aria-modal="true" aria-label="Import board">
+            <div className="modal-header">
+              <h2>Import board</h2>
+            </div>
+
+            <div className="modal-body">
+              <label className="form-field">
+                <span className="form-label">Name</span>
+                <input
+                  ref={importNameRef}
+                  type="text"
+                  value={importName}
+                  onChange={(e) => setImportName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleConfirmImport();
+                  }}
+                  disabled={isImporting}
+                />
+              </label>
+
+              <div className="form-help">
+                Imported board type: <strong>{getBoardType(importType).label}</strong>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button type="button" onClick={closeImportDialog} disabled={isImporting}>
+                Cancel
+              </button>
+              <button type="button" onClick={handleConfirmImport} disabled={isImporting}>
+                {isImporting ? 'Importing…' : 'Import'}
               </button>
             </div>
           </div>

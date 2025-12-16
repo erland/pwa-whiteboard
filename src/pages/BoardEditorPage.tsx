@@ -75,12 +75,24 @@ export const BoardEditorPage: React.FC = () => {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      // Only handle Ctrl/Cmd shortcuts.
-      const isMod = e.metaKey || e.ctrlKey;
-      if (!isMod) return;
       if (shouldIgnoreShortcut(e.target)) return;
 
-      const key = e.key.toLowerCase();
+      const keyRaw = e.key;
+
+      // Delete selection with Delete/Backspace (when not typing in an input).
+      // Note: We intentionally keep this independent from Ctrl/Cmd.
+      if (keyRaw === 'Backspace' || keyRaw === 'Delete') {
+        if (!canCopy) return;
+        e.preventDefault();
+        handleDeleteSelection();
+        return;
+      }
+
+      // Ctrl/Cmd shortcuts.
+      const isMod = e.metaKey || e.ctrlKey;
+      if (!isMod) return;
+
+      const key = keyRaw.toLowerCase();
       if (key === 'c') {
         if (!canCopy) return;
         e.preventDefault();
@@ -95,7 +107,7 @@ export const BoardEditorPage: React.FC = () => {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [canCopy, canPaste, copySelectionToClipboard, pasteFromClipboard]);
+  }, [canCopy, canPaste, copySelectionToClipboard, pasteFromClipboard, handleDeleteSelection]);
 
   return (
     <section className="page page-board-editor">

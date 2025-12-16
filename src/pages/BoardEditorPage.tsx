@@ -36,6 +36,7 @@ export const BoardEditorPage: React.FC = () => {
     handleCreateObject,
     handleSelectionChange,
     handleUpdateObject,
+    handleTransientObjectPatch,
     handleDeleteSelection,
     handleViewportChange,
     zoomPercent,
@@ -182,6 +183,7 @@ export const BoardEditorPage: React.FC = () => {
                 onCreateObject={handleCreateObject}
                 onSelectionChange={handleSelectionChange}
                 onUpdateObject={handleUpdateObject}
+                onTransientObjectPatch={handleTransientObjectPatch}
                 onViewportChange={handleViewportChange}
                 onCanvasReady={setCanvasEl}
               />

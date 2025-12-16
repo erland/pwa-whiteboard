@@ -19,6 +19,8 @@ export interface WhiteboardCanvasProps {
   onCreateObject: (object: WhiteboardObject) => void;
   onSelectionChange: (selectedIds: ObjectId[]) => void;
   onUpdateObject: (objectId: ObjectId, patch: Partial<WhiteboardObject>) => void;
+  /** Live interaction patch (drag/resize) that should NOT create an undo step. */
+  onTransientObjectPatch: (objectId: ObjectId, patch: Partial<WhiteboardObject>) => void;
   onViewportChange: (patch: Partial<Viewport>) => void;
   onCanvasReady?: (canvas: HTMLCanvasElement | null) => void;
 }

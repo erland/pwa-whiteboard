@@ -14,6 +14,8 @@ import type {
   WhiteboardMeta,
   WhiteboardState,
   Viewport,
+  ObjectId,
+  WhiteboardObject,
 } from '../domain/types';
 import { getWhiteboardRepository } from '../infrastructure/localStorageWhiteboardRepository';
 import { getClipboardRepository } from '../infrastructure/localStorageClipboardRepository';
@@ -25,7 +27,8 @@ type WhiteboardAction =
   | { type: 'APPLY_EVENT'; event: BoardEvent }
   | { type: 'UNDO' }
   | { type: 'REDO' }
-  | { type: 'SET_VIEWPORT'; patch: Partial<Viewport> };
+  | { type: 'SET_VIEWPORT'; patch: Partial<Viewport> }
+  | { type: 'APPLY_TRANSIENT_OBJECT_PATCH'; objectId: ObjectId; patch: Partial<WhiteboardObject> };
 
 interface WhiteboardContextValue {
   state: WhiteboardState | null;
@@ -40,6 +43,9 @@ interface WhiteboardContextValue {
   undo: () => void;
   redo: () => void;
   setViewport: (patch: Partial<Viewport>) => void;
+
+  /** Applies a patch to an object for live interactions (drag/resize) WITHOUT creating an undo step. */
+  applyTransientObjectPatch: (objectId: ObjectId, patch: Partial<WhiteboardObject>) => void;
 
   /** Copies the current selection into a cross-board clipboard (persisted best-effort). */
   copySelectionToClipboard: () => void;
@@ -239,6 +245,33 @@ function reducer(state: WhiteboardState | null, action: WhiteboardAction): White
       };
     }
 
+
+    case 'APPLY_TRANSIENT_OBJECT_PATCH': {
+      if (!state) return state;
+
+      const target = state.objects.find((o) => o.id === action.objectId);
+      if (!target) return state;
+
+      const boardTypeDef = getBoardType(state.meta.boardType);
+      const locked = getLockedObjectProps(boardTypeDef, target.type);
+
+      let patch: Partial<WhiteboardObject> = action.patch ?? {};
+      if (locked && Object.keys(locked).length > 0) {
+        const nextPatch: any = {};
+        for (const [k, v] of Object.entries(patch)) {
+          if (hasOwn(locked, k)) continue;
+          nextPatch[k] = v;
+        }
+        if (Object.keys(nextPatch).length === 0) return state;
+        patch = nextPatch;
+      }
+
+      return {
+        ...state,
+        objects: state.objects.map((o) => (o.id === action.objectId ? { ...o, ...patch } : o)),
+      };
+    }
+
     case 'SET_VIEWPORT': {
       if (!state) return state;
       return {
@@ -276,17 +309,29 @@ export const WhiteboardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [clipboard]);
 
-  // Persist the board whenever the state changes
+  // Persist the board when history/viewport changes.
+  // IMPORTANT: transient drag/resize patches should not trigger persistence.
   useEffect(() => {
     if (!state) return;
     const repo = getWhiteboardRepository();
     repo.saveBoard(state.meta.id, state).catch((err) => {
       console.error('Failed to persist whiteboard state', err);
     });
-  }, [state]);
+  }, [
+    state?.meta.id,
+    state?.viewport?.offsetX,
+    state?.viewport?.offsetY,
+    state?.viewport?.zoom,
+    state?.history?.pastEvents?.length,
+    state?.history?.futureEvents?.length,
+  ]);
 
   const dispatchEvent = (event: BoardEvent) => {
     dispatch({ type: 'APPLY_EVENT', event });
+  };
+
+  const applyTransientObjectPatch = (objectId: ObjectId, patch: Partial<WhiteboardObject>) => {
+    dispatch({ type: 'APPLY_TRANSIENT_OBJECT_PATCH', objectId, patch });
   };
 
   const generateEventId = () => 'evt_' + Math.random().toString(16).slice(2) + '_' + Date.now().toString(16);
@@ -380,8 +425,8 @@ export const WhiteboardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       resetBoard,
       undo,
       redo,
-      setViewport
-      ,
+      setViewport,
+      applyTransientObjectPatch,
       copySelectionToClipboard,
       pasteFromClipboard,
       clearClipboard,

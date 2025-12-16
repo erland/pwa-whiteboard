@@ -32,13 +32,17 @@ type ResizeDragState = {
   startX: number; // world coords at pointer-down
   startY: number;
   originalBounds: Bounds;
+  originalObject: WhiteboardObject;
+  lastPatch?: Partial<WhiteboardObject> | null;
 };
 
 type MoveDragState = {
   kind: 'move';
   objectId: ObjectId;
-  lastX: number;
-  lastY: number;
+  startX: number; // world coords at pointer-down
+  startY: number;
+  originalObject: WhiteboardObject;
+  lastPatch?: Partial<WhiteboardObject> | null;
 };
 
 type PanDragState = {
@@ -54,12 +58,16 @@ type ConnectorEndpointDragState = {
   kind: 'connectorEndpoint';
   connectorId: ObjectId;
   endpoint: 'from' | 'to';
+  originalObject: WhiteboardObject;
+  lastPatch?: Partial<WhiteboardObject> | null;
 };
 
 type LineEndpointDragState = {
   kind: 'lineEndpoint';
   lineId: ObjectId;
   endpoint: 'start' | 'end';
+  originalObject: WhiteboardObject;
+  lastPatch?: Partial<WhiteboardObject> | null;
 };
 
 type DragState =
@@ -67,7 +75,42 @@ type DragState =
   | PanDragState
   | ResizeDragState
   | ConnectorEndpointDragState
-  | LineEndpointDragState;
+  | LineEndpointDragState
+function cloneObj<T>(obj: T): T {
+  // Whiteboard objects are plain JSON-serializable data.
+  try {
+    // @ts-ignore
+    if (typeof structuredClone === 'function') return structuredClone(obj);
+  } catch {
+    // ignore
+  }
+  return JSON.parse(JSON.stringify(obj)) as T;
+}
+
+function isDeepEqual(a: any, b: any): boolean {
+  if (a === b) return true;
+  const ta = typeof a;
+  const tb = typeof b;
+  if (ta !== tb) return false;
+  if (a && b && ta === 'object') {
+    try {
+      return JSON.stringify(a) === JSON.stringify(b);
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+function minimizePatch(original: any, patch: Record<string, any>): Record<string, any> | null {
+  const out: any = {};
+  for (const [k, v] of Object.entries(patch)) {
+    if (!isDeepEqual(original?.[k], v)) out[k] = v;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+;
 
 
 function getConnectorEndpointHit(
@@ -149,6 +192,8 @@ export type CanvasInteractionsParams = {
   onCreateObject: (object: WhiteboardObject) => void;
   onSelectionChange: (selectedIds: ObjectId[]) => void;
   onUpdateObject: (objectId: ObjectId, patch: Partial<WhiteboardObject>) => void;
+  /** Live interaction patch (drag/resize) that should NOT create an undo step. */
+  onTransientObjectPatch: (objectId: ObjectId, patch: Partial<WhiteboardObject>) => void;
   onViewportChange: (patch: Partial<Viewport>) => void;
   canvasWidth: number;
   canvasHeight: number;
@@ -173,6 +218,7 @@ export function useCanvasInteractions({
   onCreateObject,
   onSelectionChange,
   onUpdateObject,
+  onTransientObjectPatch,
   onViewportChange,
   canvasWidth,
   canvasHeight,
@@ -283,6 +329,8 @@ export function useCanvasInteractions({
                 width: box.width,
                 height: box.height,
               },
+              originalObject: cloneObj(selectedObj),
+              lastPatch: null,
             });
             setPointerCaptureSafe(evt);
             return;
@@ -304,6 +352,8 @@ export function useCanvasInteractions({
             kind: 'lineEndpoint',
             lineId: hitObj.id,
             endpoint,
+            originalObject: cloneObj(hitObj),
+            lastPatch: null,
           });
           setPointerCaptureSafe(evt);
           return;
@@ -313,8 +363,10 @@ export function useCanvasInteractions({
         setDrag({
           kind: 'move',
           objectId: hitObj.id,
-          lastX: pos.x,
-          lastY: pos.y,
+          startX: pos.x,
+          startY: pos.y,
+          originalObject: cloneObj(hitObj),
+          lastPatch: null,
         });
         setPointerCaptureSafe(evt);
         return;
@@ -331,6 +383,8 @@ export function useCanvasInteractions({
             kind: 'connectorEndpoint',
             connectorId: hitObj.id,
             endpoint,
+            originalObject: cloneObj(hitObj),
+            lastPatch: null,
           });
           setPointerCaptureSafe(evt);
           return;
@@ -345,8 +399,10 @@ export function useCanvasInteractions({
       setDrag({
         kind: 'move',
         objectId: hitObj.id,
-        lastX: pos.x,
-        lastY: pos.y,
+        startX: pos.x,
+        startY: pos.y,
+        originalObject: cloneObj(hitObj),
+        lastPatch: null,
       });
     } else {
       onSelectionChange([]);
@@ -381,25 +437,19 @@ export function useCanvasInteractions({
       const line = objects.find((o) => o.id === drag.lineId);
       if (!line || line.type !== 'line') return;
 
-      if (drag.endpoint === 'start') {
-        onUpdateObject(line.id, { x: pos.x, y: pos.y });
-      } else {
-        onUpdateObject(line.id, { x2: pos.x, y2: pos.y });
-      }
+      const patch =
+        drag.endpoint === 'start'
+          ? ({ x: pos.x, y: pos.y } as Partial<WhiteboardObject>)
+          : ({ x2: pos.x, y2: pos.y } as Partial<WhiteboardObject>);
+
+      onTransientObjectPatch(line.id, patch);
+      setDrag({ ...drag, lastPatch: patch });
       return;
     }
 
     if (drag.kind === 'connectorEndpoint') {
       const connector = objects.find((o) => o.id === drag.connectorId);
       if (!connector || connector.type !== 'connector') return;
-
-      // Resolve the *other* endpoint so the attachment can "face" it.
-      const endpoints = resolveConnectorEndpoints(objects, connector);
-      const otherPoint = endpoints
-        ? drag.endpoint === 'from'
-          ? endpoints.p2
-          : endpoints.p1
-        : pos;
 
       // Prefer re-attaching to the connectable object currently under pointer.
       const hoverObj = hitTestConnectable(objects, pos.x, pos.y);
@@ -415,37 +465,28 @@ export function useCanvasInteractions({
       // Allow continuous anchor motion (edgeT/perimeterAngle) while still supporting ports.
       const newAttachment: Attachment = pickAttachmentForObject(targetObj, pos, viewport);
 
-      if (drag.endpoint === 'from') {
-        onUpdateObject(connector.id, {
-          from: { objectId: targetObj.id, attachment: newAttachment },
-        });
-      } else {
-        onUpdateObject(connector.id, {
-          to: { objectId: targetObj.id, attachment: newAttachment },
-        });
-      }
+      const patch =
+        drag.endpoint === 'from'
+          ? ({ from: { objectId: targetObj.id, attachment: newAttachment } } as Partial<WhiteboardObject>)
+          : ({ to: { objectId: targetObj.id, attachment: newAttachment } } as Partial<WhiteboardObject>);
 
+      onTransientObjectPatch(connector.id, patch);
+      setDrag({ ...drag, lastPatch: patch });
       return;
     }
 
     if (drag.kind === 'move') {
-      const dx = pos.x - drag.lastX;
-      const dy = pos.y - drag.lastY;
+      const dx = pos.x - drag.startX;
+      const dy = pos.y - drag.startY;
       if (dx === 0 && dy === 0) return;
 
-      const obj = objects.find((o) => o.id === drag.objectId);
-      if (!obj) return;
+      const patch = translateObject(drag.originalObject, dx, dy);
 
-      const patch = translateObject(obj, dx, dy);
+      // If a shape opts out of moving (e.g., semantic connectors), don't emit patches.
+      if (!patch) return;
 
-      // If a shape opts out of moving (e.g., semantic connectors), still advance the drag cursor.
-      if (!patch) {
-        setDrag({ ...drag, lastX: pos.x, lastY: pos.y });
-        return;
-      }
-
-      onUpdateObject(obj.id, patch);
-      setDrag({ ...drag, lastX: pos.x, lastY: pos.y });
+      onTransientObjectPatch(drag.objectId, patch);
+      setDrag({ ...drag, lastPatch: patch });
       return;
     }
 
@@ -466,17 +507,35 @@ export function useCanvasInteractions({
       const dy = pos.y - drag.startY;
       const newBounds = resizeBounds(drag.originalBounds, drag.handle, dx, dy);
 
-      const obj = objects.find((o) => o.id === drag.objectId);
-      if (!obj) return;
-
-      const patch = resizeObject(obj, newBounds);
+      const patch = resizeObject(drag.originalObject, newBounds);
       if (patch) {
-        onUpdateObject(drag.objectId, patch);
+        onTransientObjectPatch(drag.objectId, patch);
+        setDrag({ ...drag, lastPatch: patch });
       }
     }
   };
 
   const finishSelectionInteraction = (evt: React.PointerEvent<HTMLCanvasElement>) => {
+    if (drag && activeTool === 'select') {
+      if (drag.kind === 'move') {
+        const patch = drag.lastPatch ?? null;
+        const minimized = patch ? minimizePatch(drag.originalObject, patch as any) : null;
+        if (minimized) onUpdateObject(drag.objectId, minimized as any);
+      } else if (drag.kind === 'resize') {
+        const patch = drag.lastPatch ?? null;
+        const minimized = patch ? minimizePatch(drag.originalObject, patch as any) : null;
+        if (minimized) onUpdateObject(drag.objectId, minimized as any);
+      } else if (drag.kind === 'lineEndpoint') {
+        const patch = drag.lastPatch ?? null;
+        const minimized = patch ? minimizePatch(drag.originalObject, patch as any) : null;
+        if (minimized) onUpdateObject(drag.lineId, minimized as any);
+      } else if (drag.kind === 'connectorEndpoint') {
+        const patch = drag.lastPatch ?? null;
+        const minimized = patch ? minimizePatch(drag.originalObject, patch as any) : null;
+        if (minimized) onUpdateObject(drag.connectorId, minimized as any);
+      }
+    }
+
     setDrag(null);
     releasePointerCaptureSafe(evt);
   };

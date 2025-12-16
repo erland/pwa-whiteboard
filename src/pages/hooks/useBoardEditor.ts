@@ -30,6 +30,7 @@ export function useBoardEditor(id: string | undefined) {
     undo,
     redo,
     setViewport,
+    applyTransientObjectPatch,
     copySelectionToClipboard,
     pasteFromClipboard,
     clearClipboard,
@@ -236,6 +237,12 @@ export function useBoardEditor(id: string | undefined) {
     dispatchEvent(event);
   };
 
+  const handleTransientObjectPatch = (objectId: string, patch: Partial<WhiteboardObject>) => {
+    // Apply live interaction patches without creating undo/redo history.
+    applyTransientObjectPatch(objectId as any, patch);
+  };
+
+
   const handleUpdateObject = (objectId: string, patch: Partial<WhiteboardObject>) => {
     if (!state) return;
     const now = new Date().toISOString();
@@ -294,6 +301,7 @@ export function useBoardEditor(id: string | undefined) {
   } = useBoardViewport({
     viewport: state?.viewport,
     setViewport,
+    applyTransientObjectPatch,
     objects: state?.objects,
     canvasWidth: logicalCanvasWidth,
     canvasHeight: logicalCanvasHeight
@@ -386,6 +394,7 @@ export function useBoardEditor(id: string | undefined) {
     handleCreateObject,
     handleSelectionChange,
     handleUpdateObject,
+    handleTransientObjectPatch,
     handleDeleteSelection,
     handleStrokeWidthChange,
     updateStrokeWidth,

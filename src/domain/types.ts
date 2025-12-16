@@ -170,6 +170,17 @@ export type WhiteboardClipboard = WhiteboardClipboardV1;
 export interface HistoryState {
   pastEvents: BoardEvent[];
   futureEvents: BoardEvent[];
+  /**
+   * Baseline snapshot for undo/redo rebuild.
+   *
+   * Boards are persisted as a compact snapshot without full history (quota reasons).
+   * After a reload, the current objects are not reconstructable by replaying events alone.
+   * This baseline lets undo/redo rebuild from a stable loaded snapshot + subsequent events.
+   */
+  baseline?: {
+    objects: WhiteboardObject[];
+    selectedObjectIds: ObjectId[];
+  };
 }
 
 /**

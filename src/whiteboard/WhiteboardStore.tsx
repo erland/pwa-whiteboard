@@ -66,6 +66,12 @@ function ensureHistory(state: WhiteboardState) {
       futureEvents: []
     };
   }
+  // Boards loaded from snapshot persistence won't have any history that can recreate
+  // the existing objects. Capture a baseline snapshot once so UNDO/REDO rebuild
+  // can start from the loaded board state rather than an empty board.
+  if (!state.history.baseline) {
+    (state.history as any).baseline = cloneBaseline(state);
+  }
   return state.history;
 }
 
@@ -73,8 +79,20 @@ function ensureHistory(state: WhiteboardState) {
  * Rebuilds a whiteboard state from metadata and a list of past events.
  * Viewport will be whatever createEmptyWhiteboardState uses by default.
  */
-function rebuildStateFromHistory(meta: WhiteboardMeta, pastEvents: BoardEvent[]): WhiteboardState {
+function rebuildStateFromHistory(
+  meta: WhiteboardMeta,
+  pastEvents: BoardEvent[],
+  baseline?: { objects: WhiteboardObject[]; selectedObjectIds: ObjectId[] }
+): WhiteboardState {
   let state = createEmptyWhiteboardState(meta);
+
+  if (baseline) {
+    state = {
+      ...state,
+      objects: cloneJson(baseline.objects),
+      selectedObjectIds: [...baseline.selectedObjectIds],
+    };
+  }
   const boardTypeDef = getBoardType(meta.boardType);
   for (const ev of pastEvents) {
     const enforced = enforcePolicyOnEvent(boardTypeDef, state, ev);
@@ -94,8 +112,34 @@ function rebuildStateFromHistory(meta: WhiteboardMeta, pastEvents: BoardEvent[])
     },
     history: {
       pastEvents: [...pastEvents],
-      futureEvents: []
+      futureEvents: [],
+      baseline: baseline ? cloneBaselineFrom(baseline) : undefined,
     }
+  };
+}
+
+function cloneJson<T>(obj: T): T {
+  // Whiteboard state is JSON-serializable; structuredClone may not exist in all environments.
+  try {
+    // @ts-ignore
+    if (typeof structuredClone === 'function') return structuredClone(obj);
+  } catch {
+    // ignore
+  }
+  return JSON.parse(JSON.stringify(obj)) as T;
+}
+
+function cloneBaselineFrom(b: { objects: WhiteboardObject[]; selectedObjectIds: ObjectId[] }) {
+  return {
+    objects: cloneJson(b.objects),
+    selectedObjectIds: [...b.selectedObjectIds],
+  };
+}
+
+function cloneBaseline(state: WhiteboardState) {
+  return {
+    objects: cloneJson(state.objects),
+    selectedObjectIds: [...state.selectedObjectIds],
   };
 }
 
@@ -182,7 +226,8 @@ function reducer(state: WhiteboardState | null, action: WhiteboardAction): White
         ...applied,
         history: {
           pastEvents: [...history.pastEvents, enforcedEvent],
-          futureEvents: []
+          futureEvents: [],
+          baseline: history.baseline,
         }
       };
     }
@@ -195,12 +240,15 @@ function reducer(state: WhiteboardState | null, action: WhiteboardAction): White
       const newFuture = [history.pastEvents[history.pastEvents.length - 1], ...history.futureEvents];
       const remainingPast = history.pastEvents.slice(0, -1);
 
-      const rebuilt = rebuildStateFromHistory(state.meta, remainingPast);
+      const rebuilt = rebuildStateFromHistory(state.meta, remainingPast, history.baseline);
+      // Viewport changes are not tracked in history; keep current viewport stable across undo.
       return {
         ...rebuilt,
+        viewport: state.viewport,
         history: {
           pastEvents: remainingPast,
-          futureEvents: newFuture
+          futureEvents: newFuture,
+          baseline: history.baseline,
         }
       };
     }
@@ -219,7 +267,8 @@ function reducer(state: WhiteboardState | null, action: WhiteboardAction): White
           ...state,
           history: {
             pastEvents: history.pastEvents,
-            futureEvents: restFuture
+            futureEvents: restFuture,
+            baseline: history.baseline,
           }
         };
       }
@@ -231,7 +280,8 @@ function reducer(state: WhiteboardState | null, action: WhiteboardAction): White
           ...applied,
           history: {
             pastEvents: history.pastEvents,
-            futureEvents: restFuture
+            futureEvents: restFuture,
+            baseline: history.baseline,
           }
         };
       }
@@ -240,7 +290,8 @@ function reducer(state: WhiteboardState | null, action: WhiteboardAction): White
         ...applied,
         history: {
           pastEvents: [...history.pastEvents, enforcedNext],
-          futureEvents: restFuture
+          futureEvents: restFuture,
+          baseline: history.baseline,
         }
       };
     }

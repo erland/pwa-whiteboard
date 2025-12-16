@@ -7,6 +7,9 @@ import { EDITABLE_PROP_DEFS, type EditablePropKey } from '../../../whiteboard/to
 type Props = {
   selection: SelectionDetails;
   onDeleteSelection: () => void;
+  onCopySelection: () => void;
+  onPasteFromClipboard: () => void;
+  canPaste: boolean;
   updateSelectionProp: <K extends keyof WhiteboardObject>(
     key: K,
     value: WhiteboardObject[K]
@@ -119,6 +122,9 @@ function renderEditablePropControl(
 export const SelectionToolPanel: React.FC<Props> = ({
   selection,
   onDeleteSelection,
+  onCopySelection,
+  onPasteFromClipboard,
+  canPaste,
   updateSelectionProp
 }) => {
   const hasSelection = selection.selectedCount > 0;
@@ -151,6 +157,29 @@ export const SelectionToolPanel: React.FC<Props> = ({
           style={{ width: '100%' }}
         >
           🗑 Delete
+        </button>
+      </div>
+
+      <div className="panel-row" style={{ display: 'flex', gap: 8 }}>
+        <button
+          type="button"
+          className="tool-button"
+          onClick={onCopySelection}
+          disabled={!hasSelection}
+          style={{ flex: 1 }}
+          title="Copy (Ctrl/Cmd+C)"
+        >
+          ⧉ Copy
+        </button>
+        <button
+          type="button"
+          className="tool-button"
+          onClick={onPasteFromClipboard}
+          disabled={!canPaste}
+          style={{ flex: 1 }}
+          title="Paste (Ctrl/Cmd+V)"
+        >
+          ⎘ Paste
         </button>
       </div>
 

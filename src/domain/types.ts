@@ -125,6 +125,48 @@ export interface Viewport {
   zoom: number;
 }
 
+/**
+ * Minimal bounds representation used for clipboard payloads.
+ *
+ * Kept in the domain layer so clipboard data can be stored/serialized
+ * without importing the whiteboard geometry layer.
+ */
+export interface ClipboardBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Clipboard payload for copy/paste operations.
+ *
+ * v1 goals:
+ * - allow copying a selection (objects + selection bounds)
+ * - allow pasting in the same board with an offset (pasteCount)
+ * - allow pasting into another board centered in the canvas
+ * - remap connector endpoint references when possible
+ */
+export interface WhiteboardClipboardV1 {
+  version: 1;
+  sourceBoardId: WhiteboardId;
+  copiedAt: string; // ISO
+
+  /** Objects copied at the time of copy. IDs are original IDs; paste remaps them. */
+  objects: WhiteboardObject[];
+
+  /** Bounding box of the copied selection in world coordinates. */
+  bounds: ClipboardBounds;
+
+  /**
+   * Number of times this clipboard has been pasted into the source board.
+   * Used to apply a progressive offset so repeated pastes don't stack.
+   */
+  pasteCount?: number;
+}
+
+export type WhiteboardClipboard = WhiteboardClipboardV1;
+
 export interface HistoryState {
   pastEvents: BoardEvent[];
   futureEvents: BoardEvent[];

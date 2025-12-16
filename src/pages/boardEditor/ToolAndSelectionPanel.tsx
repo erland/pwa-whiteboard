@@ -21,6 +21,9 @@ type ToolAndSelectionPanelProps = {
   ) => void;
   selectedObjects: WhiteboardObject[];
   onDeleteSelection: () => void;
+  onCopySelection: () => void;
+  onPasteFromClipboard: () => void;
+  canPaste: boolean;
   updateSelectionProp: <K extends keyof WhiteboardObject>(
     key: K,
     value: WhiteboardObject[K]
@@ -38,6 +41,9 @@ export const ToolAndSelectionPanel: React.FC<ToolAndSelectionPanelProps> = ({
   onUpdateToolProp,
   selectedObjects,
   onDeleteSelection,
+  onCopySelection,
+  onPasteFromClipboard,
+  canPaste,
   updateSelectionProp
 }) => {
   const selection = useSelectionDetails(selectedObjects, boardTypeDef);
@@ -63,6 +69,9 @@ export const ToolAndSelectionPanel: React.FC<ToolAndSelectionPanelProps> = ({
         <SelectionToolPanel
           selection={selection}
           onDeleteSelection={onDeleteSelection}
+          onCopySelection={onCopySelection}
+          onPasteFromClipboard={onPasteFromClipboard}
+          canPaste={canPaste}
           updateSelectionProp={updateSelectionProp}
         />
       )}

@@ -22,7 +22,18 @@ import { useBoardSelection } from './useBoardSelection';
 import { useBoardImportExport } from './useBoardImportExport';
 
 export function useBoardEditor(id: string | undefined) {
-  const { state, resetBoard, dispatchEvent, undo, redo, setViewport } = useWhiteboard();
+  const {
+    state,
+    clipboard,
+    resetBoard,
+    dispatchEvent,
+    undo,
+    redo,
+    setViewport,
+    copySelectionToClipboard,
+    pasteFromClipboard,
+    clearClipboard,
+  } = useWhiteboard();
   const boardTypeDef = getBoardType(state?.meta.boardType ?? 'advanced');
   const toolbox = boardTypeDef.toolbox;
   const toolboxKey = useMemo(() => toolbox.map((t) => t.id).join('|'), [toolbox]);
@@ -259,6 +270,22 @@ export function useBoardEditor(id: string | undefined) {
   const logicalCanvasWidth = canvasEl ? canvasEl.width / dpr : undefined;
   const logicalCanvasHeight = canvasEl ? canvasEl.height / dpr : undefined;
 
+  // ---- Clipboard actions (copy/paste) ----
+  const handleCopySelectionToClipboard = () => {
+    copySelectionToClipboard();
+  };
+
+  const handlePasteFromClipboard = () => {
+    pasteFromClipboard({
+      canvasWidth: logicalCanvasWidth,
+      canvasHeight: logicalCanvasHeight,
+    });
+  };
+
+  const handleClearClipboard = () => {
+    clearClipboard();
+  };
+
   const {
     zoomPercent,
     handleViewportChange,
@@ -336,6 +363,7 @@ export function useBoardEditor(id: string | undefined) {
 
   return {
     state,
+    clipboard,
     boardTypeDef,
     activeTool,
     toolbox,
@@ -374,6 +402,12 @@ export function useBoardEditor(id: string | undefined) {
     canUndo,
     canRedo,
     undo,
-    redo
+    redo,
+
+    // Copy/paste actions (wired to clipboard storage; UI comes in the next step)
+    hasClipboard: !!clipboard,
+    copySelectionToClipboard: handleCopySelectionToClipboard,
+    pasteFromClipboard: handlePasteFromClipboard,
+    clearClipboard: handleClearClipboard,
   };
 }

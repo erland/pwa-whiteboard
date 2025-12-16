@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { WhiteboardCanvas } from '../whiteboard/WhiteboardCanvas';
 
@@ -50,16 +50,62 @@ export const BoardEditorPage: React.FC = () => {
     canUndo,
     canRedo,
     undo,
-    redo
+    redo,
+
+    // Copy/paste actions
+    hasClipboard,
+    copySelectionToClipboard,
+    pasteFromClipboard,
   } = useBoardEditor(id);
 
   // Derive board name from state (adjust if your meta shape differs)
   const boardName = state?.meta?.name ?? 'Untitled board';
 
+  const canCopy = (state?.selectedObjectIds?.length ?? 0) > 0;
+  const canPaste = !!hasClipboard;
+
+  const shouldIgnoreShortcut = (target: EventTarget | null) => {
+    const el = target as HTMLElement | null;
+    if (!el) return false;
+    if ((el as any).isContentEditable) return true;
+    const tag = el.tagName?.toLowerCase();
+    return tag === 'input' || tag === 'textarea' || tag === 'select';
+  };
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      // Only handle Ctrl/Cmd shortcuts.
+      const isMod = e.metaKey || e.ctrlKey;
+      if (!isMod) return;
+      if (shouldIgnoreShortcut(e.target)) return;
+
+      const key = e.key.toLowerCase();
+      if (key === 'c') {
+        if (!canCopy) return;
+        e.preventDefault();
+        copySelectionToClipboard();
+      }
+      if (key === 'v') {
+        if (!canPaste) return;
+        e.preventDefault();
+        pasteFromClipboard();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [canCopy, canPaste, copySelectionToClipboard, pasteFromClipboard]);
+
   return (
     <section className="page page-board-editor">
       {/* Pass boardName instead of boardId */}
-      <BoardEditorHeader boardName={boardName} />
+      <BoardEditorHeader
+        boardName={boardName}
+        canCopy={canCopy}
+        canPaste={canPaste}
+        onCopy={copySelectionToClipboard}
+        onPaste={pasteFromClipboard}
+      />
 
       <div className="board-editor-layout">
         <aside className="board-editor-sidebar">
@@ -82,6 +128,9 @@ export const BoardEditorPage: React.FC = () => {
             onUpdateToolProp={updateActiveToolProp}
             selectedObjects={selectedObjects}
             onDeleteSelection={handleDeleteSelection}
+            onCopySelection={copySelectionToClipboard}
+            onPasteFromClipboard={pasteFromClipboard}
+            canPaste={canPaste}
             updateSelectionProp={updateSelectionProp}
           />
 

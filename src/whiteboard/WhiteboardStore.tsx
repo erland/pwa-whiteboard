@@ -4,12 +4,21 @@ import React, {
   useContext,
   useMemo,
   useReducer,
-  useEffect
+  useEffect,
+  useState,
 } from 'react';
 import { applyEvent, createEmptyWhiteboardState } from '../domain/whiteboardState';
-import type { BoardEvent, WhiteboardMeta, WhiteboardState, Viewport } from '../domain/types';
+import type {
+  BoardEvent,
+  WhiteboardClipboardV1,
+  WhiteboardMeta,
+  WhiteboardState,
+  Viewport,
+} from '../domain/types';
 import { getWhiteboardRepository } from '../infrastructure/localStorageWhiteboardRepository';
+import { getClipboardRepository } from '../infrastructure/localStorageClipboardRepository';
 import { getBoardType, getLockedObjectProps } from './boardTypes';
+import { createClipboardFromSelection, pasteClipboard } from './clipboard';
 
 type WhiteboardAction =
   | { type: 'RESET_BOARD'; state: WhiteboardState }
@@ -20,6 +29,7 @@ type WhiteboardAction =
 
 interface WhiteboardContextValue {
   state: WhiteboardState | null;
+  clipboard: WhiteboardClipboardV1 | null;
   dispatchEvent: (event: BoardEvent) => void;
   /**
    * Can be called with:
@@ -30,6 +40,12 @@ interface WhiteboardContextValue {
   undo: () => void;
   redo: () => void;
   setViewport: (patch: Partial<Viewport>) => void;
+
+  /** Copies the current selection into a cross-board clipboard (persisted best-effort). */
+  copySelectionToClipboard: () => void;
+  /** Pastes from clipboard into the current board (requires canvas size for cross-board centering). */
+  pasteFromClipboard: (args?: { canvasWidth?: number; canvasHeight?: number }) => void;
+  clearClipboard: () => void;
 }
 
 const WhiteboardContext = createContext<WhiteboardContextValue | undefined>(undefined);
@@ -242,6 +258,24 @@ function reducer(state: WhiteboardState | null, action: WhiteboardAction): White
 export const WhiteboardProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(reducer, null as WhiteboardState | null);
 
+  // Cross-board clipboard: stored separately from per-board state.
+  const [clipboard, setClipboard] = useState<WhiteboardClipboardV1 | null>(() => {
+    try {
+      return getClipboardRepository().loadClipboard();
+    } catch {
+      return null;
+    }
+  });
+
+  // Keep clipboard in sync with localStorage (best-effort).
+  useEffect(() => {
+    try {
+      getClipboardRepository().saveClipboard(clipboard);
+    } catch {
+      // ignore
+    }
+  }, [clipboard]);
+
   // Persist the board whenever the state changes
   useEffect(() => {
     if (!state) return;
@@ -253,6 +287,75 @@ export const WhiteboardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const dispatchEvent = (event: BoardEvent) => {
     dispatch({ type: 'APPLY_EVENT', event });
+  };
+
+  const generateEventId = () => 'evt_' + Math.random().toString(16).slice(2) + '_' + Date.now().toString(16);
+
+  const copySelectionToClipboard = () => {
+    if (!state) return;
+    const next = createClipboardFromSelection({
+      boardId: state.meta.id,
+      objects: state.objects,
+      selectedIds: state.selectedObjectIds,
+    });
+    if (!next) return;
+    // Reset pasteCount so subsequent pastes start at one offset step.
+    setClipboard({ ...next, pasteCount: 0 });
+  };
+
+  const pasteFromClipboard = (args?: { canvasWidth?: number; canvasHeight?: number }) => {
+    if (!state) return;
+    if (!clipboard) return;
+
+    const canvasWidth = args?.canvasWidth;
+    const canvasHeight = args?.canvasHeight;
+
+    const res = pasteClipboard({
+      clipboard,
+      targetBoardId: state.meta.id,
+      viewport: state.viewport,
+      canvasSize:
+        typeof canvasWidth === 'number' && typeof canvasHeight === 'number'
+          ? { width: canvasWidth, height: canvasHeight }
+          : undefined,
+      existingIds: state.objects.map((o) => o.id),
+    });
+
+    const now = new Date().toISOString();
+
+    // Create all new objects.
+    for (const obj of res.objects) {
+      const ev: BoardEvent = {
+        id: generateEventId(),
+        boardId: state.meta.id,
+        type: 'objectCreated',
+        timestamp: now,
+        payload: { object: obj },
+      } as BoardEvent;
+      dispatchEvent(ev);
+    }
+
+    // Select the pasted objects.
+    const selEv: BoardEvent = {
+      id: generateEventId(),
+      boardId: state.meta.id,
+      type: 'selectionChanged',
+      timestamp: now,
+      payload: { selectedIds: res.selectedIds },
+    } as BoardEvent;
+    dispatchEvent(selEv);
+
+    // Persist updated pasteCount (for progressive offset on same-board paste).
+    setClipboard(res.nextClipboard);
+  };
+
+  const clearClipboard = () => {
+    setClipboard(null);
+    try {
+      getClipboardRepository().clearClipboard();
+    } catch {
+      // ignore
+    }
   };
 
   const resetBoard = (metaOrState: WhiteboardMeta | WhiteboardState) => {
@@ -272,13 +375,18 @@ export const WhiteboardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const value: WhiteboardContextValue = useMemo(
     () => ({
       state,
+      clipboard,
       dispatchEvent,
       resetBoard,
       undo,
       redo,
       setViewport
+      ,
+      copySelectionToClipboard,
+      pasteFromClipboard,
+      clearClipboard,
     }),
-    [state]
+    [state, clipboard]
   );
 
   return <WhiteboardContext.Provider value={value}>{children}</WhiteboardContext.Provider>;

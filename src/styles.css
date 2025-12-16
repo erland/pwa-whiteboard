@@ -478,6 +478,20 @@ a:hover {
   transform: translateY(1px) scale(0.99);
 }
 
+.tool-button:disabled,
+.tool-button[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+  transform: none;
+}
+
+.tool-button:disabled:active,
+.tool-button[aria-disabled="true"]:active {
+  transform: none;
+}
+
+
 
 .tool-button:hover {
   border-color: var(--color-accent);

@@ -557,6 +557,30 @@ a:hover {
     flex-wrap: wrap;
   }
 
+  /* Board editor header: keep title + Copy/Paste on one row on narrow screens */
+  .page-header.board-editor-header {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .page-header.board-editor-header .board-header-main {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .page-header.board-editor-header .board-header-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .page-header.board-editor-header .page-header-actions {
+    width: auto;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+    gap: 0.35rem;
+  }
+
   .board-editor-layout {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
@@ -588,6 +612,24 @@ a:hover {
   .board-editor-header .board-header-main {
     flex-wrap: wrap;
     gap: 0.35rem;
+  }
+
+  /* Board editor header: do not wrap title + buttons; use truncation instead */
+  .page-header.board-editor-header {
+    flex-wrap: nowrap;
+  }
+
+  .board-editor-header .board-header-main {
+    flex-wrap: nowrap;
+  }
+
+  .page-header.board-editor-header .page-header-actions {
+    flex-wrap: nowrap;
+  }
+
+  .page-header.board-editor-header .tool-button {
+    padding: 0.25rem 0.6rem;
+    font-size: 0.8rem;
   }
 
   .board-header-title {

@@ -102,8 +102,10 @@ export const BoardEditorPage: React.FC = () => {
       {/* Pass boardName instead of boardId */}
       <BoardEditorHeader
         boardName={boardName}
+        canDelete={canCopy}
         canCopy={canCopy}
         canPaste={canPaste}
+        onDelete={handleDeleteSelection}
         onCopy={copySelectionToClipboard}
         onPaste={pasteFromClipboard}
       />
@@ -128,10 +130,6 @@ export const BoardEditorPage: React.FC = () => {
             onStrokeWidthChange={updateStrokeWidth}
             onUpdateToolProp={updateActiveToolProp}
             selectedObjects={selectedObjects}
-            onDeleteSelection={handleDeleteSelection}
-            onCopySelection={copySelectionToClipboard}
-            onPasteFromClipboard={pasteFromClipboard}
-            canPaste={canPaste}
             updateSelectionProp={updateSelectionProp}
           />
 

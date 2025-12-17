@@ -6,76 +6,24 @@ import type {
   Viewport,
   ObjectId,
   Point,
-  Attachment,
 } from '../domain/types';
 import {
   getBoundingBox,
-  hitTest, hitTestConnectable,
+  hitTest,
   hitTestResizeHandleCanvas,
-  resizeBounds,
   Bounds,
-  ResizeHandleId,
   worldToCanvas,
   canvasToWorld,
-  isConnectable,
   resolveConnectorEndpoints,
 } from './geometry';
 import type { DraftShape } from './drawing';
 import type { DrawingTool } from './whiteboardTypes';
-import { toolPointerDown, toolPointerMove, toolPointerUp, translateObject, canResizeObject, resizeObject } from './tools/shapeRegistry';
-import { pickAttachmentForObject } from './tools/connector/interactions';
+import { toolPointerDown, toolPointerMove, toolPointerUp, canResizeObject } from './tools/shapeRegistry';
 
-type ResizeDragState = {
-  kind: 'resize';
-  objectId: ObjectId;
-  handle: ResizeHandleId;
-  startX: number; // world coords at pointer-down
-  startY: number;
-  originalBounds: Bounds;
-  originalObject: WhiteboardObject;
-  lastPatch?: Partial<WhiteboardObject> | null;
-};
+import type { DragState } from './interactions/drag/types';
+import { handleDragMove, getCommitFromDrag } from './interactions/drag/dispatch';
 
-type MoveDragState = {
-  kind: 'move';
-  objectId: ObjectId;
-  startX: number; // world coords at pointer-down
-  startY: number;
-  originalObject: WhiteboardObject;
-  lastPatch?: Partial<WhiteboardObject> | null;
-};
-
-type PanDragState = {
-  kind: 'pan';
-  startCanvasX: number;
-  startCanvasY: number;
-  startOffsetX: number;
-  startOffsetY: number;
-  zoomAtStart: number;
-};
-
-type ConnectorEndpointDragState = {
-  kind: 'connectorEndpoint';
-  connectorId: ObjectId;
-  endpoint: 'from' | 'to';
-  originalObject: WhiteboardObject;
-  lastPatch?: Partial<WhiteboardObject> | null;
-};
-
-type LineEndpointDragState = {
-  kind: 'lineEndpoint';
-  lineId: ObjectId;
-  endpoint: 'start' | 'end';
-  originalObject: WhiteboardObject;
-  lastPatch?: Partial<WhiteboardObject> | null;
-};
-
-type DragState =
-  | MoveDragState
-  | PanDragState
-  | ResizeDragState
-  | ConnectorEndpointDragState
-  | LineEndpointDragState
+// DragState definitions moved to src/whiteboard/interactions/drag/types.ts
 function cloneObj<T>(obj: T): T {
   // Whiteboard objects are plain JSON-serializable data.
   try {
@@ -109,8 +57,6 @@ function minimizePatch(original: any, patch: Record<string, any>): Record<string
   }
   return Object.keys(out).length ? out : null;
 }
-
-;
 
 
 function getConnectorEndpointHit(
@@ -350,7 +296,7 @@ export function useCanvasInteractions({
         if (endpoint) {
           setDrag({
             kind: 'lineEndpoint',
-            lineId: hitObj.id,
+            objectId: hitObj.id,
             endpoint,
             originalObject: cloneObj(hitObj),
             lastPatch: null,
@@ -381,7 +327,7 @@ export function useCanvasInteractions({
         if (endpoint) {
           setDrag({
             kind: 'connectorEndpoint',
-            connectorId: hitObj.id,
+            objectId: hitObj.id,
             endpoint,
             originalObject: cloneObj(hitObj),
             lastPatch: null,
@@ -433,107 +379,24 @@ export function useCanvasInteractions({
 
     const { canvasX, canvasY } = getCanvasXY(evt);
 
-    if (drag.kind === 'lineEndpoint') {
-      const line = objects.find((o) => o.id === drag.lineId);
-      if (!line || line.type !== 'line') return;
+    const next = handleDragMove(drag, {
+      objects,
+      viewport,
+      pos,
+      canvasX,
+      canvasY,
+      onTransientObjectPatch,
+      onViewportChange,
+    });
 
-      const patch =
-        drag.endpoint === 'start'
-          ? ({ x: pos.x, y: pos.y } as Partial<WhiteboardObject>)
-          : ({ x2: pos.x, y2: pos.y } as Partial<WhiteboardObject>);
-
-      onTransientObjectPatch(line.id, patch);
-      setDrag({ ...drag, lastPatch: patch });
-      return;
-    }
-
-    if (drag.kind === 'connectorEndpoint') {
-      const connector = objects.find((o) => o.id === drag.connectorId);
-      if (!connector || connector.type !== 'connector') return;
-
-      // Prefer re-attaching to the connectable object currently under pointer.
-      const hoverObj = hitTestConnectable(objects, pos.x, pos.y);
-
-      // Otherwise, move along the currently attached object (if still present).
-      const attachedId =
-        drag.endpoint === 'from' ? connector.from?.objectId : connector.to?.objectId;
-      const attachedObj = attachedId ? objects.find((o) => o.id === attachedId) : undefined;
-
-      const targetObj = hoverObj ?? (attachedObj && isConnectable(attachedObj) ? attachedObj : null);
-      if (!targetObj) return;
-
-      // Allow continuous anchor motion (edgeT/perimeterAngle) while still supporting ports.
-      const newAttachment: Attachment = pickAttachmentForObject(targetObj, pos, viewport);
-
-      const patch =
-        drag.endpoint === 'from'
-          ? ({ from: { objectId: targetObj.id, attachment: newAttachment } } as Partial<WhiteboardObject>)
-          : ({ to: { objectId: targetObj.id, attachment: newAttachment } } as Partial<WhiteboardObject>);
-
-      onTransientObjectPatch(connector.id, patch);
-      setDrag({ ...drag, lastPatch: patch });
-      return;
-    }
-
-    if (drag.kind === 'move') {
-      const dx = pos.x - drag.startX;
-      const dy = pos.y - drag.startY;
-      if (dx === 0 && dy === 0) return;
-
-      const patch = translateObject(drag.originalObject, dx, dy);
-
-      // If a shape opts out of moving (e.g., semantic connectors), don't emit patches.
-      if (!patch) return;
-
-      onTransientObjectPatch(drag.objectId, patch);
-      setDrag({ ...drag, lastPatch: patch });
-      return;
-    }
-
-    if (drag.kind === 'pan') {
-      const dxCanvas = canvasX - drag.startCanvasX;
-      const dyCanvas = canvasY - drag.startCanvasY;
-      const zoom = drag.zoomAtStart || 1;
-
-      onViewportChange({
-        offsetX: drag.startOffsetX + dxCanvas / zoom,
-        offsetY: drag.startOffsetY + dyCanvas / zoom,
-      });
-      return;
-    }
-
-    if (drag.kind === 'resize') {
-      const dx = pos.x - drag.startX;
-      const dy = pos.y - drag.startY;
-      const newBounds = resizeBounds(drag.originalBounds, drag.handle, dx, dy);
-
-      const patch = resizeObject(drag.originalObject, newBounds);
-      if (patch) {
-        onTransientObjectPatch(drag.objectId, patch);
-        setDrag({ ...drag, lastPatch: patch });
-      }
-    }
+    // Avoid unnecessary state updates for pan, no-op moves, etc.
+    if (next !== drag) setDrag(next);
   };
 
   const finishSelectionInteraction = (evt: React.PointerEvent<HTMLCanvasElement>) => {
     if (drag && activeTool === 'select') {
-      if (drag.kind === 'move') {
-        const patch = drag.lastPatch ?? null;
-        const minimized = patch ? minimizePatch(drag.originalObject, patch as any) : null;
-        if (minimized) onUpdateObject(drag.objectId, minimized as any);
-      } else if (drag.kind === 'resize') {
-        const patch = drag.lastPatch ?? null;
-        const minimized = patch ? minimizePatch(drag.originalObject, patch as any) : null;
-        if (minimized) onUpdateObject(drag.objectId, minimized as any);
-      } else if (drag.kind === 'lineEndpoint') {
-        const patch = drag.lastPatch ?? null;
-        const minimized = patch ? minimizePatch(drag.originalObject, patch as any) : null;
-        if (minimized) onUpdateObject(drag.lineId, minimized as any);
-      } else if (drag.kind === 'connectorEndpoint') {
-        const patch = drag.lastPatch ?? null;
-        const minimized = patch ? minimizePatch(drag.originalObject, patch as any) : null;
-        if (minimized) onUpdateObject(drag.connectorId, minimized as any);
-      }
+      const commit = getCommitFromDrag(drag, minimizePatch);
+      if (commit) onUpdateObject(commit.objectId, commit.patch);
     }
 
     setDrag(null);

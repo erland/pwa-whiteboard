@@ -1,327 +1,243 @@
-# Functional Specification – Digital Whiteboard Application
-
-## 1. Purpose and Vision
-
-The purpose of the application is to provide a digital whiteboard that can be used for visual work such as sketches, notes, flows, and simple diagrams.
-
-The vision is:
-
-- **First version:** A whiteboard for a single user on a single device, with the ability to create, save, open, and continue working on their own whiteboards.
-- **Future versions:** Extend the solution with support for multiple simultaneous users on the same whiteboard, including real-time updates and collaboration features (e.g., cursors, chat/comments).
-
-The application should be easy to use, work well on desktop, tablet, and mobile, and be usable even when the device is offline (with local storage and later synchronization).
-
----
-
-## 2. Target Users and Roles
-
-### 2.1 Target Users
-
-- **Individual users** who want to:
-  - Sketch ideas
-  - Prepare meetings and presentations
-  - Have a digital replacement for a physical whiteboard
-- **Teams/workgroups** (future versions) who want to:
-  - Collaborate visually at a distance
-  - Use a shared visual workspace
-
-### 2.2 Roles
-
-In the first version, there is only **one role**:
-
-- **User**
-  - Creates, edits, and deletes their own whiteboards
-  - Has full control over their local content
-
-In future versions, the following roles may be introduced (described here to future-proof the design):
-
-- **Whiteboard owner**
-  - Creates a whiteboard and manages sharing and permissions
-- **Collaborating user**
-  - Can be granted permission to write/draw or only read
-- **Observer / view-only**
-  - Can only view the content and cannot make changes
-
----
-
-## 3. High-Level Features
-
-### 3.1 Whiteboard Management
-
-- Create a new whiteboard  
-- Rename a whiteboard  
-- List existing whiteboards  
-- Open an existing whiteboard  
-- Delete a whiteboard (with confirmation)  
-- Duplicate a whiteboard (“Save as…” / “Copy board”)  
-
-### 3.2 Drawing and Editing Features
-
-On a whiteboard, the user should be able to:
-
-- Draw freehand strokes
-- Create basic objects:
-  - Rectangles
-  - Circles/ellipses
-  - Straight lines
-  - Arrows
-  - Text objects (e.g., short labels)
-  - “Sticky note”-like boxes with text
-- Adjust object properties:
-  - Stroke width
-  - Color (at least a basic set)
-  - Fill color (for shapes/sticky notes)
-  - Text size (at least a few levels)
-- Select and edit objects:
-  - Select one or multiple objects
-  - Move objects
-  - Resize objects (via handles)
-  - Copy/paste objects
-  - Delete objects
-- Undo / redo at the board level
-
-
-### 3.2.1 Board Types and Tool Presets (v1+)
-
-A whiteboard has a **board type** that controls the editing experience.
-
-- A board type defines which tools are available in the toolbox.
-  - The **Selection** tool must be available in all board types.
-  - Example board types:
-    - **Advanced**: all tools available.
-    - **Freehand**: only Freehand + Selection.
-    - **Mindmap**: focused toolbox (e.g., Sticky Notes + Connectors + Selection) with simplified settings.
-- A board type may define **tool presets** (multiple toolbox entries that share the same base tool but with different default settings),
-  for example:
-  - “Rectangle (outline)” and “Rectangle (filled)”.
-- A board type may hide and/or lock certain settings to simplify the UI and ensure consistent styling.
-
-### 3.3 Whiteboard Navigation
-
-- Pan (move the view) over an area larger than the visible screen  
-- Zoom in/out:
-  - Predefined zoom levels (e.g., 25%, 50%, 100%, 200%)
-  - Fit-to-screen (auto zoom to fit)
-- Quickly reset to a default view (e.g., centered board at 100% zoom)
-
-### 3.4 Storage and Files
-
-First version (single user, local storage):
-
-- Automatic saving of whiteboards locally on the device
-- Manual “Save” function with clear feedback that everything is saved
-- Export a whiteboard to an image format (e.g., PNG) to use in presentations, documents, etc.
-- Export a whiteboard to a file with structured content (e.g., JSON-like format) for backup and sharing via email or file sharing tools
-- Import a previously exported whiteboard file
-
-Future versions (collaboration):
-
-- Store whiteboards in a central storage solution
-- Automatic synchronization between devices and users
-- Handling of conflicts between local changes and the central version
-
-### 3.5 Sharing and Collaboration (Future Features)
-
-In future versions, the application should support:
-
-- Create a sharing link for a whiteboard
-- Configure whether others can:
-  - View only
-  - View and edit
-- Display which users are currently connected to a whiteboard
-- Show other users’ cursors (e.g., initials near the pointer)
-- Real-time updates for:
-  - New objects
-  - Changes to existing objects
-  - Deletion of objects
-- Simple chat or comment function linked to the whiteboard
-
-These functions are not required in the first version, but the design should not make it difficult to add them later.
-
-### 3.6 Offline Support and Synchronization
-
-First version:
-
-- The application should be fully usable without network connectivity
-- All local whiteboards should be available offline
-- All changes are saved locally
-
-Future versions:
-
-- If central storage is introduced, the solution should provide:
-  - Automatic synchronization when the network is available
-  - A disconnected mode where the user continues to work locally
-  - Synchronization of changes once connectivity is restored
-
----
-
-## 4. User Flows
-
-### 4.1 Create and Work on a New Whiteboard (v1)
-
-1. The user opens the application.  
-2. The user selects “Create new board”.  
-3. An empty whiteboard is displayed.  
-4. The user draws, adds text, and creates objects.  
-5. The application saves the board automatically on an ongoing basis.  
-6. At any time the user can:
-   - rename the board,
-   - export the board as an image,
-   - close the board and return to the list of boards.
-
-### 4.2 Resume Work on an Existing Whiteboard (v1)
-
-1. The user opens the application.  
-2. A list of previous boards is shown.  
-3. The user selects a board to open.  
-4. The board is opened in the same state as at the last save.  
-5. The user continues editing.  
-
-### 4.3 Export and Import of a Whiteboard (v1)
-
-**Export:**  
-1. The user has a board open.  
-2. The user selects “Export”.  
-3. The user can choose to:
-   - Export as an image  
-   - Export as a file (structured data)  
-4. The file is downloaded using the browser’s download functionality.  
-
-**Import:**  
-1. The user goes to the board list and selects “Import board”.  
-2. The user selects a previously exported file.  
-3. The application creates a new board based on the file content.  
-4. The imported board is added to the list of boards.  
-
-### 4.4 Collaboration in a Future Version (High-Level Flow)
-
-1. The owner creates a board and selects “Share”.  
-2. A share link is generated.  
-3. Other users open the link in their browsers.  
-4. All users with edit rights see:
-   - the same whiteboard,
-   - changes occurring in real time.  
-5. The application handles multiple users drawing and editing at the same time.  
-
-This flow is not part of the first version but is specified because it affects the overall design.
-
----
-
-## 5. Functional Requirements
-
-### 5.1 Whiteboard Objects and State
-
-- The application must internally represent the whiteboard content as a set of objects with:
-  - unique identity,
-  - type (e.g., line, rectangle, text, sticky note),
-  - position,
-  - size (where relevant),
-  - style attributes (color, stroke style, text size, etc.).
-- All changes to the whiteboard must be expressible as discrete events, for example:
-  - “object created”
-  - “object updated”
-  - “object deleted”
-- It must be possible, in the future, to store and replay a sequence of events (for undo/redo and for collaboration).
-
-### 5.2 Undo/Redo
-
-- The user must be able to undo the most recent change.  
-- The user must be able to redo a previously undone change.  
-- The number of undo steps should be defined (at least a practical number, e.g., 20 steps).  
-
-### 5.3 Responsiveness
-
-- The application should adapt to different screen sizes:
-  - Desktop
-  - Laptop
-  - Tablet
-  - Mobile phone
-- Core functionality (drawing, zooming, saving, opening) should be fully usable on all form factors.
-
-### 5.4 Error Handling
-
-- If a board cannot be saved locally, the user should receive a clear error message.
-- If file import fails (e.g., invalid format), the application should:
-  - inform the user,
-  - not crash,
-  - not corrupt or remove existing boards.
-- If there is insufficient storage space, the application should ask the user what to do (e.g., delete older boards).
-
----
-
-
-### 5.5 Board Types, Tool Presets, and Policies
-
-- Each board must have a `boardType` value.
-- The toolbox must be rendered from the board type definition (not hard-coded).
-- The Selection tool must be available in all board types.
-- Tool presets must be supported (multiple toolbox entries pointing to the same base tool but with different default settings).
-- A board type may hide settings in tool/selection panels and may lock certain properties so that:
-  - newly created objects always get the locked values, and
-  - updates that try to change locked values are ignored.
-
-
-## 6. Non-Functional Requirements (High-Level)
-
-Even though the focus is on functional requirements, the following high-level non-functional requirements are relevant:
-
-- **Performance**
-  - Drawing and interaction should feel responsive even on relatively large boards.
-  - Zooming and panning should be smooth and without noticeable delays on modern devices.
-
-- **Accessibility**
-  - Core features should be usable with both keyboard and touch input.
-  - Important contrasts and text sizes must be readable.
-
-- **Robustness**
-  - The application should not lose data in normal situations such as:
-    - temporary network loss,
-    - the browser window being closed unexpectedly,
-    - the device going to sleep.
-
-- **Extensibility**
-  - The internal representation of the whiteboard, objects, and events should be designed so that it is possible to:
-    - connect the whiteboard to central storage in the future,
-    - send events between clients for collaboration,
-    - add new object types (e.g., images, icons, containers) without extensive rewrites.
-
----
-
-## 7. Versioning
-
-### Version 1 – Single User, Local Whiteboard
-
-Includes:
-
-- Create, open, list, delete, and duplicate whiteboards  
-- Draw basic objects (freehand, shapes, text, sticky notes)  
-- Move and edit objects  
-- Undo/redo  
-- Zoom and pan  
-- Local automatic saving  
-- Export/import of boards  
-- Export as image  
-
-### Version 2 – Preparatory Steps for Collaboration
-
-Examples of new features/changes that build on v1:
-
-- A clearer event model with IDs and timestamps  
-- Ability to export/import a board including its event log  
-- A separate abstraction for storage (local vs. central)  
-
-### Version 3 – Collaboration Features
-
-Examples of extensions:
-
-- Central storage of whiteboards  
-- Share links and permission settings  
-- Real-time updates between multiple users  
-- Display of other users’ cursors  
-- Simple chat/comments linked to the board  
-
----
-
-## 8. Summary
-
-This functional specification describes a digital whiteboard where the first version focuses on a single user and local storage, but where the internal model for the whiteboard, objects, and events is designed so that it will be possible in later versions to add central storage and real-time collaboration between multiple simultaneous users without extensive rewrites of the core logic.
+# Whiteboard PWA – Functional Specification (v2: Multi‑user)
+
+> This document describes *what* the application must do (user-facing behavior and functional requirements). It intentionally avoids committing to specific hosting providers or implementation libraries.
+
+## 1. Purpose
+
+The Whiteboard app is a browser-based whiteboard for creating and editing visual boards containing shapes, text, sticky notes, freehand strokes, and connectors. Boards can be used locally by a single user and can also be shared for real-time collaboration with multiple users.
+
+## 2. Scope
+
+### 2.1 In scope
+- Board creation and management (create, rename, duplicate, delete, import/export).
+- Editing tools (select, shapes, text, sticky note, freehand, connectors).
+- Multi-user collaboration on the same board in real time:
+  - Live updates (authoritative ordered operation log).
+  - Presence (who is in the room, cursors, optional selection indicators).
+  - Sharing via invite URLs (with role-based access).
+- Basic security controls appropriate for link sharing and collaborative editing.
+
+### 2.2 Out of scope (v2)
+- Real-time voice/video chat.
+- Granular per-object permissions beyond the board-level roles described below.
+- Full audit/compliance-grade immutable history (can be added later).
+- Complex conflict-free data types (CRDT). This version uses ordered operations with deterministic application.
+
+## 3. Terminology
+
+- **Board**: A named workspace containing drawable objects and metadata.
+- **Object**: An item on a board, e.g., rectangle, ellipse, text, sticky note, freehand stroke, connector.
+- **Operation (Op)**: A change to the shared board state (create/update/delete/reorder, etc.).
+- **Room**: A collaboration session for a specific board.
+- **Presence**: Ephemeral data about connected users (cursor, selection, name/color), not part of the board’s persisted content.
+- **Owner**: The user who created the board and controls sharing links.
+- **Editor**: A user invited with write access.
+- **Viewer**: A user invited with read-only access.
+
+## 4. Users, Roles, and Access Model
+
+### 4.1 Roles
+- **Owner**
+  - Full read/write on the board.
+  - Can generate, revoke, and rotate invite links (viewer and editor links).
+- **Editor**
+  - Read/write access on the board while connected.
+  - Cannot manage invite links (unless explicitly granted in future versions).
+- **Viewer**
+  - Read-only access.
+  - May see live updates and presence but cannot modify board content.
+
+### 4.2 Authentication and invite links
+- The **Owner must authenticate** to create and manage boards and sharing settings.
+- Editors and viewers **may access a board without authentication** by using an invite URL that grants access to a specific board and role.
+- Invite URLs must be:
+  - **Unguessable** (strong random capability token).
+  - **Scoped** (bound to a single board and role).
+  - **Time-limited** (configurable expiration).
+  - **Revocable** (owner can disable a link).
+  - **Rotatable** (owner can regenerate links to invalidate old ones).
+
+### 4.3 Guest identity (non-authenticated participants)
+When joining via invite URL without authentication:
+- The system assigns the participant a **guest identity** (display name + color).
+- The participant may optionally set a display name.
+- The system should remember the guest’s chosen name/color on that device for convenience (local preference), while acknowledging it is not a strong identity.
+
+## 5. Board Management
+
+### 5.1 Board list
+Users can:
+- Create a new board.
+- Open an existing board.
+- Rename a board.
+- Duplicate a board.
+- Delete a board.
+- Import a board from an exported file.
+- Export a board to a portable file format.
+
+### 5.2 Board metadata
+Boards include:
+- Title/name.
+- Creation timestamp and last modified timestamp.
+- Optional board type/preset (toolbox configuration and policies).
+- Sharing state (viewer link, editor link, enabled/disabled, expiration).
+
+## 6. Editing Features
+
+### 6.1 Canvas & navigation
+- Pan and zoom the canvas.
+- Grid and outlines (if supported by the application UI).
+- Responsive layout for desktop and mobile devices.
+
+### 6.2 Tools and objects
+The app supports (at minimum):
+- **Select** tool: select one or multiple objects.
+- **Shapes**: rectangle, ellipse.
+- **Text** object.
+- **Sticky note** object.
+- **Freehand** drawing.
+- **Connector** (line connecting objects/points).
+
+### 6.3 Object manipulation
+- Create objects by clicking/dragging.
+- Move objects by dragging.
+- Resize objects via handles.
+- Edit text/sticky-note content.
+- Change styling properties (e.g., stroke width, colors, font size as applicable).
+- Multi-select and apply shared properties where applicable.
+
+### 6.4 Clipboard and duplication
+- Copy and paste selected objects (within a board).
+- Duplicate selection.
+
+### 6.5 Undo/redo behavior (single-user vs multi-user)
+- **Single-user mode**: undo/redo works as expected for local history.
+- **Multi-user mode (v2)**: undo/redo behavior is intentionally conservative:
+  - Minimum requirement: undo/redo may be disabled while connected to a multi-user session, or limited to local, non-shared UI actions.
+  - If enabled, “undo my last action” must not remove or reorder other users’ actions unexpectedly.
+  - A future version may introduce robust multi-user undo with inverse operations and author tracking.
+
+## 7. Multi-user Collaboration
+
+### 7.1 Collaboration goals
+When multiple people edit the same board:
+- Everyone sees updates in near real time.
+- The board converges to the same final state for all participants.
+- Conflicts are resolved deterministically.
+
+### 7.2 Room join and state sync
+When a participant opens a shared board:
+1. The client connects to the collaboration service and joins the board’s room.
+2. The participant receives the **current board snapshot** and the latest **sequence number (seq)**.
+3. The participant receives subsequent ordered operations and applies them in sequence.
+
+### 7.3 Authoritative ordered op log
+- All shared edits are transmitted as **operations**.
+- The collaboration service assigns a **monotonic sequence number** to each accepted operation.
+- All clients apply operations in that server-defined order.
+- Clients must ignore duplicate operations (idempotency) and already-applied sequence numbers.
+
+### 7.4 Conflict handling
+Because multiple edits can happen concurrently:
+- The system resolves conflicts by the authoritative order:
+  - Later operations override earlier operations when they target the same properties (“last write wins” in the ordered stream).
+- Operations should be granular (property-level updates) to reduce unintended overwrites.
+
+### 7.5 Presence (ephemeral)
+Presence information is not persisted as board content. It includes:
+- User list (name, color, role).
+- Cursor position (optional but recommended).
+- Optional: current selection outline(s) or “user is editing text” indicators.
+
+Presence should be rate-limited/throttled to avoid excessive network traffic.
+
+### 7.6 Live editing behaviors and bandwidth considerations
+To keep collaboration responsive:
+- **Dragging/moving/resizing**: updates may be coalesced (e.g., periodic updates plus a final commit on release).
+- **Freehand**:
+  - Users should see a smooth local preview while drawing.
+  - The shared model should prefer **batched** updates or a final stroke commit to reduce message volume.
+- The system must define maximum sizes for:
+  - operation payloads,
+  - text length,
+  - freehand point counts / stroke size,
+  - number of objects per board (soft limits).
+
+### 7.7 Connection handling
+- If the network disconnects:
+  - The UI must indicate “Disconnected / Reconnecting”.
+  - The board remains viewable.
+  - Editing may be disabled until reconnected (v2), or queued optimistically with clear user feedback (future enhancement).
+- On reconnect:
+  - The client re-joins and re-syncs from snapshot + operations.
+
+## 8. Persistence and Data Handling
+
+### 8.1 Persistence responsibilities
+This version distinguishes between:
+- **Durable board content** (persisted):
+  - objects, properties, ordering, board type, metadata.
+- **Ephemeral presence** (not persisted):
+  - cursors, live selections, “is typing” indicators.
+
+### 8.2 Snapshotting and replay
+- The system must persist the board as:
+  - periodic **snapshots**, and optionally
+  - an **operation log** since the last snapshot.
+- The system must be able to reconstruct current state by applying operations after the snapshot.
+
+### 8.3 Export/import
+- Export includes board content and metadata required to restore the board locally or on another system.
+- Export must not embed sensitive invite tokens by default.
+- Import restores board content; sharing settings are reset/disabled by default unless explicitly included and the user has permission.
+
+## 9. Security and Privacy Requirements
+
+### 9.1 Trust boundaries
+- Clients are untrusted. The server/collaboration service must validate:
+  - access rights (viewer/editor),
+  - operation structure and allowed fields,
+  - rate limits and message sizes.
+
+### 9.2 Invite token security
+- Invite tokens must be treated as secrets.
+- The application must provide controls to:
+  - disable a link immediately,
+  - regenerate new links (rotate),
+  - set expirations.
+- The system should minimize accidental leakage (e.g., avoid logging full URLs with tokens).
+
+### 9.3 Transport security
+- Communication must use encrypted transport in production environments.
+- The collaboration service must restrict cross-site usage appropriately (e.g., origin checks).
+
+### 9.4 Content safety
+- Text objects must be treated as plain text (no unsafe HTML execution).
+- Imported files must be validated before applying to the shared state.
+
+### 9.5 Logging and observability (privacy-aware)
+- The system should log key events (join/leave, accepted/rejected ops) with minimal personal data.
+- If guests are allowed, logs may include a guest identifier but should avoid storing unnecessary personal information.
+
+## 10. Performance and Quality Requirements
+
+- Target “feels real-time” collaboration for typical interactions.
+- Canvas rendering should remain smooth during editing (local preview preferred).
+- The system should degrade gracefully under load (coalescing updates, throttling presence).
+- The application must remain usable on modern desktop and mobile browsers.
+
+## 11. Accessibility and Usability
+
+- Keyboard shortcuts for common actions (select, delete, copy/paste) where appropriate.
+- Clear UI states for:
+  - role (viewer vs editor),
+  - connection status,
+  - “read-only” mode for viewers,
+  - sharing status (link enabled/disabled, expiration).
+
+## 12. Future Enhancements (not required for v2)
+- Multi-user undo/redo (“undo my last op”) with inverse operations and author tracking.
+- Offline-first collaboration (queue ops while offline, reconcile on reconnect).
+- Commenting, version history UI, and audit trail.
+- Templates and board organization (folders, tags).
+- Advanced permissions (per-object locks, admin roles, organization ownership).

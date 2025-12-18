@@ -7,7 +7,11 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "jest",
-    "deploy": "gh-pages -d dist"
+    "deploy": "gh-pages -d dist",
+    "typecheck": "tsc -p tsconfig.json",
+    "typecheck:all": "tsc -p tsconfig.json && tsc -p shared/tsconfig.json && tsc -p workers/collab/tsconfig.json",
+    "typecheck:shared": "tsc -p shared/tsconfig.json",
+    "typecheck:worker": "tsc -p workers/collab/tsconfig.json"
   },
   "dependencies": {
     "react": "^18.3.1",

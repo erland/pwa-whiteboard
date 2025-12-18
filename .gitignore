@@ -23,3 +23,7 @@ digest*
 *.njsproj
 *.sln
 *.sw?
+
+# Cloudflare / Wrangler
+.wrangler/
+workers/**/.wrangler/

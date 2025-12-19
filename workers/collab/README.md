@@ -29,3 +29,23 @@ From `workers/collab`:
 ## Configuration
 See `wrangler.toml` for environment variables. Secrets must be set via:
 - `wrangler secret put SUPABASE_SERVICE_ROLE_KEY`
+
+
+## Step 5: Join/auth validation
+
+This worker now requires the first message on the WebSocket to be a `join` message matching the shared protocol.
+
+Example (browser console):
+
+```js
+const ws = new WebSocket('ws://127.0.0.1:8787/collab/<boardId>');
+ws.onmessage = (e) => console.log('msg', e.data);
+ws.onopen = () => {
+  ws.send(JSON.stringify({
+    type: 'join',
+    boardId: '<boardId>',
+    auth: { kind: 'invite', inviteToken: '<token>' },
+    client: { displayName: 'Guest', color: '#38bdf8' }
+  }));
+};
+```

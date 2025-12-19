@@ -27,3 +27,4 @@ digest*
 # Cloudflare / Wrangler
 .wrangler/
 workers/**/.wrangler/
+.dev.vars

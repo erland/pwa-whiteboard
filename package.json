@@ -11,7 +11,9 @@
     "typecheck": "tsc -p tsconfig.json",
     "typecheck:all": "tsc -p tsconfig.json && tsc -p shared/tsconfig.json && tsc -p workers/collab/tsconfig.json",
     "typecheck:shared": "tsc -p shared/tsconfig.json",
-    "typecheck:worker": "tsc -p workers/collab/tsconfig.json"
+    "typecheck:worker": "tsc -p workers/collab/tsconfig.json",
+    "worker:dev": "cd workers/collab && npx wrangler dev",
+    "worker:deploy": "cd workers/collab && npx wrangler deploy"
   },
   "dependencies": {
     "react": "^18.3.1",

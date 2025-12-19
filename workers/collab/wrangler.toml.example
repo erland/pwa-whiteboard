@@ -1,10 +1,1 @@
-# Example Wrangler configuration (Step 0).
-#
-# In later steps we will create the real wrangler.toml and bind Durable Objects + secrets.
-name = "pwa-whiteboard-collab"
-main = "src/index.ts"
-compatibility_date = "2025-12-18"
-
-# [[durable_objects.bindings]]
-# name = "BOARD_ROOM_DO"
-# class_name = "BoardRoom"
+# This file is kept for reference. Use wrangler.toml instead.

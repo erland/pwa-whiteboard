@@ -8,6 +8,7 @@ import {
   MAX_TOKEN_CHARS,
   MAX_USER_ID_CHARS,
 } from './limits';
+import type { BoardEvent } from '../domain';
 import type {
   BoardRole,
   ClientToServerMessage,
@@ -47,6 +48,31 @@ function withinChars(s: string, max: number): boolean {
 
 function optionalWithinChars(s: unknown, max: number): boolean {
   return s === undefined || (isString(s) && s.length <= max);
+}
+
+function validateBoardEvent(v: unknown, expectedBoardId?: string): ValidationResult<BoardEvent> {
+  if (!isRecord(v)) return { ok: false, error: 'op.op must be an object' };
+  if (!isString(v.id) || !withinChars(v.id, MAX_CLIENT_OP_ID_CHARS)) {
+    // reuse MAX_CLIENT_OP_ID_CHARS as a reasonable limit for event ids
+    return { ok: false, error: 'op.op.id must be a string' };
+  }
+  if (!isString(v.boardId) || !withinChars(v.boardId, MAX_BOARD_ID_CHARS)) {
+    return { ok: false, error: 'op.op.boardId must be a string' };
+  }
+  if (expectedBoardId && v.boardId !== expectedBoardId) {
+    return { ok: false, error: 'op.op.boardId must match message.boardId' };
+  }
+  if (!isString(v.type) || !withinChars(v.type, 64)) {
+    return { ok: false, error: 'op.op.type must be a string' };
+  }
+  if (!isString(v.timestamp) || !withinChars(v.timestamp, 64)) {
+    return { ok: false, error: 'op.op.timestamp must be a string' };
+  }
+  if (v.payload === undefined || !isRecord(v.payload)) {
+    return { ok: false, error: 'op.op.payload must be an object' };
+  }
+  // Deeper per-event validation can be added later; MVP validates envelope + payload presence.
+  return { ok: true, value: v as unknown as BoardEvent };
 }
 
 function validatePresencePayload(v: unknown): ValidationResult<PresencePayload> {
@@ -188,10 +214,8 @@ export function validateClientToServerMessage(v: unknown): ValidationResult<Clie
     if (!isInt(v.baseSeq) || v.baseSeq < 0) {
       return { ok: false, error: 'op.baseSeq must be a non-negative integer' };
     }
-    // `op` payload is intentionally not validated at this step (Step 2 defines op type).
-    if (v.op === undefined) {
-      return { ok: false, error: 'op.op is required' };
-    }
+    const opRes = validateBoardEvent(v.op, v.boardId);
+    if (!opRes.ok) return opRes;
     return {
       ok: true,
       value: {
@@ -199,7 +223,7 @@ export function validateClientToServerMessage(v: unknown): ValidationResult<Clie
         boardId: v.boardId,
         clientOpId: v.clientOpId,
         baseSeq: v.baseSeq,
-        op: v.op,
+        op: opRes.value,
       },
     };
   }
@@ -301,6 +325,8 @@ export function validateServerToClientMessage(v: unknown): ValidationResult<Serv
       return { ok: false, error: `op.clientOpId must be <=${MAX_CLIENT_OP_ID_CHARS}` };
     }
     if (v.op === undefined) return { ok: false, error: 'op.op is required' };
+    const opRes = validateBoardEvent(v.op, v.boardId);
+    if (!opRes.ok) return opRes;
 
     return {
       ok: true,
@@ -308,7 +334,7 @@ export function validateServerToClientMessage(v: unknown): ValidationResult<Serv
         type: 'op',
         boardId: v.boardId,
         seq: v.seq,
-        op: v.op,
+        op: opRes.value,
         authorId: v.authorId,
         clientOpId: v.clientOpId as string | undefined,
       },

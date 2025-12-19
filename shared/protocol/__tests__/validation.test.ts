@@ -33,7 +33,13 @@ describe('protocol validation', () => {
       boardId: 'b',
       clientOpId: 'c1',
       baseSeq: 5,
-      op: { any: 'payload' },
+      op: {
+        id: 'e1',
+        boardId: 'b',
+        type: 'viewportChanged',
+        timestamp: '2025-01-01T00:00:00.000Z',
+        payload: { viewport: { x: 0 } },
+      },
     });
     expect(res.ok).toBe(true);
   });
@@ -58,7 +64,42 @@ describe('protocol validation', () => {
     expect(res.ok).toBe(true);
   });
 
-  test('validates server joined', () => {
+  
+  test('valid op message with BoardEvent envelope passes', () => {
+    const msg = {
+      type: 'op',
+      boardId: 'board-1',
+      clientOpId: 'client-op-1',
+      baseSeq: 0,
+      op: {
+        id: 'event-1',
+        boardId: 'board-1',
+        type: 'objectCreated',
+        timestamp: new Date().toISOString(),
+        payload: {
+          object: {
+            id: 'obj-1',
+            type: 'text',
+            x: 0,
+            y: 0,
+            text: 'hi',
+            fontSize: 16,
+            textColor: '#111111',
+          }
+        }
+      }
+    };
+
+    const res = validateClientToServerMessage(msg);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.type).toBe('op');
+      expect(res.value.boardId).toBe('board-1');
+      expect(res.value.op.boardId).toBe('board-1');
+    }
+  });
+
+test('validates server joined', () => {
     const res = validateServerToClientMessage({
       type: 'joined',
       boardId: 'b',

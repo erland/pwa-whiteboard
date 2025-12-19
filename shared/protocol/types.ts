@@ -1,3 +1,5 @@
+import type { BoardEvent } from '../domain';
+
 export type BoardRole = 'owner' | 'editor' | 'viewer';
 
 export type Cursor = { x: number; y: number };
@@ -15,6 +17,7 @@ export type PresencePayload = {
   isTyping?: boolean;
 };
 
+
 /**
  * A lightweight, non-sensitive representation of a connected participant.
  *
@@ -27,11 +30,7 @@ export type PresenceUser = {
   role: BoardRole;
 };
 
-/**
- * Placeholder type for shared ops. In Step 2, this should be replaced by
- * the real WhiteboardEvent/Op type from `shared/domain`.
- */
-export type WhiteboardOp = unknown;
+export type WhiteboardOp = BoardEvent;
 
 // ----------------------------
 // Client -> Server messages

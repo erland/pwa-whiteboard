@@ -7,6 +7,14 @@ import {
   type BoardRole,
 } from "../../../shared/protocol";
 import {
+  applyEvent,
+  createEmptyWhiteboardState,
+  type BoardEvent,
+  type WhiteboardMeta,
+  type WhiteboardState,
+} from "../../../shared/domain";
+
+import {
   fetchBoardOwner,
   fetchInviteByTokenHash,
   fetchSupabaseUserFromJwt,
@@ -78,6 +86,10 @@ type ClientMeta = {
 
 const JOIN_TIMEOUT_MS = 10_000;
 const MAX_JOIN_ATTEMPTS_PER_MINUTE_PER_IP = 30;
+const MAX_OPS_PER_10S_PER_CLIENT = 200;
+const OP_WINDOW_MS = 10_000;
+const PROCESSED_OP_TTL_MS = 5 * 60_000;
+
 
 function getConnectingIp(request: Request): string {
   // Cloudflare sets CF-Connecting-IP in production. Wrangler/local may not.
@@ -114,6 +126,22 @@ export class BoardRoom implements DurableObject {
   private sockets = new Set<WebSocket>();
   private metaBySocket = new WeakMap<WebSocket, ClientMeta>();
   private joinAttemptsByIp = new Map<string, { count: number; resetAt: number }>();
+
+
+private boardSeq = 0;
+private boardState: WhiteboardState | null = null;
+
+// Idempotency: remember processed clientOpIds for a short TTL so retries don't duplicate edits.
+private processedOps = new Map<
+  string,
+  { seq: number; op: BoardEvent; authorId: string; processedAt: number }
+>();
+
+// Presence (ephemeral) keyed by userId/guestId.
+private presenceByUserId = new Map<string, unknown>();
+
+// Simple per-connection op rate limiting
+private opRateBySocket = new WeakMap<WebSocket, { windowStart: number; count: number }>();
 
   constructor(private state: DurableObjectState, private env: Env) {}
 
@@ -197,22 +225,20 @@ export class BoardRoom implements DurableObject {
           this.metaBySocket.set(server, updated);
 
           // For Step 5 we don't yet have snapshots/seq; respond with minimal joined message.
-          const joined: ServerToClientMessage = {
-            type: "joined",
-            boardId,
-            role: authResult.role,
-            seq: 0,
-            users: [
-              ...this.getJoinedUsers().map((u) => ({
-                userId: u.userId,
-                guestId: u.guestId,
-                displayName: u.displayName,
-                color: u.color,
-                role: u.role,
-                lastSeenAt: nowIso(),
-              })),
-            ],
-          };
+          
+// Ensure the authoritative state exists (Step 6). For now we start with an empty board state;
+// Step 7 will load snapshots from Supabase.
+this.ensureBoardState(boardId);
+
+const joined: ServerToClientMessage = {
+  type: "joined",
+  boardId,
+  role: updated.role!,
+  seq: this.boardSeq,
+  snapshot: this.boardState,
+  snapshotSeq: this.boardSeq,
+  users: this.getUsersForPresence(),
+};
           sendJson(server, joined);
 
           // Broadcast presence roster update to others (lightweight).
@@ -225,37 +251,113 @@ export class BoardRoom implements DurableObject {
         }
       }
 
-      // Already joined: for now keep simple behavior until Step 6.
-      if (msg.type === "op") {
-        if (meta.role === "viewer") {
-          const err: ServerToClientMessage = { type: "error", boardId, code: "forbidden", message: "Viewer cannot send ops" };
-          sendJson(server, err);
-          return;
-        }
-        // Broadcast the op as-is (Step 6 will add ordering + validation + seq).
-        this.broadcastRaw(data);
-        return;
-      }
+      
+// Already joined: handle ops and presence with authoritative sequencing (Step 6).
+if (msg.type === "op") {
+  if (meta.role === "viewer") {
+    const err: ServerToClientMessage = {
+      type: "error",
+      boardId,
+      code: "forbidden",
+      message: "Viewer cannot send ops",
+    };
+    sendJson(server, err);
+    return;
+  }
 
-      if (msg.type === "presence") {
-        // For Step 5, just broadcast presence messages to others (ephemeral).
-        this.broadcastRaw(data);
-        return;
-      }
+  // Ensure we have an in-memory board state.
+  this.ensureBoardState(boardId);
 
-      if (msg.type === "ping") {
-        const pong: ServerToClientMessage = { type: "pong", boardId, t: msg.t };
-        sendJson(server, pong);
-        return;
-      }
+  // Basic per-connection op rate limiting.
+  if (!this.consumeOp(server)) {
+    const err: ServerToClientMessage = {
+      type: "error",
+      boardId,
+      code: "rate_limited",
+      message: "Too many ops; slow down",
+    };
+    sendJson(server, err);
+    return;
+  }
+
+  // Idempotency: if we've already processed this clientOpId, re-send the canonical server op to this client.
+  const existing = this.processedOps.get(msg.clientOpId);
+  if (existing) {
+    const replay: ServerToClientMessage = {
+      type: "op",
+      boardId,
+      seq: existing.seq,
+      op: existing.op,
+      authorId: existing.authorId,
+      clientOpId: msg.clientOpId,
+    };
+    sendJson(server, replay);
+    return;
+  }
+
+  // Clean up old processed ops (best-effort).
+  this.gcProcessedOps();
+
+  const authorId = meta.userId ?? meta.guestId ?? "unknown";
+
+  // Assign authoritative order.
+  this.boardSeq += 1;
+  const seq = this.boardSeq;
+
+  // Apply to authoritative state.
+  const op = msg.op as BoardEvent;
+  this.boardState = applyEvent(this.boardState!, op);
+
+  // Remember for idempotency.
+  this.processedOps.set(msg.clientOpId, {
+    seq,
+    op,
+    authorId,
+    processedAt: Date.now(),
+  });
+
+  // Broadcast the ordered op to all joined clients.
+  const out: ServerToClientMessage = {
+    type: "op",
+    boardId,
+    seq,
+    op,
+    authorId,
+    clientOpId: msg.clientOpId,
+  };
+  this.broadcastJson(out);
+  return;
+}
+
+if (msg.type === "presence") {
+  const userKey = meta.userId ?? meta.guestId;
+  if (userKey) {
+    this.presenceByUserId.set(userKey, msg.presence);
+  }
+  // Broadcast full presence roster snapshot (simple, deterministic).
+  this.broadcastUsers(boardId);
+  return;
+}
+
+if (msg.type === "ping") {
+  sendJson(server, { type: "pong", t: msg.t });
+  return;
+}
     });
 
-    const cleanup = () => {
-      clearTimeout(joinTimeout);
-      this.sockets.delete(server);
-      // roster update
-      this.broadcastUsers(boardId);
-    };
+    
+const cleanup = () => {
+  clearTimeout(joinTimeout);
+  const meta = this.metaBySocket.get(server);
+  if (meta) {
+    const key = meta.userId ?? meta.guestId;
+    if (key) this.presenceByUserId.delete(key);
+    this.metaBySocket.delete(server);
+  }
+  this.sockets.delete(server);
+  // roster update
+  this.broadcastUsers(boardId);
+};
 
     server.addEventListener("close", cleanup);
     server.addEventListener("error", cleanup);
@@ -275,15 +377,15 @@ export class BoardRoom implements DurableObject {
 
   private broadcastUsers(boardId: string) {
     const users = this.getJoinedUsers().map((u) => ({
-      userId: u.userId,
-      guestId: u.guestId,
-      displayName: u.displayName,
+      userId: u.userId ?? u.guestId ?? "unknown",
+      displayName: u.displayName ?? "Guest",
       color: u.color,
       role: u.role,
-      lastSeenAt: nowIso(),
     }));
 
-    const msg: ServerToClientMessage = { type: "presence", boardId, users };
+    const presenceByUserId = Object.fromEntries(this.presenceByUserId.entries()) as Record<string, any>;
+
+    const msg: ServerToClientMessage = { type: "presence", boardId, users, presenceByUserId };
     const payload = JSON.stringify(msg);
 
     for (const ws of this.sockets) {
@@ -313,6 +415,16 @@ export class BoardRoom implements DurableObject {
     return out;
   }
 
+private getUsersForPresence() {
+  return this.getJoinedUsers().map((u) => ({
+    userId: u.userId ?? u.guestId ?? "unknown",
+    displayName: u.displayName ?? "Guest",
+    color: u.color,
+    role: u.role,
+  }));
+}
+
+
   private consumeJoinAttempt(ip: string): boolean {
     const now = Date.now();
     const rec = this.joinAttemptsByIp.get(ip);
@@ -325,7 +437,53 @@ export class BoardRoom implements DurableObject {
     return true;
   }
 
-  private async validateJoin(msg: ClientJoinMessage, boardId: string): Promise<{
+  
+private ensureBoardState(boardId: string) {
+  if (this.boardState) return;
+  const meta: WhiteboardMeta = {
+    id: boardId,
+    name: "Untitled",
+    boardType: "advanced",
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  };
+  this.boardState = createEmptyWhiteboardState(meta);
+  this.boardSeq = 0;
+}
+
+private consumeOp(ws: WebSocket): boolean {
+  const now = Date.now();
+  const cur = this.opRateBySocket.get(ws);
+  if (!cur || now - cur.windowStart >= OP_WINDOW_MS) {
+    this.opRateBySocket.set(ws, { windowStart: now, count: 1 });
+    return true;
+  }
+  if (cur.count >= MAX_OPS_PER_10S_PER_CLIENT) return false;
+  cur.count += 1;
+  return true;
+}
+
+private gcProcessedOps() {
+  const cutoff = Date.now() - PROCESSED_OP_TTL_MS;
+  for (const [clientOpId, v] of this.processedOps) {
+    if (v.processedAt < cutoff) this.processedOps.delete(clientOpId);
+  }
+}
+
+private broadcastJson(msg: ServerToClientMessage) {
+  const payload = JSON.stringify(msg);
+  for (const ws of this.sockets) {
+    const meta = this.metaBySocket.get(ws);
+    if (!meta?.joined) continue;
+    try {
+      ws.send(payload);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+private async validateJoin(msg: ClientJoinMessage, boardId: string): Promise<{
     role: BoardRole;
     userId?: string;
     guestId?: string;

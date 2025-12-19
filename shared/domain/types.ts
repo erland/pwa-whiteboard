@@ -1,0 +1,253 @@
+export type WhiteboardId = string;
+export type ObjectId = string;
+export type BoardEventId = string;
+
+export type BoardTypeId = 'advanced' | 'freehand' | 'mindmap';
+
+export interface WhiteboardMeta {
+  id: WhiteboardId;
+  name: string;
+  boardType: BoardTypeId;
+  createdAt: string; // ISO timestamp
+  updatedAt: string; // ISO timestamp
+}
+
+export type WhiteboardObjectType =
+  | 'freehand'
+  | 'line'
+  | 'rectangle'
+  | 'ellipse'
+  | 'diamond'
+  | 'roundedRect'
+  | 'text'
+  | 'stickyNote'
+  | 'connector';
+
+/**
+ * Arrow head type for line ends.
+ *
+ * - none: no arrow head
+ * - open: open V-shaped arrow
+ * - closed: outlined (stroked) triangle
+ * - filled: filled triangle (legacy "closed" behavior)
+ */
+export type ArrowType = 'none' | 'open' | 'closed' | 'filled';
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+/**
+ * Attachment model for connectors (future-proof for modeling-style connections).
+ *
+ * - port: explicit named port on an object (later: shapes like process arrow can expose ports)
+ * - edgeT: parameterized point along a rectangle-like edge, t in [0..1]
+ * - perimeterAngle: angle on perimeter (useful for ellipse/circle and other radial shapes)
+ * - fallback: simple anchor for early implementation / degraded cases
+ */
+export type Attachment =
+  | { type: 'port'; portId: string }
+  | { type: 'edgeT'; edge: 'top' | 'right' | 'bottom' | 'left'; t: number }
+  | { type: 'perimeterAngle'; angleRad: number }
+  | {
+      type: 'fallback';
+      anchor: 'center' | 'top' | 'right' | 'bottom' | 'left';
+    };
+
+export interface ConnectorEnd {
+  objectId: ObjectId;
+  attachment: Attachment;
+}
+
+/**
+ * Base representation of an object on the board.
+ * For v1:
+ * - freehand: uses `points` (and derives a loose bounding box from x/y/width/height)
+ * - rectangle/ellipse: use x, y, width, height
+ * - text/stickyNote: use x, y and optional width/height + text/fontSize
+ *
+ * For connectors (new):
+ * - type: 'connector'
+ * - uses `from` and `to` to reference connected objects
+ * - style uses strokeColor/strokeWidth
+ * - x/y/width/height are not required for connectors (kept for structural compatibility)
+ */
+export interface WhiteboardObject {
+  id: ObjectId;
+  type: WhiteboardObjectType;
+
+  // Anchor position in board coordinates
+  x: number;
+  y: number;
+
+  /**
+   * Secondary end point, used by straight lines.
+   * (When undefined, tools may treat it as equal to x/y.)
+   */
+  x2?: number;
+  y2?: number;
+
+  // Size (for rectangle/ellipse/stickyNote). Freehand uses this as a loose bounding box.
+  width?: number;
+  height?: number;
+
+  // Style
+  strokeColor?: string;
+  fillColor?: string;
+  cornerRadius?: number;
+  strokeWidth?: number;
+
+  /** Line/connector arrowheads (used by type === 'line' | 'connector'). */
+  arrowStart?: ArrowType;
+  arrowEnd?: ArrowType;
+
+  // Text content (for text / sticky notes)
+  text?: string;
+  fontSize?: number;
+  textColor?: string;
+
+  // Freehand path (board coordinates)
+  points?: Point[];
+
+  // Connector endpoints (only for type === 'connector')
+  from?: ConnectorEnd;
+  to?: ConnectorEnd;
+
+  // Reserved for later routing modes (not used in v1 implementation)
+  routing?: 'straight' | 'manual' | 'orthogonal';
+  waypoints?: Point[];
+}
+
+export interface Viewport {
+  offsetX: number;
+  offsetY: number;
+  zoom: number;
+}
+
+/**
+ * Minimal bounds representation used for clipboard payloads.
+ *
+ * Kept in the domain layer so clipboard data can be stored/serialized
+ * without importing the whiteboard geometry layer.
+ */
+export interface ClipboardBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Clipboard payload for copy/paste operations.
+ *
+ * v1 goals:
+ * - allow copying a selection (objects + selection bounds)
+ * - allow pasting in the same board with an offset (pasteCount)
+ * - allow pasting into another board centered in the canvas
+ * - remap connector endpoint references when possible
+ */
+export interface WhiteboardClipboardV1 {
+  version: 1;
+  sourceBoardId: WhiteboardId;
+  copiedAt: string; // ISO
+
+  /** Objects copied at the time of copy. IDs are original IDs; paste remaps them. */
+  objects: WhiteboardObject[];
+
+  /** Bounding box of the copied selection in world coordinates. */
+  bounds: ClipboardBounds;
+
+  /**
+   * Number of times this clipboard has been pasted into the source board.
+   * Used to apply a progressive offset so repeated pastes don't stack.
+   */
+  pasteCount?: number;
+}
+
+export type WhiteboardClipboard = WhiteboardClipboardV1;
+
+export interface HistoryState {
+  pastEvents: BoardEvent[];
+  futureEvents: BoardEvent[];
+  /**
+   * Baseline snapshot for undo/redo rebuild.
+   *
+   * Boards are persisted as a compact snapshot without full history (quota reasons).
+   * After a reload, the current objects are not reconstructable by replaying events alone.
+   * This baseline lets undo/redo rebuild from a stable loaded snapshot + subsequent events.
+   */
+  baseline?: {
+    objects: WhiteboardObject[];
+    selectedObjectIds: ObjectId[];
+  };
+}
+
+/**
+ * Full in-memory state of a whiteboard.
+ * For v1 there is a single local user, but the model is future-proof for collaboration.
+ */
+export interface WhiteboardState {
+  meta: WhiteboardMeta;
+  objects: WhiteboardObject[];
+  selectedObjectIds: ObjectId[];
+  viewport: Viewport;
+  history: HistoryState;
+}
+
+export type BoardEventType =
+  | 'objectCreated'
+  | 'objectUpdated'
+  | 'objectDeleted'
+  | 'selectionChanged'
+  | 'viewportChanged';
+
+export interface BaseBoardEvent {
+  id: BoardEventId;
+  boardId: WhiteboardId;
+  type: BoardEventType;
+  timestamp: string; // ISO
+}
+
+export interface ObjectCreatedEvent extends BaseBoardEvent {
+  type: 'objectCreated';
+  payload: {
+    object: WhiteboardObject;
+  };
+}
+
+export interface ObjectUpdatedEvent extends BaseBoardEvent {
+  type: 'objectUpdated';
+  payload: {
+    objectId: ObjectId;
+    patch: Partial<WhiteboardObject>;
+  };
+}
+
+export interface ObjectDeletedEvent extends BaseBoardEvent {
+  type: 'objectDeleted';
+  payload: {
+    objectId: ObjectId;
+  };
+}
+
+export interface SelectionChangedEvent extends BaseBoardEvent {
+  type: 'selectionChanged';
+  payload: {
+    selectedIds: ObjectId[];
+  };
+}
+
+export interface ViewportChangedEvent extends BaseBoardEvent {
+  type: 'viewportChanged';
+  payload: {
+    viewport: Partial<Viewport>;
+  };
+}
+
+export type BoardEvent =
+  | ObjectCreatedEvent
+  | ObjectUpdatedEvent
+  | ObjectDeletedEvent
+  | SelectionChangedEvent
+  | ViewportChangedEvent;

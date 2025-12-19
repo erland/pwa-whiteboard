@@ -1,4 +1,5 @@
-// Step 0 placeholder.
-//
-// In Step 2 we will move environment-agnostic domain types and reducers here.
-export {};
+// Environment-agnostic domain model and reducer logic.
+// This code is intended to run in both browser and Cloudflare Workers/Durable Objects.
+
+export * from './types';
+export * from './whiteboardState';

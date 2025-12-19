@@ -2,10 +2,15 @@
   "extends": "../tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
-    "lib": ["ESNext"],
+    "lib": [
+      "ESNext"
+    ],
     "types": []
   },
-  "include": ["./**/*.ts"]
-  ,
-  "exclude": ["./**/__tests__/**"]
+  "include": [
+    "./**/*.ts"
+  ],
+  "exclude": [
+    "**/__tests__/**"
+  ]
 }

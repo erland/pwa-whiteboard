@@ -18,6 +18,10 @@ import {
   fetchBoardOwner,
   fetchInviteByTokenHash,
   fetchSupabaseUserFromJwt,
+  fetchBoardInfo,
+  fetchLatestSnapshot,
+  insertSnapshot,
+  updateBoardSnapshotSeq,
   sha256Hex,
 } from "./supabase";
 
@@ -90,6 +94,10 @@ const MAX_OPS_PER_10S_PER_CLIENT = 200;
 const OP_WINDOW_MS = 10_000;
 const PROCESSED_OP_TTL_MS = 5 * 60_000;
 
+const SNAPSHOT_OP_INTERVAL = 50;
+const SNAPSHOT_TIME_MS = 10_000;
+const SNAPSHOT_MIN_RETRY_MS = 5_000;
+
 
 function getConnectingIp(request: Request): string {
   // Cloudflare sets CF-Connecting-IP in production. Wrangler/local may not.
@@ -130,6 +138,14 @@ export class BoardRoom implements DurableObject {
 
 private boardSeq = 0;
 private boardState: WhiteboardState | null = null;
+private boardLoaded = false;
+private boardLoading: Promise<void> | null = null;
+
+// Snapshot persistence cadence.
+private opsSinceSnapshot = 0;
+private lastSnapshotPersistAt = 0;
+private lastSnapshotAttemptAt = 0;
+private snapshotPersisting: Promise<void> | null = null;
 
 // Idempotency: remember processed clientOpIds for a short TTL so retries don't duplicate edits.
 private processedOps = new Map<
@@ -228,7 +244,7 @@ private opRateBySocket = new WeakMap<WebSocket, { windowStart: number; count: nu
           
 // Ensure the authoritative state exists (Step 6). For now we start with an empty board state;
 // Step 7 will load snapshots from Supabase.
-this.ensureBoardState(boardId);
+await this.ensureLoaded(boardId);
 
 const joined: ServerToClientMessage = {
   type: "joined",
@@ -266,7 +282,7 @@ if (msg.type === "op") {
   }
 
   // Ensure we have an in-memory board state.
-  this.ensureBoardState(boardId);
+  await this.ensureLoaded(boardId);
 
   // Basic per-connection op rate limiting.
   if (!this.consumeOp(server)) {
@@ -326,8 +342,13 @@ if (msg.type === "op") {
     clientOpId: msg.clientOpId,
   };
   this.broadcastJson(out);
+
+  // Snapshot durability (Step 7): persist periodically.
+  this.opsSinceSnapshot += 1;
+  await this.maybePersistSnapshot(boardId);
   return;
 }
+
 
 if (msg.type === "presence") {
   const userKey = meta.userId ?? meta.guestId;
@@ -438,6 +459,122 @@ private getUsersForPresence() {
   }
 
   
+
+private async ensureLoaded(boardId: string): Promise<void> {
+  if (this.boardLoaded) return;
+
+  if (this.boardLoading) {
+    await this.boardLoading;
+    return;
+  }
+
+  this.boardLoading = (async () => {
+    // Fetch board info for metadata (title/type/timestamps).
+    const info = await fetchBoardInfo(this.env, boardId);
+    if (!info) {
+      // Board should exist (validateJoin checks), but fall back safely.
+      this.ensureBoardState(boardId);
+      this.boardLoaded = true;
+      this.lastSnapshotPersistAt = Date.now();
+      return;
+    }
+
+    const latest = await fetchLatestSnapshot(this.env, boardId);
+
+    if (latest && latest.snapshot_json && typeof latest.snapshot_json === "object") {
+      // We store the full WhiteboardState as snapshot_json.
+      const snap = latest.snapshot_json as any;
+      this.boardState = snap as WhiteboardState;
+      this.boardSeq = latest.seq;
+
+      // Ensure meta fields are sane.
+      if (this.boardState?.meta) {
+        this.boardState = {
+          ...this.boardState,
+          meta: {
+            ...this.boardState.meta,
+            id: boardId,
+            name: this.boardState.meta.name || info.title,
+          },
+          selectedObjectIds: [],
+        };
+      }
+    } else {
+      // No snapshot yet; create an empty board state based on DB metadata.
+      const meta: WhiteboardMeta = {
+        id: boardId,
+        name: info.title,
+        boardType: info.board_type ?? "advanced",
+        createdAt: info.created_at,
+        updatedAt: info.updated_at,
+      };
+      this.boardState = createEmptyWhiteboardState(meta);
+      this.boardSeq = info.snapshot_seq ?? 0;
+    }
+
+    this.boardLoaded = true;
+    this.lastSnapshotPersistAt = Date.now();
+  })();
+
+  try {
+    await this.boardLoading;
+  } finally {
+    this.boardLoading = null;
+  }
+}
+
+private shouldPersistSnapshot(): boolean {
+  if (!this.boardState) return false;
+  if (this.opsSinceSnapshot >= SNAPSHOT_OP_INTERVAL) return true;
+  if (this.opsSinceSnapshot > 0 && Date.now() - this.lastSnapshotPersistAt >= SNAPSHOT_TIME_MS) return true;
+  return false;
+}
+
+private sanitizeSnapshotState(state: WhiteboardState): WhiteboardState {
+  // Persist only durable board content; do not persist ephemeral selections or undo/redo history.
+  return {
+    ...state,
+    selectedObjectIds: [],
+    history: {
+      pastEvents: [],
+      futureEvents: [],
+    },
+  };
+}
+
+private async maybePersistSnapshot(boardId: string): Promise<void> {
+  if (!this.boardState) return;
+  if (!this.shouldPersistSnapshot()) return;
+
+  const now = Date.now();
+  if (now - this.lastSnapshotAttemptAt < SNAPSHOT_MIN_RETRY_MS) return;
+  this.lastSnapshotAttemptAt = now;
+
+  if (this.snapshotPersisting) {
+    // If a snapshot is already in-flight, don't start another.
+    return;
+  }
+
+  const seq = this.boardSeq;
+  const snapshotJson = this.sanitizeSnapshotState(this.boardState);
+
+  this.snapshotPersisting = (async () => {
+    await insertSnapshot(this.env, boardId, seq, snapshotJson);
+    await updateBoardSnapshotSeq(this.env, boardId, seq);
+  })();
+
+  try {
+    await this.snapshotPersisting;
+    this.lastSnapshotPersistAt = Date.now();
+    this.opsSinceSnapshot = 0;
+  } catch (e) {
+    // Don't crash the room if persistence fails; we'll retry later.
+    console.warn("Snapshot persist failed:", e);
+  } finally {
+    this.snapshotPersisting = null;
+  }
+}
+
 private ensureBoardState(boardId: string) {
   if (this.boardState) return;
   const meta: WhiteboardMeta = {

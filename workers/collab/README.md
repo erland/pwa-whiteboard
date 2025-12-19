@@ -49,3 +49,32 @@ ws.onopen = () => {
   }));
 };
 ```
+
+
+## Step 7: Snapshots (durability)
+
+This worker persists periodic snapshots to Supabase:
+
+- Reads latest snapshot from `whiteboard.board_snapshots` on first join.
+- Inserts a new snapshot every N ops or T seconds.
+- Updates `whiteboard.boards.snapshot_seq` to the latest persisted seq.
+
+### Required Supabase setup
+
+- The `whiteboard` schema and tables (`boards`, `board_snapshots`) must exist (from the `supabase-erland` migrations).
+- **Expose the `whiteboard` schema** in Supabase Dashboard: Settings → API → "Exposed schemas" so PostgREST can access it.
+
+### Local dev vars
+
+Create `workers/collab/.dev.vars` (do not commit):
+
+```
+SUPABASE_URL=https://<PROJECT_REF>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<SERVICE_ROLE_KEY>
+```
+
+Then run:
+
+```
+npm run worker:dev
+```

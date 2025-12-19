@@ -6,4 +6,6 @@
     "types": []
   },
   "include": ["./**/*.ts"]
+  ,
+  "exclude": ["./**/__tests__/**"]
 }

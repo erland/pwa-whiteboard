@@ -49,7 +49,7 @@ export function useBoardCollaboration({
   resetBoard,
   applyRemoteEvent,
 }: UseBoardCollaborationArgs): UseBoardCollaborationResult {
-  const baseUrl = (import.meta as any).env?.VITE_COLLAB_BASE_URL as string | undefined;
+  const baseUrl = (globalThis as any).__VITE_COLLAB_BASE_URL as string | undefined;
   const inviteToken = useMemo(() => getInviteTokenFromUrl(), []);
   const guestId = useMemo(() => getOrCreateGuestId(), []);
   const enabled = !!baseUrl && !!inviteToken && !!boardId;

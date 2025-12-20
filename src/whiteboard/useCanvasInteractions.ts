@@ -141,6 +141,7 @@ export type CanvasInteractionsParams = {
   /** Live interaction patch (drag/resize) that should NOT create an undo step. */
   onTransientObjectPatch: (objectId: ObjectId, patch: Partial<WhiteboardObject>) => void;
   onViewportChange: (patch: Partial<Viewport>) => void;
+  onCursorWorldMove?: (pos: { x: number; y: number }) => void;
   canvasWidth: number;
   canvasHeight: number;
 };
@@ -166,6 +167,7 @@ export function useCanvasInteractions({
   onUpdateObject,
   onTransientObjectPatch,
   onViewportChange,
+  onCursorWorldMove,
   canvasWidth,
   canvasHeight,
 }: CanvasInteractionsParams): CanvasInteractionsResult {
@@ -233,7 +235,9 @@ export function useCanvasInteractions({
     // Ignore non-left *mouse* buttons; don't block touch.
     if (evt.pointerType === 'mouse' && evt.button !== 0) return;
 
-    const pos = getCanvasPos(evt); // world coords
+    const pos = getCanvasPos(evt);
+    onCursorWorldMove?.(pos);
+
 
     // Drawing tools: delegate "what happens" to tool modules.
     if (activeTool !== 'select') {
@@ -366,7 +370,9 @@ export function useCanvasInteractions({
   };
 
   const handlePointerMove = (evt: React.PointerEvent<HTMLCanvasElement>) => {
-    const pos = getCanvasPos(evt); // world coords
+    const pos = getCanvasPos(evt);
+    onCursorWorldMove?.(pos);
+
 
     // Draft interaction is delegated to tool modules.
     if (draft) {
@@ -405,6 +411,7 @@ export function useCanvasInteractions({
 
   const handlePointerUp = (evt: React.PointerEvent<HTMLCanvasElement>) => {
     const pos = getCanvasPos(evt);
+    onCursorWorldMove?.(pos);
 
     // Draft completion is delegated to tool modules.
     if (draft) {
@@ -424,6 +431,8 @@ export function useCanvasInteractions({
 
   const handlePointerLeave = (evt: React.PointerEvent<HTMLCanvasElement>) => {
     const pos = getCanvasPos(evt);
+    onCursorWorldMove?.(pos);
+
 
     // Keep previous behavior:
     // - connector draft: cancel

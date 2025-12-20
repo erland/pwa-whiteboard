@@ -25,6 +25,7 @@ import { createClipboardFromSelection, pasteClipboard } from './clipboard';
 type WhiteboardAction =
   | { type: 'RESET_BOARD'; state: WhiteboardState }
   | { type: 'APPLY_EVENT'; event: BoardEvent }
+  | { type: 'APPLY_REMOTE_EVENT'; event: BoardEvent }
   | { type: 'UNDO' }
   | { type: 'REDO' }
   | { type: 'SET_VIEWPORT'; patch: Partial<Viewport> }
@@ -34,6 +35,7 @@ interface WhiteboardContextValue {
   state: WhiteboardState | null;
   clipboard: WhiteboardClipboardV1 | null;
   dispatchEvent: (event: BoardEvent) => void;
+  applyRemoteEvent: (event: BoardEvent) => void;
   /**
    * Can be called with:
    * - WhiteboardMeta → creates a fresh empty board
@@ -214,8 +216,8 @@ function reducer(state: WhiteboardState | null, action: WhiteboardAction): White
       const history = ensureHistory(state);
       const applied = applyEvent(state, enforcedEvent);
 
-      // We don't want viewport-only changes to affect undo/redo history.
-      if (enforcedEvent.type === 'viewportChanged') {
+      // We don't want viewport/selection-only changes to affect undo/redo history.
+      if (enforcedEvent.type === 'viewportChanged' || enforcedEvent.type === 'selectionChanged') {
         return {
           ...applied,
           history
@@ -231,6 +233,21 @@ function reducer(state: WhiteboardState | null, action: WhiteboardAction): White
         }
       };
     }
+
+
+    case 'APPLY_REMOTE_EVENT': {
+      if (!state) return state;
+
+      // Remote events are applied without affecting local undo/redo history.
+      const boardTypeDef = getBoardType(state.meta.boardType);
+      const enforcedEvent = enforcePolicyOnEvent(boardTypeDef, state, action.event);
+      if (!enforcedEvent) return state;
+
+      const history = ensureHistory(state);
+      const applied = applyEvent(state, enforcedEvent);
+      return { ...applied, history };
+    }
+
 
     case 'UNDO': {
       if (!state) return state;
@@ -381,6 +398,10 @@ export const WhiteboardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     dispatch({ type: 'APPLY_EVENT', event });
   };
 
+  const applyRemoteEvent = (event: BoardEvent) => {
+    dispatch({ type: 'APPLY_REMOTE_EVENT', event });
+  };
+
   const applyTransientObjectPatch = (objectId: ObjectId, patch: Partial<WhiteboardObject>) => {
     dispatch({ type: 'APPLY_TRANSIENT_OBJECT_PATCH', objectId, patch });
   };
@@ -473,6 +494,7 @@ export const WhiteboardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       state,
       clipboard,
       dispatchEvent,
+      applyRemoteEvent,
       resetBoard,
       undo,
       redo,

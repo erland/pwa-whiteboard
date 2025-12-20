@@ -290,7 +290,6 @@ class LocalStorageWhiteboardRepository implements WhiteboardRepository {
       const isQuota =
         typeof err === 'object' &&
         err !== null &&
-        // @ts-expect-error - DOMException name in browsers
         ((err as any).name === 'QuotaExceededError' || (err as any).code === 22);
 
       if (isQuota) {

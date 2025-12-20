@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { WhiteboardCanvas } from '../whiteboard/WhiteboardCanvas';
 
 import { BoardEditorHeader } from './boardEditor/BoardEditorHeader';
+import { RemoteCursorsOverlay } from './boardEditor/RemoteCursorsOverlay';
 import { HistoryAndViewPanel } from './boardEditor/HistoryAndViewPanel';
 import { ExportImportPanel } from './boardEditor/ExportImportPanel';
 import { ToolSelectorPanel } from './boardEditor/ToolSelectorPanel';
@@ -14,7 +15,8 @@ const CANVAS_WIDTH = 960;
 const CANVAS_HEIGHT = 540;
 
 export const BoardEditorPage: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+  const {
+id } = useParams<{ id: string }>();
 
   const {
     state,
@@ -57,10 +59,21 @@ export const BoardEditorPage: React.FC = () => {
     hasClipboard,
     copySelectionToClipboard,
     pasteFromClipboard,
-  } = useBoardEditor(id);
+
+    collab,
+    handleCursorWorldMove,
+} = useBoardEditor(id);
 
   // Derive board name from state (adjust if your meta shape differs)
   const boardName = state?.meta?.name ?? 'Untitled board';
+
+  const inviteLink = React.useMemo(() => {
+    if (!collab?.inviteToken) return undefined;
+    const url = new URL(window.location.href);
+    url.searchParams.set('invite', collab.inviteToken);
+    url.hash = '';
+    return url.toString();
+  }, [collab?.inviteToken]);
 
   const canCopy = (state?.selectedObjectIds?.length ?? 0) > 0;
   const canPaste = !!hasClipboard;
@@ -113,6 +126,12 @@ export const BoardEditorPage: React.FC = () => {
     <section className="page page-board-editor">
       {/* Pass boardName instead of boardId */}
       <BoardEditorHeader
+        collab={{
+          status: collab.enabled ? collab.status : 'disabled',
+          role: collab.role,
+          usersCount: collab.users?.length ?? 0,
+        }}
+        inviteLink={inviteLink}
         boardName={boardName}
         canDelete={canCopy}
         canCopy={canCopy}
@@ -180,7 +199,8 @@ export const BoardEditorPage: React.FC = () => {
 
           <div className="board-editor-canvas-wrapper">
             {state ? (
-              <WhiteboardCanvas
+              <div className="board-editor-canvas-stack">
+                <WhiteboardCanvas
                 width={CANVAS_WIDTH}
                 height={CANVAS_HEIGHT}
                 objects={state.objects}
@@ -196,7 +216,18 @@ export const BoardEditorPage: React.FC = () => {
                 onTransientObjectPatch={handleTransientObjectPatch}
                 onViewportChange={handleViewportChange}
                 onCanvasReady={setCanvasEl}
+                onCursorWorldMove={handleCursorWorldMove}
               />
+              {collab.enabled && collab.status === 'connected' && (
+                <RemoteCursorsOverlay
+                  width={CANVAS_WIDTH}
+                  height={CANVAS_HEIGHT}
+                  viewport={state.viewport}
+                  users={collab.users.filter((u) => u.userId !== collab.guestId)}
+                  presenceByUserId={collab.presenceByUserId}
+                />
+              )}
+              </div>
             ) : (
               <div className="board-editor-placeholder">
                 <p>Loading board…</p>

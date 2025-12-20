@@ -155,7 +155,7 @@ export const SHAPES: Record<WhiteboardObjectType, ShapeToolDefinition> = {
     getBoundingBox: (obj) => getRoundedRectBoundingBox(obj),
     resize: (obj, newBounds) => resizeBoxObjectByBounds(obj, newBounds),
     getPorts: (obj): ObjectPort[] =>
-      getRoundedRectPorts(obj).map((p) => ({ id: p.portId, point: p.point })),
+      getRoundedRectPorts(obj).map((p) => ({ portId: p.portId, point: p.point })),
     selectionCaps: roundedRectSelectionCapabilities,
     draft: {
       startDraft: (ctx: ToolPointerContext, pos: Point) =>

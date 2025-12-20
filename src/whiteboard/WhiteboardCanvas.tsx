@@ -36,6 +36,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = (props) => {
     onUpdateObject: props.onUpdateObject,
     onTransientObjectPatch: props.onTransientObjectPatch,
     onViewportChange: props.onViewportChange,
+    onCursorWorldMove: props.onCursorWorldMove,
     canvasWidth: props.width,
     canvasHeight: props.height,
   });

@@ -504,7 +504,10 @@ private async ensureLoaded(boardId: string): Promise<void> {
       const meta: WhiteboardMeta = {
         id: boardId,
         name: info.title,
-        boardType: info.board_type ?? "advanced",
+        boardType:
+          info.board_type === 'advanced' || info.board_type === 'freehand' || info.board_type === 'mindmap'
+            ? info.board_type
+            : 'advanced',
         createdAt: info.created_at,
         updatedAt: info.updated_at,
       };

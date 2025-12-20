@@ -8,6 +8,8 @@ import { useBoardPersistence } from './useBoardPersistence';
 import { useBoardPolicy } from './useBoardPolicy';
 import { useBoardClipboard } from './useBoardClipboard';
 import { useBoardMutations } from './useBoardMutations';
+import { useBoardCollaboration } from './useBoardCollaboration';
+import type { PresencePayload } from '../../../shared/protocol';
 
 export function useBoardEditor(id: string | undefined) {
   const {
@@ -15,6 +17,7 @@ export function useBoardEditor(id: string | undefined) {
     clipboard,
     resetBoard,
     dispatchEvent,
+    applyRemoteEvent,
     undo,
     redo,
     setViewport,
@@ -24,6 +27,37 @@ export function useBoardEditor(id: string | undefined) {
     clearClipboard,
   } = useWhiteboard();
   const [canvasEl, setCanvasEl] = useState<HTMLCanvasElement | null>(null);
+
+// ---- Collaboration (invite-based, realtime) ----
+const collab = useBoardCollaboration({
+  boardId: id,
+  resetBoard,
+  applyRemoteEvent,
+});
+
+const canSendOps = collab.enabled && collab.status === 'connected' && (collab.role === 'owner' || collab.role === 'editor');
+
+const dispatchOpEvent = (event: any) => {
+  if (canSendOps) {
+    collab.sendOp(event);
+    return;
+  }
+  dispatchEvent(event);
+};
+
+const dispatchEventWithLocalOnly = (event: any) => {
+  // Keep selection/viewport local-only (presence handles sharing).
+  if (event?.type === 'selectionChanged' || event?.type === 'viewportChanged') {
+    dispatchEvent(event);
+    return;
+  }
+  dispatchOpEvent(event);
+};
+
+const sendPresence = (presence: PresencePayload) => {
+  collab.sendPresence(presence);
+};
+
 
   // ---- Persistence (load/init + board type changes) ----
   const { setBoardType } = useBoardPersistence({ id, state, resetBoard });
@@ -52,7 +86,7 @@ export function useBoardEditor(id: string | undefined) {
     handleTransientObjectPatch,
   } = useBoardMutations({
     state,
-    dispatchEvent,
+    dispatchEvent: dispatchOpEvent,
     applyTransientObjectPatch,
   });
 
@@ -75,13 +109,12 @@ export function useBoardEditor(id: string | undefined) {
 
   const {
     zoomPercent,
-    handleViewportChange,
+    handleViewportChange: _handleViewportChange,
     handleZoomChange,
     handleFitView
   } = useBoardViewport({
     viewport: state?.viewport,
     setViewport,
-    applyTransientObjectPatch,
     objects: state?.objects,
     canvasWidth: logicalCanvasWidth,
     canvasHeight: logicalCanvasHeight
@@ -89,12 +122,12 @@ export function useBoardEditor(id: string | undefined) {
 
   const {
     selectedObjects,
-    handleSelectionChange,
+    handleSelectionChange: _handleSelectionChange,
     handleDeleteSelection,
     updateSelectionProp
   } = useBoardSelection({
     state,
-    dispatchEvent
+    dispatchEvent: dispatchEventWithLocalOnly,
   });
 
   const {
@@ -107,12 +140,39 @@ export function useBoardEditor(id: string | undefined) {
     state,
     canvasEl,
     resetBoard,
-    dispatchEvent,
+    dispatchEvent: dispatchOpEvent,
     setViewport
   });
 
   const canUndo = !!state && state.history.pastEvents.length > 0;
   const canRedo = !!state && state.history.futureEvents.length > 0;
+const handleSelectionChange = (selectedIds: string[]) => {
+  _handleSelectionChange(selectedIds);
+  // Broadcast as presence (not as ops)
+  if (collab.enabled) {
+    sendPresence({ selectionIds: selectedIds });
+  }
+};
+
+const handleViewportChange = (patch: any) => {
+  _handleViewportChange(patch);
+  if (collab.enabled && state?.viewport) {
+    const next = { ...state.viewport, ...patch };
+    sendPresence({
+      viewport: {
+        panX: next.offsetX ?? 0,
+        panY: next.offsetY ?? 0,
+        zoom: next.zoom ?? 1,
+      },
+    });
+  }
+};
+
+const handleCursorWorldMove = (pos: { x: number; y: number }) => {
+  if (!collab.enabled) return;
+  sendPresence({ cursor: { x: pos.x, y: pos.y } });
+};
+
 
   return {
     state,
@@ -139,7 +199,7 @@ export function useBoardEditor(id: string | undefined) {
     handleDeleteSelection,
     handleStrokeWidthChange,
     updateStrokeWidth,
-    handleViewportChange,
+    handleViewportChange: _handleViewportChange,
     zoomPercent,
     handleZoomChange,
     handleFitView,
@@ -149,6 +209,8 @@ export function useBoardEditor(id: string | undefined) {
     handleImportFileChange,
     selectedObjects,
     updateSelectionProp,
+    collab,
+    handleCursorWorldMove,
     canUndo,
     canRedo,
     undo,

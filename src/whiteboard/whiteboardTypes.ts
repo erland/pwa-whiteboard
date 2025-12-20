@@ -22,5 +22,7 @@ export interface WhiteboardCanvasProps {
   /** Live interaction patch (drag/resize) that should NOT create an undo step. */
   onTransientObjectPatch: (objectId: ObjectId, patch: Partial<WhiteboardObject>) => void;
   onViewportChange: (patch: Partial<Viewport>) => void;
+  /** Optional: track cursor position in world coordinates (for presence). */
+  onCursorWorldMove?: (pos: { x: number; y: number }) => void;
   onCanvasReady?: (canvas: HTMLCanvasElement | null) => void;
 }

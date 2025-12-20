@@ -9,6 +9,7 @@ import { ExportImportPanel } from './boardEditor/ExportImportPanel';
 import { ToolSelectorPanel } from './boardEditor/ToolSelectorPanel';
 import { ToolAndSelectionPanel } from './boardEditor/ToolAndSelectionPanel';
 import { BoardInfoPanel } from './boardEditor/BoardInfoPanel';
+import { SharePanel } from './boardEditor/SharePanel';
 import { useBoardEditor } from './hooks/useBoardEditor';
 
 const CANVAS_WIDTH = 960;
@@ -17,6 +18,8 @@ const CANVAS_HEIGHT = 540;
 export const BoardEditorPage: React.FC = () => {
   const {
 id } = useParams<{ id: string }>();
+
+  const boardId = id ?? '';
 
   const {
     state,
@@ -173,6 +176,9 @@ id } = useParams<{ id: string }>();
             fileInputRef={fileInputRef}
             onImportFileChange={handleImportFileChange}
           />
+
+          <SharePanel boardId={boardId} boardName={boardName} />
+
 
           {/* Board Info at the very bottom */}
           {state && (

@@ -301,33 +301,37 @@ Tests:
 
 ---
 
-## Step 11 — Deployment (Cloudflare Pages + Worker) + CI
+## Step 11 — Deployment (GitHub Pages frontend + Cloudflare Worker) + CI
 
-**Goal:** One-command deployments and reproducible environments.
+**Goal:** Keep the frontend on GitHub Pages (already in place) and deploy only the collaboration backend to Cloudflare, with repeatable CI.
 
-- Cloudflare Pages:
-  - build and deploy the frontend
-  - set environment variables for:
-    - Worker base URL
-    - Supabase URL/public anon key (client-side)
-- Cloudflare Worker:
-  - deploy via Wrangler
-  - set server-only secrets:
-    - Supabase service role key
-    - invite signing secret (if used)
+### Frontend: GitHub Pages (existing)
+- Build the web app with Vite and deploy to GitHub Pages using your existing workflow.
+- Ensure the app is configured for GitHub Pages hosting:
+  - Vite `base` is set correctly (e.g. `"/<repo>/"` when not using a custom domain).
+  - SPA routing fallback is handled (if you add routes beyond the root).
+- Configure **client-side** environment values at build time:
+  - Collaboration Worker base URL (public): e.g. `VITE_COLLAB_BASE_URL`
+  - Supabase URL + public anon key (public): e.g. `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
 
-CI (GitHub Actions):
-- `test` job: run unit tests
-- `build` job: build web
-- `deploy` jobs (optional):
-  - deploy worker on main branch
-  - deploy pages via Cloudflare integration
+### Backend: Cloudflare Worker (collab)
+- Deploy the Worker (and Durable Object) via Wrangler.
+- Configure **server-only** secrets in Cloudflare:
+  - Supabase service role key (server-only)
+  - Invite signing secret (if you use invite tokens)
+- Configure allowed origins / CORS rules to include your GitHub Pages origin (and any custom domain if applicable).
+
+### CI: GitHub Actions
+- Keep the current GitHub Pages workflow for the frontend (build + deploy).
+- Add a separate Worker deployment job/workflow:
+  - Run tests (shared + worker, as applicable)
+  - `wrangler deploy` on `main` (or on tags/releases)
+  - Use GitHub Secrets for Cloudflare credentials (API token, account id, etc.)
 
 Tests:
-- Smoke test in staging environment (optional but recommended).
+- Smoke test in a staging Worker environment (optional but recommended) before promoting to production.
 
 ---
-
 ## Step 12 — Polish & operational readiness
 
 **Goal:** Make it stable and pleasant to use.

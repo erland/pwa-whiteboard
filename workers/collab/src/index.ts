@@ -530,7 +530,7 @@ private async ensureLoaded(boardId: string): Promise<void> {
           meta: {
             ...this.boardState.meta,
             id: boardId,
-            name: this.boardState.meta.name || info.title,
+            name: (this.boardState.meta.name && this.boardState.meta.name !== 'Untitled board') ? this.boardState.meta.name : info.title,
           },
           selectedObjectIds: [],
         };

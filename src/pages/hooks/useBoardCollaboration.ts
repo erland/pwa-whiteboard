@@ -3,6 +3,7 @@ import type { BoardEvent } from '../../domain/types';
 import type { BoardRole, PresencePayload, PresenceUser } from '../../../shared/protocol';
 import { CollabClient, type CollabStatus } from '../../collab/CollabClient';
 import { getSupabaseClient, isSupabaseConfigured } from '../../supabase/supabaseClient';
+import { getBoardsRepository } from '../../infrastructure/localStorageBoardsRepository';
 
 function getInviteTokenFromUrl(): string | null {
   if (typeof window === 'undefined') return null;
@@ -34,6 +35,7 @@ function getOrCreateGuestId(): string {
 
 export type UseBoardCollaborationArgs = {
   boardId: string | undefined;
+  boardMetaId?: string;
   boardName?: string;
   resetBoard: (next: any) => void;
   applyRemoteEvent: (event: BoardEvent) => void;
@@ -54,6 +56,7 @@ export type UseBoardCollaborationResult = {
 
 export function useBoardCollaboration({
   boardId,
+  boardMetaId,
   boardName,
   resetBoard,
   applyRemoteEvent,
@@ -112,22 +115,61 @@ export function useBoardCollaboration({
     return null;
   }, [inviteToken, supabaseJwt]);
 
+// Ensure the board exists in Supabase before the owner joins collab.
+// Important: do NOT flip boardEnsured back to false just because the title becomes available later;
+// otherwise React effect cleanups will close the websocket mid-connect.
+const ensuredBoardIdRef = useRef<string | null>(null);
 
-  // Ensure the board exists in Supabase before the owner joins collab.
-  useEffect(() => {
+useEffect(() => {
   let cancelled = false;
-  async function run() {
-    // Invite-based sessions don't create boards in Supabase.
-    if (!boardId) { setBoardEnsured(false); return; }
-    if (inviteToken) { setBoardEnsured(true); return; }
-    if (!isSupabaseConfigured()) { setBoardEnsured(true); return; }
+
+  async function getBestLocalTitle(id: string): Promise<string | null> {
+    try {
+      if (boardName && boardName.trim()) return boardName.trim();
+      const repo = getBoardsRepository();
+      const boards = await repo.listBoards();
+      const found = boards.find((b) => b.id === id);
+      if (found?.name && found.name.trim()) return found.name.trim();
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+
+  async function ensureRow() {
+    if (!boardId) {
+      ensuredBoardIdRef.current = null;
+      setBoardEnsured(false);
+      return;
+    }
+    if (inviteToken) {
+      // Invite-based sessions don't create boards in Supabase.
+      ensuredBoardIdRef.current = boardId;
+      setBoardEnsured(true);
+      return;
+    }
+    if (!isSupabaseConfigured()) {
+      // No Supabase configured => can't ensure; treat as ensured so local-only can still work.
+      ensuredBoardIdRef.current = boardId;
+      setBoardEnsured(true);
+      return;
+    }
+
+    // Only reset when the boardId changes.
+    if (ensuredBoardIdRef.current !== boardId) {
+      setBoardEnsured(false);
+    }
+
     const client = getSupabaseClient();
     const { data } = await client.auth.getSession();
     const sess = data.session;
-    if (!sess) { setBoardEnsured(false); return; }
+    if (!sess) {
+      setBoardEnsured(false);
+      return;
+    }
 
-    // Upsert board row (owner-only) so the Worker can find it during join.
-    const title = (boardName && boardName.trim()) ? boardName.trim() : 'Untitled board';
+    const title = (await getBestLocalTitle(boardId)) ?? 'Untitled board';
+
     const { error } = await client
       .schema('whiteboard')
       .from('boards')
@@ -143,22 +185,56 @@ export function useBoardCollaboration({
     if (cancelled) return;
     if (error) {
       console.error('Failed to ensure board exists in Supabase', error);
-      // Don't hard-fail collaboration; the Worker might still allow join if it creates the row.
-      setBoardEnsured(true);
+      setErrorText(`Supabase ensure failed: ${error.message ?? String(error)}`);
+      setBoardEnsured(false);
       return;
     }
+
+    ensuredBoardIdRef.current = boardId;
     setBoardEnsured(true);
   }
 
-  // Reset ensure status when board changes.
-  setBoardEnsured(false);
-  run().catch((err) => {
+  ensureRow().catch((err) => {
     console.error('Failed to ensure board exists in Supabase', err);
-    setBoardEnsured(true);
+    setErrorText(`Supabase ensure failed: ${String(err)}`);
+    setBoardEnsured(false);
   });
 
-  return () => { cancelled = true; };
-  }, [boardId, boardName, inviteToken]);
+  return () => {
+    cancelled = true;
+  };
+}, [boardId, inviteToken, boardName]);
+
+// If the owner renames a board later, update the title in Supabase without interrupting the websocket.
+useEffect(() => {
+  let cancelled = false;
+  async function pushRename() {
+    if (!boardId) return;
+    if (inviteToken) return;
+    if (!boardEnsured) return;
+    if (!isSupabaseConfigured()) return;
+    const title = boardName?.trim();
+    if (!title) return;
+
+    const client = getSupabaseClient();
+    const { data } = await client.auth.getSession();
+    const sess = data.session;
+    if (!sess) return;
+
+    const { error } = await client
+      .schema('whiteboard')
+      .from('boards')
+      .update({ title })
+      .eq('id', boardId);
+
+    if (cancelled) return;
+    if (error) console.error('Failed to update board title in Supabase', error);
+  }
+  pushRename().catch((err) => console.error('Failed to update board title in Supabase', err));
+  return () => {
+    cancelled = true;
+  };
+}, [boardId, boardName, boardEnsured, inviteToken]);
   useEffect(() => {
     if (!cooldownUntil) return;
     const now = Date.now();
@@ -177,9 +253,15 @@ export function useBoardCollaboration({
     }
 
     // Owner-mode requires the board row to exist in Supabase before we join.
-    if (auth.kind === 'owner' && !boardEnsured) {
-      setStatus('connecting');
-      return;
+    if (auth.kind === 'owner') {
+      if (!boardEnsured) {
+        setStatus('connecting');
+        return;
+      }
+      if (boardMetaId && boardMetaId !== boardId) {
+        setStatus('connecting');
+        return;
+      }
     }
 
     // Cooldown after rate-limit errors (prevents reconnect storms)
@@ -247,7 +329,7 @@ export function useBoardCollaboration({
         clientKeyRef.current = null;
       }
     };
-  }, [enabled, baseUrl, auth, boardId, guestId, cooldownUntil, boardEnsured]);
+  }, [enabled, baseUrl, auth, boardId, boardMetaId, guestId, cooldownUntil, boardEnsured]);
 
   const sendOp = (event: BoardEvent) => {
     if (!enabled || status !== 'connected' || !boardId) return;

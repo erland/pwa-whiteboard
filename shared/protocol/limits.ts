@@ -13,6 +13,7 @@ export const MAX_MESSAGE_BYTES = 64 * 1024; // 64 KiB
 export const MAX_BOARD_ID_CHARS = 128;
 export const MAX_USER_ID_CHARS = 128;
 export const MAX_CLIENT_OP_ID_CHARS = 128;
+export const MAX_OBJECT_ID_CHARS = 128;
 
 // Invite tokens / auth tokens can be relatively long (JWTs, etc.).
 // Keep it bounded to avoid accidental megabyte payloads.
@@ -25,4 +26,10 @@ export const MAX_SELECTION_IDS = 200;
 
 // Content-ish limits (these are *protocol* limits; domain may be stricter later).
 export const MAX_TEXT_CHARS = 10_000;
-export const MAX_STROKE_POINTS = 50_000;
+
+// Freehand strokes can get large quickly; keep it high enough for real use but bounded.
+// Note: MAX_MESSAGE_BYTES will usually be the limiting factor.
+export const MAX_STROKE_POINTS = 5_000;
+
+// Guardrail against memory abuse over time (server-side should enforce too).
+export const MAX_OBJECTS_PER_BOARD = 20_000;

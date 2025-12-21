@@ -1,6 +1,7 @@
-import { MAX_MESSAGE_BYTES } from "../../../shared/protocol/limits";
+import { MAX_MESSAGE_BYTES, MAX_OBJECTS_PER_BOARD } from "../../../shared/protocol/limits";
 import {
   parseAndValidateClientMessage,
+  utf8ByteLength,
   type ClientJoinMessage,
   type ClientToServerMessage,
   type ServerToClientMessage,
@@ -118,6 +119,8 @@ const JOIN_TIMEOUT_MS = 10_000;
 const MAX_JOIN_ATTEMPTS_PER_MINUTE_PER_IP = 30;
 const MAX_OPS_PER_10S_PER_CLIENT = 200;
 const OP_WINDOW_MS = 10_000;
+const MAX_PRESENCE_PER_10S_PER_CLIENT = 100;
+const PRESENCE_WINDOW_MS = 10_000;
 const PROCESSED_OP_TTL_MS = 5 * 60_000;
 
 const SNAPSHOT_OP_INTERVAL = 50;
@@ -185,6 +188,9 @@ private presenceByUserId = new Map<string, unknown>();
 // Simple per-connection op rate limiting
 private opRateBySocket = new WeakMap<WebSocket, { windowStart: number; count: number }>();
 
+// Simple per-connection presence rate limiting
+private presenceRateBySocket = new WeakMap<WebSocket, { windowStart: number; count: number }>();
+
   constructor(private state: DurableObjectState, private env: Env) {}
 
   async fetch(request: Request): Promise<Response> {
@@ -221,7 +227,7 @@ private opRateBySocket = new WeakMap<WebSocket, { windowStart: number; count: nu
       const data = evt?.data;
 
       // Basic payload size guard (approx).
-      if (typeof data === "string" && data.length > MAX_MESSAGE_BYTES) {
+      if (typeof data === "string" && utf8ByteLength(data) > MAX_MESSAGE_BYTES) {
         closeWithError(server, boardId, "Message too large", 1009);
         return;
       }
@@ -289,6 +295,7 @@ const joined: ServerToClientMessage = {
 
           return;
         } catch (e: any) {
+          this.recordJoinFailure(ip);
           closeWithError(server, boardId, e?.message ?? "Join rejected");
           return;
         }
@@ -296,6 +303,12 @@ const joined: ServerToClientMessage = {
 
       
 // Already joined: handle ops and presence with authoritative sequencing (Step 6).
+// Security hardening: ensure message boardId matches room boardId.
+if ((msg as any).boardId && (msg as any).boardId !== boardId) {
+  closeWithError(server, boardId, "BoardId mismatch");
+  return;
+}
+
 if (msg.type === "op") {
   if (meta.role === "viewer") {
     const err: ServerToClientMessage = {
@@ -310,6 +323,31 @@ if (msg.type === "op") {
 
   // Ensure we have an in-memory board state.
   await this.ensureLoaded(boardId);
+
+  // Guardrail: prevent unbounded growth over time.
+  if ((msg.op as any)?.type === 'objectCreated') {
+    const incomingObjId = (msg.op as any)?.payload?.object?.id as string | undefined;
+    if (this.boardState!.objects.length >= MAX_OBJECTS_PER_BOARD) {
+      const err: ServerToClientMessage = {
+        type: 'error',
+        boardId,
+        code: 'forbidden',
+        message: 'Board is too large to accept more objects',
+      };
+      sendJson(server, err);
+      return;
+    }
+    if (incomingObjId && this.boardState!.objects.some((o) => o.id === incomingObjId)) {
+      const err: ServerToClientMessage = {
+        type: 'error',
+        boardId,
+        code: 'forbidden',
+        message: 'Duplicate object id',
+      };
+      sendJson(server, err);
+      return;
+    }
+  }
 
   // Basic per-connection op rate limiting.
   if (!this.consumeOp(server)) {
@@ -343,13 +381,26 @@ if (msg.type === "op") {
 
   const authorId = meta.userId ?? meta.guestId ?? "unknown";
 
-  // Assign authoritative order.
-  this.boardSeq += 1;
-  const seq = this.boardSeq;
+// Assign authoritative order.
+// NOTE: we increment seq only after we are sure we can apply the op.
+const op = msg.op as BoardEvent;
+let nextState: WhiteboardState;
+try {
+  nextState = applyEvent(this.boardState!, op);
+} catch {
+  const err: ServerToClientMessage = {
+    type: "error",
+    boardId,
+    code: "forbidden",
+    message: "Op rejected",
+  };
+  sendJson(server, err);
+  return;
+}
 
-  // Apply to authoritative state.
-  const op = msg.op as BoardEvent;
-  this.boardState = applyEvent(this.boardState!, op);
+this.boardSeq += 1;
+const seq = this.boardSeq;
+this.boardState = nextState;
 
   // Remember for idempotency.
   this.processedOps.set(msg.clientOpId, {
@@ -378,6 +429,18 @@ if (msg.type === "op") {
 
 
 if (msg.type === "presence") {
+  // Basic per-connection presence rate limiting.
+  if (!this.consumePresence(server)) {
+    const err: ServerToClientMessage = {
+      type: "error",
+      boardId,
+      code: "rate_limited",
+      message: "Too many presence updates; slow down",
+    };
+    sendJson(server, err);
+    return;
+  }
+
   const userKey = meta.userId ?? meta.guestId;
   if (userKey) {
     this.presenceByUserId.set(userKey, msg.presence);
@@ -638,6 +701,20 @@ private consumeOp(ws: WebSocket): boolean {
   cur.count += 1;
   return true;
 }
+
+private consumePresence(ws: WebSocket): boolean {
+  const now = Date.now();
+  const cur = this.presenceRateBySocket.get(ws);
+  if (!cur || now - cur.windowStart >= PRESENCE_WINDOW_MS) {
+    this.presenceRateBySocket.set(ws, { windowStart: now, count: 1 });
+    return true;
+  }
+  if (cur.count >= MAX_PRESENCE_PER_10S_PER_CLIENT) return false;
+  cur.count += 1;
+  return true;
+}
+
+
 
 private gcProcessedOps() {
   const cutoff = Date.now() - PROCESSED_OP_TTL_MS;

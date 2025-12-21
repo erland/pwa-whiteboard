@@ -38,7 +38,7 @@ describe('protocol validation', () => {
         boardId: 'b',
         type: 'viewportChanged',
         timestamp: '2025-01-01T00:00:00.000Z',
-        payload: { viewport: { x: 0 } },
+        payload: { viewport: { offsetX: 0 } },
       },
     });
     expect(res.ok).toBe(true);
@@ -109,6 +109,50 @@ test('validates server joined', () => {
     });
     expect(res.ok).toBe(true);
   });
+
+
+test('rejects objectCreated with too-long text', () => {
+  const longText = 'a'.repeat(10001);
+  const msg = {
+    type: 'op',
+    boardId: 'board-1',
+    clientOpId: 'client-op-2',
+    baseSeq: 0,
+    op: {
+      id: 'event-2',
+      boardId: 'board-1',
+      type: 'objectCreated',
+      timestamp: new Date().toISOString(),
+      payload: {
+        object: {
+          id: 'obj-2',
+          type: 'text',
+          x: 0,
+          y: 0,
+          text: longText,
+          fontSize: 16,
+          textColor: '#111111',
+        },
+      },
+    },
+  };
+
+  const res = validateClientToServerMessage(msg as any);
+  expect(res.ok).toBe(false);
+});
+
+test('rejects malformed op payload cleanly', () => {
+  const raw = JSON.stringify({
+    type: 'op',
+    boardId: 'b',
+    clientOpId: 'c1',
+    baseSeq: 0,
+    op: { id: 'e1', boardId: 'b', type: 'objectCreated', timestamp: 't', payload: { object: 123 } },
+  });
+  const res = parseAndValidateClientMessage(raw);
+  expect(res.ok).toBe(false);
+});
+
 
   test('validates parseAndValidateClientMessage with byte limit', () => {
     const raw = JSON.stringify({ type: 'ping', t: 123 });

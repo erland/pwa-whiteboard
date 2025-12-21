@@ -323,10 +323,47 @@ useEffect(() => {
     clientRef.current?.sendOp(event, boardId);
   };
 
-  const sendPresence = (presence: PresencePayload) => {
-    if (!enabled || status !== 'connected' || !boardId) return;
-    clientRef.current?.sendPresence(boardId, presence);
-  };
+// Throttle presence to avoid spamming the server (and to play nicely with server-side rate limits).
+const PRESENCE_THROTTLE_MS = 120;
+const pendingPresenceRef = useRef<PresencePayload | null>(null);
+const presenceTimerRef = useRef<number | null>(null);
+const lastPresenceSentAtRef = useRef<number>(0);
+
+const flushPresence = () => {
+  presenceTimerRef.current = null;
+  if (!enabled || status !== 'connected' || !boardId) return;
+
+  const pending = pendingPresenceRef.current;
+  if (!pending) return;
+
+  const now = Date.now();
+  const elapsed = now - lastPresenceSentAtRef.current;
+  if (elapsed < PRESENCE_THROTTLE_MS) {
+    presenceTimerRef.current = window.setTimeout(flushPresence, PRESENCE_THROTTLE_MS - elapsed) as any;
+    return;
+  }
+
+  pendingPresenceRef.current = null;
+  lastPresenceSentAtRef.current = now;
+  clientRef.current?.sendPresence(boardId, pending);
+
+  // If something arrived while we sent (rare), schedule another tick.
+  if (pendingPresenceRef.current && !presenceTimerRef.current) {
+    presenceTimerRef.current = window.setTimeout(flushPresence, PRESENCE_THROTTLE_MS) as any;
+  }
+};
+
+const sendPresence = (presence: PresencePayload) => {
+  if (!enabled || status !== 'connected' || !boardId) return;
+
+  // Merge presence updates (latest wins).
+  pendingPresenceRef.current = { ...(pendingPresenceRef.current ?? {}), ...(presence ?? {}) };
+
+  if (!presenceTimerRef.current) {
+    presenceTimerRef.current = window.setTimeout(flushPresence, PRESENCE_THROTTLE_MS) as any;
+  }
+};
+
 
   return {
     enabled,

@@ -28,7 +28,14 @@ export function generateInviteToken(): string {
 
 export function buildInviteUrl(inviteToken: string): string {
   const url = new URL(window.location.href);
-  url.searchParams.set('invite', inviteToken);
-  url.hash = '';
+
+  // Security: keep the invite token out of the query string so it won't be sent as part of referrers.
+  // Use fragment form: .../boards/<id>#invite=<TOKEN>
+  url.searchParams.delete('invite');
+
+  const baseHash = '';
+  url.hash = baseHash;
+  url.hash = `invite=${encodeURIComponent(inviteToken)}`;
+
   return url.toString();
 }

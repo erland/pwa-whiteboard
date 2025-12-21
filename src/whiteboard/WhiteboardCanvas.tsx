@@ -146,8 +146,9 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = (props) => {
       ref={canvasRef}
       className="whiteboard-canvas"
       style={{
-        width: '100%',
-        height: 'auto',
+        width: props.width,
+        height: props.height,
+        display: 'block',
         touchAction: 'none',
       }}
       onPointerDown={handlePointerDownReact}

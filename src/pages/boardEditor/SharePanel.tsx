@@ -1,6 +1,10 @@
 import React from 'react';
-import { getSupabaseClient, isSupabaseConfigured } from '../../supabase/getSupabaseClient';
+import { useNavigate } from 'react-router-dom';
+import { getSupabaseClient, isSupabaseConfigured } from '../../supabase/supabaseClient';
 import { buildInviteUrl, generateInviteToken, sha256Hex } from '../../share/inviteTokens';
+import type { WhiteboardMeta, WhiteboardState } from '../../domain/types';
+import { createEmptyWhiteboardState } from '../../domain/whiteboardState';
+import { getWhiteboardRepository } from '../../infrastructure/localStorageWhiteboardRepository';
 
 type InviteRole = 'viewer' | 'editor';
 
@@ -27,6 +31,46 @@ function computeExpiresAt(preset: ExpiresPreset): string | null {
   return now.toISOString();
 }
 
+
+const BOARDS_INDEX_KEY = 'pwa-whiteboard.boardsIndex';
+
+function isUuidLike(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+}
+
+function newUuid(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return (crypto as any).randomUUID() as string;
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+function readBoardsIndex(): WhiteboardMeta[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(BOARDS_INDEX_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as WhiteboardMeta[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeBoardsIndex(index: WhiteboardMeta[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(BOARDS_INDEX_KEY, JSON.stringify(index));
+  } catch {
+    // ignore
+  }
+}
+
+
 async function safeCopy(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);
@@ -50,6 +94,18 @@ async function safeCopy(text: string): Promise<boolean> {
 }
 
 export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) => {
+  const navigate = useNavigate();
+  const boardIdIsUuid = isUuidLike(boardId);
+
+
+const getAuthRedirectTo = () => {
+  // In dev BASE_URL is usually "/", in GitHub Pages it's "/pwa-whiteboard/".
+  const base = ((globalThis as any).__VITE_BASE_URL as string | undefined) ?? '/';
+  const origin = window.location.origin;
+  // Send user back to the current board route so Share panel reflects the session immediately.
+  return new URL(window.location.pathname + window.location.search + window.location.hash, origin).toString();
+};
+
   const [email, setEmail] = React.useState('');
   const [sessionEmail, setSessionEmail] = React.useState<string | null>(null);
   const [authLoading, setAuthLoading] = React.useState(false);
@@ -72,6 +128,52 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
 
   const supabaseReady = isSupabaseConfigured();
 
+  async function migrateBoardIdToUuid(): Promise<void> {
+    try {
+      setMessage(null);
+      const nextId = newUuid();
+
+      const index = readBoardsIndex();
+      const meta = index.find((m) => m.id === boardId);
+      if (!meta) {
+        setMessage('Could not migrate: board metadata not found.');
+        return;
+      }
+
+      const repo = getWhiteboardRepository();
+      const oldState = await repo.loadBoard(boardId);
+
+      const now = new Date().toISOString();
+      const nextMeta: WhiteboardMeta = { ...meta, id: nextId, updatedAt: now };
+
+      const base = createEmptyWhiteboardState(nextMeta);
+      const nextState: WhiteboardState = {
+        ...base,
+        objects: oldState?.objects ?? [],
+        viewport: oldState?.viewport ?? base.viewport,
+        selectedObjectIds: [],
+        history: base.history,
+      };
+
+      await repo.saveBoard(nextId, nextState);
+
+      const nextIndex = index.filter((m) => m.id !== boardId).concat(nextMeta);
+      writeBoardsIndex(nextIndex);
+      try {
+        window.localStorage.removeItem('pwa-whiteboard.board.' + boardId);
+      } catch {
+        // ignore
+      }
+
+      navigate(`/boards/${nextId}${window.location.search}${window.location.hash}`, { replace: true });
+      setMessage('Migrated board to a shareable ID. You can now create invite links.');
+    } catch (err) {
+      console.error(err);
+      setMessage('Could not migrate board id. See console for details.');
+    }
+  }
+
+
   const refreshAuthAndInvites = React.useCallback(async () => {
     if (!supabaseReady) return;
     setMessage(null);
@@ -83,6 +185,11 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
     setSessionEmail(sess?.user?.email ?? null);
 
     if (sess) {
+      if (!boardIdIsUuid) {
+        setMessage('This board uses a local-only id and cannot be shared yet. Click "Migrate to shareable board" to create a UUID-based board id.');
+        return;
+      }
+
       // Ensure board exists in Supabase for this boardId (and is owned by the user)
       const { data: existing, error: selErr } = await client
         .schema('whiteboard')
@@ -100,14 +207,22 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
         const { error: insErr } = await client
           .schema('whiteboard')
           .from('boards')
-          .insert({
-            id: boardId,
-            owner_user_id: sess.user.id,
-            title: boardName || 'Board',
-          });
+          .upsert(
+            {
+              id: boardId,
+              owner_user_id: sess.user.id,
+              title: boardName || 'Board',
+            },
+            { onConflict: 'id', ignoreDuplicates: true }
+          );
         if (insErr) {
-          setMessage(`Could not create board in Supabase: ${insErr.message}`);
-          return;
+          // If two refreshes race, we may attempt to create the same row twice.
+          // Treat duplicate-key as success.
+          const msg = insErr.message || '';
+          if (!msg.includes('duplicate key') && !msg.includes('boards_pkey')) {
+            setMessage(`Could not create board in Supabase: ${insErr.message}`);
+            return;
+          }
         }
       }
 
@@ -139,7 +254,7 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
   React.useEffect(() => {
     refreshAuthAndInvites().catch(() => void 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boardId]);
+  }, [boardId, boardName, supabaseReady, refreshAuthAndInvites]);
 
   const signInWithEmail = async () => {
     setMessage(null);
@@ -279,6 +394,18 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
               <button type="button" className="tool-button" onClick={signOut}>
                 Sign out
               </button>
+
+{!boardIdIsUuid && (
+  <div style={{ marginTop: 8 }}>
+    <div className="muted" style={{ marginBottom: 6 }}>
+      This board id is local-only and can’t be shared. Migrate it to a UUID-based id to enable invites.
+    </div>
+    <button type="button" className="tool-button" onClick={migrateBoardIdToUuid}>
+      Migrate to shareable board
+    </button>
+  </div>
+)}
+
             </span>
           ) : (
             <span className="inline-auth">

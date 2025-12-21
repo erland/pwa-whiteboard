@@ -5,6 +5,7 @@ declare global {
   var __VITE_SUPABASE_URL: string | undefined;
   var __VITE_SUPABASE_ANON_KEY: string | undefined;
   var __VITE_COLLAB_BASE_URL: string | undefined;
+  var __VITE_BASE_URL: string | undefined;
 }
 
 export {};

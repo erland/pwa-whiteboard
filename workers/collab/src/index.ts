@@ -25,6 +25,32 @@ import {
   sha256Hex,
 } from "./supabase";
 
+
+function normalizeInviteToken(raw: string): string {
+  let t = (raw ?? '').trim();
+
+  // If someone accidentally passed a full URL, extract ?invite=...
+  try {
+    if (t.startsWith('http://') || t.startsWith('https://')) {
+      const u = new URL(t);
+      const q = u.searchParams.get('invite');
+      if (q) t = q;
+      // Also support #invite=...
+      const h = u.hash?.startsWith('#') ? u.hash.slice(1) : u.hash;
+      const m = /(?:^|&)invite=([^&]+)/.exec(h || '');
+      if (!q && m?.[1]) t = decodeURIComponent(m[1]);
+    }
+  } catch {
+    // ignore
+  }
+
+  // Support raw "invite=TOKEN"
+  if (t.startsWith('invite=')) {
+    t = decodeURIComponent(t.slice('invite='.length));
+  }
+  return t.trim();
+}
+
 /**
  * Environment bindings for the collaboration worker.
  * In Cloudflare, Durable Objects are bound via wrangler.toml [[durable_objects.bindings]].
@@ -220,14 +246,15 @@ private opRateBySocket = new WeakMap<WebSocket, { windowStart: number; count: nu
           return;
         }
 
-        // coarse join rate limit per ip
-        if (!this.consumeJoinAttempt(ip)) {
+        // coarse join rate limit per ip (counts only failed joins; reset on success)
+        if (!this.allowJoin(ip)) {
           closeWithError(server, boardId, "Too many join attempts; try again later");
           return;
         }
 
         try {
           const authResult = await this.validateJoin(msg, boardId);
+          this.clearJoinFailures(ip);
           clearTimeout(joinTimeout);
 
           const updated: ClientMeta = {
@@ -446,17 +473,26 @@ private getUsersForPresence() {
 }
 
 
-  private consumeJoinAttempt(ip: string): boolean {
-    const now = Date.now();
-    const rec = this.joinAttemptsByIp.get(ip);
-    if (!rec || now >= rec.resetAt) {
-      this.joinAttemptsByIp.set(ip, { count: 1, resetAt: now + 60_000 });
-      return true;
-    }
-    rec.count += 1;
-    if (rec.count > MAX_JOIN_ATTEMPTS_PER_MINUTE_PER_IP) return false;
-    return true;
+  private allowJoin(ip: string): boolean {
+  const now = Date.now();
+  const rec = this.joinAttemptsByIp.get(ip);
+  if (!rec || now >= rec.resetAt) return true;
+  return rec.count < MAX_JOIN_ATTEMPTS_PER_MINUTE_PER_IP;
+}
+
+private recordJoinFailure(ip: string): void {
+  const now = Date.now();
+  const rec = this.joinAttemptsByIp.get(ip);
+  if (!rec || now >= rec.resetAt) {
+    this.joinAttemptsByIp.set(ip, { count: 1, resetAt: now + 60_000 });
+    return;
   }
+  rec.count += 1;
+}
+
+private clearJoinFailures(ip: string): void {
+  this.joinAttemptsByIp.delete(ip);
+}
 
   
 
@@ -656,7 +692,7 @@ private async validateJoin(msg: ClientJoinMessage, boardId: string): Promise<{
 
     if (msg.auth.kind === "invite") {
       // For now we store and validate invite tokens by hashing them with SHA-256 hex.
-      const tokenHash = await sha256Hex(msg.auth.inviteToken);
+      const tokenHash = await sha256Hex(normalizeInviteToken(msg.auth.inviteToken));
       const invite = await fetchInviteByTokenHash(this.env, boardId, tokenHash);
       if (!invite) throw new Error("Invalid invite token");
       if (invite.revoked_at) throw new Error("Invite revoked");

@@ -15,7 +15,10 @@ export async function fetchSupabaseUserFromJwt(env: Env, jwt: string): Promise<S
       "authorization": `Bearer ${jwt}`,
     },
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`Invite lookup failed (${res.status}): ${txt.slice(0, 200)}`);
+  }
   const data = await res.json() as any;
   if (!data || typeof data.id !== "string") return null;
   return { id: data.id };
@@ -38,7 +41,10 @@ export async function fetchBoardOwner(env: Env, boardId: string): Promise<BoardO
       "accept-profile": "whiteboard",
     },
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`Invite lookup failed (${res.status}): ${txt.slice(0, 200)}`);
+  }
   const rows = await res.json() as any[];
   if (!Array.isArray(rows) || rows.length === 0) return null;
   const r = rows[0];
@@ -67,7 +73,10 @@ export async function fetchInviteByTokenHash(env: Env, boardId: string, tokenHas
       "accept-profile": "whiteboard",
     },
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`Invite lookup failed (${res.status}): ${txt.slice(0, 200)}`);
+  }
   const rows = await res.json() as any[];
   if (!Array.isArray(rows) || rows.length === 0) return null;
   const r = rows[0];
@@ -104,7 +113,10 @@ export async function fetchBoardInfo(env: Env, boardId: string): Promise<BoardIn
       "accept-profile": "whiteboard",
     },
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`Invite lookup failed (${res.status}): ${txt.slice(0, 200)}`);
+  }
   const rows = (await res.json()) as any[];
   if (!Array.isArray(rows) || rows.length === 0) return null;
   const r = rows[0];
@@ -140,7 +152,10 @@ export async function fetchLatestSnapshot(env: Env, boardId: string): Promise<La
       "accept-profile": "whiteboard",
     },
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`Invite lookup failed (${res.status}): ${txt.slice(0, 200)}`);
+  }
   const rows = (await res.json()) as any[];
   if (!Array.isArray(rows) || rows.length === 0) return null;
   const r = rows[0];

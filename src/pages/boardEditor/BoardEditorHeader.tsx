@@ -5,6 +5,7 @@ type CollabInfo = {
   status: 'disabled' | 'idle' | 'connecting' | 'connected' | 'error' | 'closed';
   role?: BoardRole;
   usersCount?: number;
+  errorText?: string;
 };
 
 type BoardEditorHeaderProps = {
@@ -45,6 +46,13 @@ export const BoardEditorHeader: React.FC<BoardEditorHeaderProps> = ({
             : 'Collab: disabled';
 
 
+  const labelWithError =
+    (status === 'error' || status === 'closed') && collab?.errorText
+      ? `${label} (${collab.errorText})`
+      : label;
+
+
+
 
 const [inviteCopied, setInviteCopied] = React.useState(false);
 
@@ -80,9 +88,9 @@ const copyInviteLink = async () => {
 
       <div className="board-editor-actions">
         {showBadge && (
-          <span className="collab-badge" data-status={status} title={label}>
+          <span className="collab-badge" data-status={status} title={labelWithError}>
             <span className="collab-dot" />
-            <span>{label}</span>
+            <span>{labelWithError}</span>
           </span>
         )}
 

@@ -5,13 +5,12 @@ const BOARDS_INDEX_KEY = 'pwa-whiteboard.boardsIndex';
 const BOARD_STATE_PREFIX = 'pwa-whiteboard.board.';
 
 function generateId(): string {
-  // Simple unique-ish id, good enough for local single-user usage.
-  return (
-    'b_' +
-    Math.random().toString(16).slice(2) +
-    '_' +
-    Date.now().toString(16)
-  );
+  // Use UUIDs so boards can be referenced server-side (Supabase uses uuid primary keys).
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return (crypto as any).randomUUID() as string;
+  }
+  // Fallback: keep previous local id style.
+  return 'b_' + Math.random().toString(16).slice(2) + '_' + Date.now().toString(16);
 }
 
 

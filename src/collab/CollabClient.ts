@@ -1,6 +1,7 @@
 import { toWsUrl } from './collabUrl';
 import type {
   BoardRole,
+  JoinAuth,
   ClientToServerMessage,
   PresencePayload,
   ServerToClientMessage,
@@ -22,7 +23,7 @@ export type CollabClientHandlers = {
 export type CollabClientOptions = {
   baseUrl: string;
   boardId: string;
-  inviteToken: string;
+  auth: JoinAuth;
   guestId?: string;
   displayName?: string;
   color?: string;
@@ -35,6 +36,8 @@ function generateClientOpId(): string {
 export class CollabClient {
   private ws: WebSocket | null = null;
   private status: CollabStatus = 'idle';
+  private connecting = false;
+  private manualClose = false;
   private readonly opts: CollabClientOptions;
   private readonly handlers: CollabClientHandlers;
 
@@ -44,7 +47,11 @@ export class CollabClient {
   }
 
   connect() {
-    if (this.ws) return;
+    // Avoid connect storms: if a socket is already open/connecting, do nothing.
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
+    if (this.connecting) return;
+    this.manualClose = false;
+    this.connecting = true;
 
     const url = toWsUrl(this.opts.baseUrl, `/collab/${encodeURIComponent(this.opts.boardId)}`);
     this.setStatus('connecting');
@@ -53,11 +60,12 @@ export class CollabClient {
     this.ws = ws;
 
     ws.onopen = () => {
-      // Join with invite token (Step 8 MVP)
+      this.connecting = false;
+      // Join
       const join: ClientToServerMessage = {
         type: 'join',
         boardId: this.opts.boardId,
-        auth: { kind: 'invite', inviteToken: this.opts.inviteToken },
+        auth: this.opts.auth,
         client: {
           guestId: this.opts.guestId,
           displayName: this.opts.displayName,
@@ -86,9 +94,19 @@ export class CollabClient {
         case 'presence':
           this.handlers.onPresence?.(msg);
           break;
-        case 'error':
+        case 'error': {
+          const errText = `${msg.code}: ${msg.message}`;
+          this.setStatus('error', errText);
           this.handlers.onErrorMsg?.(msg);
+          if (msg.fatal) {
+            try {
+              this.ws?.close();
+            } catch {
+              // ignore
+            }
+          }
           break;
+        }
         case 'pong':
           // ignore
           break;
@@ -99,13 +117,24 @@ export class CollabClient {
       this.setStatus('error', 'WebSocket error');
     };
 
-    ws.onclose = () => {
+    ws.onclose = (evt) => {
       this.ws = null;
-      this.setStatus('closed');
+      this.connecting = false;
+      const reason = evt?.reason ? `: ${evt.reason}` : '';
+      if (this.manualClose) {
+        this.manualClose = false;
+        this.setStatus('closed', `WebSocket closed (${evt.code})${reason}`);
+        return;
+      }
+      if (this.status !== 'error') {
+        this.setStatus('closed', `WebSocket closed (${evt.code})${reason}`);
+      }
     };
   }
 
   close() {
+    this.manualClose = true;
+    this.connecting = false;
     try {
       this.ws?.close();
     } catch {

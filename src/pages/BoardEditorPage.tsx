@@ -133,6 +133,7 @@ id } = useParams<{ id: string }>();
           status: collab.enabled ? collab.status : 'disabled',
           role: collab.role,
           usersCount: collab.users?.length ?? 0,
+          errorText: collab.errorText,
         }}
         inviteLink={inviteLink}
         boardName={boardName}

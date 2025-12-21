@@ -31,6 +31,7 @@ export function useBoardEditor(id: string | undefined) {
 // ---- Collaboration (invite-based, realtime) ----
 const collab = useBoardCollaboration({
   boardId: id,
+  boardName: state?.meta?.name,
   resetBoard,
   applyRemoteEvent,
 });

@@ -3,7 +3,8 @@ import type { BoardEvent } from '../../domain/types';
 import type { BoardRole, PresencePayload, PresenceUser } from '../../../shared/protocol';
 import { CollabClient, type CollabStatus } from '../../collab/CollabClient';
 import { getSupabaseClient, isSupabaseConfigured } from '../../supabase/supabaseClient';
-import { getBoardsRepository } from '../../infrastructure/localStorageBoardsRepository';
+import { getBestLocalBoardTitle } from '../../domain/boardTitle';
+import { ensureBoardRowInSupabase, updateBoardTitleInSupabase } from '../../supabase/boards';
 
 function getInviteTokenFromUrl(): string | null {
   if (typeof window === 'undefined') return null;
@@ -122,20 +123,6 @@ const ensuredBoardIdRef = useRef<string | null>(null);
 
 useEffect(() => {
   let cancelled = false;
-
-  async function getBestLocalTitle(id: string): Promise<string | null> {
-    try {
-      if (boardName && boardName.trim()) return boardName.trim();
-      const repo = getBoardsRepository();
-      const boards = await repo.listBoards();
-      const found = boards.find((b) => b.id === id);
-      if (found?.name && found.name.trim()) return found.name.trim();
-    } catch {
-      // ignore
-    }
-    return null;
-  }
-
   async function ensureRow() {
     if (!boardId) {
       ensuredBoardIdRef.current = null;
@@ -168,24 +155,19 @@ useEffect(() => {
       return;
     }
 
-    const title = (await getBestLocalTitle(boardId)) ?? 'Untitled board';
+    const title = (await getBestLocalBoardTitle(boardId, boardName)) ?? 'Untitled board';
 
-    const { error } = await client
-      .schema('whiteboard')
-      .from('boards')
-      .upsert(
-        {
-          id: boardId,
-          owner_user_id: sess.user.id,
-          title,
-        },
-        { onConflict: 'id' }
-      );
+    const ensured = await ensureBoardRowInSupabase({
+      client,
+      boardId,
+      ownerUserId: sess.user.id,
+      title,
+    });
 
     if (cancelled) return;
-    if (error) {
-      console.error('Failed to ensure board exists in Supabase', error);
-      setErrorText(`Supabase ensure failed: ${error.message ?? String(error)}`);
+    if (!ensured.ok) {
+      console.error('Failed to ensure board exists in Supabase', ensured.message);
+      setErrorText(ensured.message);
       setBoardEnsured(false);
       return;
     }
@@ -221,14 +203,9 @@ useEffect(() => {
     const sess = data.session;
     if (!sess) return;
 
-    const { error } = await client
-      .schema('whiteboard')
-      .from('boards')
-      .update({ title })
-      .eq('id', boardId);
-
+    const res = await updateBoardTitleInSupabase({ client, boardId, title });
     if (cancelled) return;
-    if (error) console.error('Failed to update board title in Supabase', error);
+    if (!res.ok) console.warn('Failed to update board title in Supabase', res.message);
   }
   pushRename().catch((err) => console.error('Failed to update board title in Supabase', err));
   return () => {
@@ -300,7 +277,7 @@ useEffect(() => {
           if (msg.snapshot) resetBoardRef.current(msg.snapshot);
         },
         onOp: (msg) => {
-          if (msg.op) applyRemoteEventRef.current(msg.op as any);
+          if (msg.op) applyRemoteEventRef.current(msg.op);
         },
         onPresence: (msg) => {
           setUsers(msg.users ?? []);
@@ -333,7 +310,7 @@ useEffect(() => {
 
   const sendOp = (event: BoardEvent) => {
     if (!enabled || status !== 'connected' || !boardId) return;
-    clientRef.current?.sendOp(event as any, boardId);
+    clientRef.current?.sendOp(event, boardId);
   };
 
   const sendPresence = (presence: PresencePayload) => {

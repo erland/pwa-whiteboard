@@ -1,6 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getSupabaseClient, isSupabaseConfigured } from '../../supabase/supabaseClient';
+import { ensureBoardRowInSupabase } from '../../supabase/boards';
+import { getBestLocalBoardTitle } from '../../domain/boardTitle';
 import { buildInviteUrl, generateInviteToken, sha256Hex } from '../../share/inviteTokens';
 import type { WhiteboardMeta, WhiteboardState } from '../../domain/types';
 import { createEmptyWhiteboardState } from '../../domain/whiteboardState';
@@ -191,39 +193,16 @@ const getAuthRedirectTo = () => {
       }
 
       // Ensure board exists in Supabase for this boardId (and is owned by the user)
-      const { data: existing, error: selErr } = await client
-        .schema('whiteboard')
-        .from('boards')
-        .select('id, owner_user_id')
-        .eq('id', boardId)
-        .maybeSingle();
-
-      if (!selErr && existing && existing.owner_user_id !== sess.user.id) {
-        setMessage('You are signed in, but you are not the owner of this board in Supabase.');
+      const title = (await getBestLocalBoardTitle(boardId, boardName)) ?? boardName ?? 'Untitled board';
+      const ensured = await ensureBoardRowInSupabase({
+        client,
+        boardId,
+        ownerUserId: sess.user.id,
+        title,
+      });
+      if (!ensured.ok) {
+        setMessage(ensured.message);
         return;
-      }
-
-      if (!existing) {
-        const { error: insErr } = await client
-          .schema('whiteboard')
-          .from('boards')
-          .upsert(
-            {
-              id: boardId,
-              owner_user_id: sess.user.id,
-              title: boardName || 'Board',
-            },
-            { onConflict: 'id', ignoreDuplicates: true }
-          );
-        if (insErr) {
-          // If two refreshes race, we may attempt to create the same row twice.
-          // Treat duplicate-key as success.
-          const msg = insErr.message || '';
-          if (!msg.includes('duplicate key') && !msg.includes('boards_pkey')) {
-            setMessage(`Could not create board in Supabase: ${insErr.message}`);
-            return;
-          }
-        }
       }
 
       // Load active invites (token itself is not stored; only hash)
@@ -253,7 +232,6 @@ const getAuthRedirectTo = () => {
 
   React.useEffect(() => {
     refreshAuthAndInvites().catch(() => void 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boardId, boardName, supabaseReady, refreshAuthAndInvites]);
 
   const signInWithEmail = async () => {

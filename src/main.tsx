@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import './styles.css';
 import { WhiteboardProvider } from './whiteboard/WhiteboardStore';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { initSupabaseAuthFromUrl } from './supabase/supabaseClient';
 
 // Expose selected Vite env vars on globalThis so non-ESM test environments (Jest) don't choke on import.meta.env
@@ -24,9 +25,11 @@ initSupabaseAuthFromUrl().catch(() => void 0);
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <BrowserRouter basename={basename}>
+      <ErrorBoundary fallbackTitle="Whiteboard crashed">
       <WhiteboardProvider>
         <App />
       </WhiteboardProvider>
+      </ErrorBoundary>
     </BrowserRouter>
   </React.StrictMode>
 );

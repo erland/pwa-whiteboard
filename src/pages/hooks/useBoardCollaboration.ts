@@ -51,6 +51,8 @@ export type UseBoardCollaborationResult = {
   presenceByUserId: Record<string, PresencePayload>;
   inviteToken?: string;
   guestId: string;
+  /** The userId key used in presence/users lists for this local client. */
+  selfUserId: string;
   sendOp: (event: BoardEvent) => void;
   sendPresence: (presence: PresencePayload) => void;
 };
@@ -65,6 +67,7 @@ export function useBoardCollaboration({
   const baseUrl = (globalThis as any).__VITE_COLLAB_BASE_URL as string | undefined;
   const inviteToken = useMemo(() => getInviteTokenFromUrl(), []);
   const guestId = useMemo(() => getOrCreateGuestId(), []);
+  const [selfUserId, setSelfUserId] = useState<string>(guestId);
 
   const enabled = Boolean(baseUrl) && Boolean(boardId);
 
@@ -97,12 +100,17 @@ export function useBoardCollaboration({
       if (!isSupabaseConfigured()) return;
       if (inviteToken) {
         setSupabaseJwt(null);
+        setSelfUserId(guestId);
         return;
       }
       const client = getSupabaseClient();
       const { data } = await client.auth.getSession();
-      const jwt = data.session?.access_token ?? null;
-      if (!cancelled) setSupabaseJwt(jwt);
+      const sess = data.session;
+      const jwt = sess?.access_token ?? null;
+      if (!cancelled) {
+        setSupabaseJwt(jwt);
+        setSelfUserId(sess?.user?.id ?? guestId);
+      }
     }
     run().catch((err) => console.error('Failed to get supabase session', err));
     return () => {
@@ -154,6 +162,8 @@ useEffect(() => {
       setBoardEnsured(false);
       return;
     }
+
+    setSelfUserId(sess.user.id);
 
     const title = (await getBestLocalBoardTitle(boardId, boardName)) ?? 'Untitled board';
 
@@ -327,6 +337,7 @@ useEffect(() => {
     presenceByUserId,
     inviteToken: inviteToken ?? undefined,
     guestId,
+    selfUserId,
     sendOp,
     sendPresence,
   };

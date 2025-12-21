@@ -230,7 +230,7 @@ id } = useParams<{ id: string }>();
                   width={CANVAS_WIDTH}
                   height={CANVAS_HEIGHT}
                   viewport={state.viewport}
-                  users={collab.users.filter((u) => u.userId !== collab.guestId)}
+                  users={collab.users.filter((u) => u.userId !== collab.selfUserId)}
                   presenceByUserId={collab.presenceByUserId}
                 />
               )}

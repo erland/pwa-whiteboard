@@ -95,18 +95,16 @@ async function safeCopy(text: string): Promise<boolean> {
   }
 }
 
+function getAuthRedirectTo(): string {
+  // Send the user back to *this exact URL* after the magic link completes.
+  // Works on localhost and GitHub Pages, and avoids import.meta (Jest-safe).
+  if (typeof window === 'undefined') return 'http://localhost/';
+  return window.location.href;
+}
+
 export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) => {
   const navigate = useNavigate();
   const boardIdIsUuid = isUuidLike(boardId);
-
-
-const getAuthRedirectTo = () => {
-  // In dev BASE_URL is usually "/", in GitHub Pages it's "/pwa-whiteboard/".
-  const base = ((globalThis as any).__VITE_BASE_URL as string | undefined) ?? '/';
-  const origin = window.location.origin;
-  // Send user back to the current board route so Share panel reflects the session immediately.
-  return new URL(window.location.pathname + window.location.search + window.location.hash, origin).toString();
-};
 
   const [email, setEmail] = React.useState('');
   const [sessionEmail, setSessionEmail] = React.useState<string | null>(null);
@@ -253,14 +251,13 @@ const getAuthRedirectTo = () => {
       }
     
       // Redirect back to *this* deployment (works for GitHub Pages + localhost)
-      const base = (import.meta as any).env?.BASE_URL ?? '/';
-      const emailRedirectTo = `${window.location.origin}${base}`;
-    
+      const emailRedirectTo = getAuthRedirectTo();
+
       const { error } = await client.auth.signInWithOtp({
         email: email.trim(),
         options: { emailRedirectTo },
       });
-    
+          
       if (error) {
         setMessage(error.message);
         return;

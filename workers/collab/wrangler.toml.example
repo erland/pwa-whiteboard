@@ -1,1 +1,5 @@
 # This file is kept for reference. Use wrangler.toml instead.
+
+[vars]
+# Optional allowlist for Origin checks, comma-separated (e.g. "https://example.com,https://user.github.io").
+ALLOWED_ORIGINS = ""

@@ -104,6 +104,7 @@ export function useBoardCollaboration({
         return;
       }
       const client = getSupabaseClient();
+      if (!client) return;
       const { data } = await client.auth.getSession();
       const sess = data.session;
       const jwt = sess?.access_token ?? null;
@@ -156,6 +157,10 @@ useEffect(() => {
     }
 
     const client = getSupabaseClient();
+    if (!client) {
+      setBoardEnsured(false);
+      return;
+    }
     const { data } = await client.auth.getSession();
     const sess = data.session;
     if (!sess) {
@@ -209,6 +214,7 @@ useEffect(() => {
     if (!title) return;
 
     const client = getSupabaseClient();
+    if (!client) return;
     const { data } = await client.auth.getSession();
     const sess = data.session;
     if (!sess) return;
@@ -283,7 +289,7 @@ useEffect(() => {
         onJoined: (msg) => {
           setRole(msg.role);
           setUsers(msg.users ?? []);
-          setPresenceByUserId(msg.presenceByUserId ?? {});
+          setPresenceByUserId({});
           if (msg.snapshot) resetBoardRef.current(msg.snapshot);
         },
         onOp: (msg) => {
@@ -291,7 +297,7 @@ useEffect(() => {
         },
         onPresence: (msg) => {
           setUsers(msg.users ?? []);
-          setPresenceByUserId(msg.presenceByUserId ?? {});
+          setPresenceByUserId({});
         },
         onErrorMsg: (msg) => {
           const err = `${msg.code}: ${msg.message}`;

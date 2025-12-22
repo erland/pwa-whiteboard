@@ -305,31 +305,30 @@ Tests:
 
 **Goal:** Keep the frontend on GitHub Pages (already in place) and deploy only the collaboration backend to Cloudflare, with repeatable CI.
 
-### Frontend: GitHub Pages (existing)
-- Build the web app with Vite and deploy to GitHub Pages using your existing workflow.
-- Ensure the app is configured for GitHub Pages hosting:
-  - Vite `base` is set correctly (e.g. `"/<repo>/"` when not using a custom domain).
-  - SPA routing fallback is handled (if you add routes beyond the root).
-- Configure **client-side** environment values at build time:
-  - Collaboration Worker base URL (public): e.g. `VITE_COLLAB_BASE_URL`
-  - Supabase URL + public anon key (public): e.g. `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+### Frontend: GitHub Pages
+- Use `.github/workflows/deploy.yml` to build + deploy the Vite app to GitHub Pages.
+- Ensure Vite is configured for Pages:
+  - `vite.config.ts` has `base: "/<repo>/"` (already set for `/pwa-whiteboard/`).
+- Configure **public** build-time env vars via GitHub **Repository Variables** (recommended):
+  - `VITE_COLLAB_BASE_URL` (e.g. `https://pwa-whiteboard-collab.<your-subdomain>.workers.dev`)
+  - `VITE_SUPABASE_URL`
+  - `VITE_SUPABASE_ANON_KEY`
 
-### Backend: Cloudflare Worker (collab)
-- Deploy the Worker (and Durable Object) via Wrangler.
-- Configure **server-only** secrets in Cloudflare:
-  - Supabase service role key (server-only)
-  - Invite signing secret (if you use invite tokens)
-- Configure allowed origins / CORS rules to include your GitHub Pages origin (and any custom domain if applicable).
+### Backend: Cloudflare Worker (Workers + Durable Objects)
+- Use `.github/workflows/deploy-worker.yml` to deploy `workers/collab` via Wrangler.
+- Required GitHub **Repository Secrets** (used by CI):
+  - `CLOUDFLARE_API_TOKEN`
+  - `CLOUDFLARE_ACCOUNT_ID`
+  - `SUPABASE_URL`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+  - Optional: `INVITE_SIGNING_SECRET` (only if you implement signed invites)
+- Configure allowed origins (Origin allowlist) to include your GitHub Pages origin:
+  - Set `ALLOWED_ORIGINS` in `workers/collab/wrangler.toml` (or in the Cloudflare dashboard as a variable).
+  - Example: `https://<user>.github.io,https://<user>.github.io/<repo>`
 
-### CI: GitHub Actions
-- Keep the current GitHub Pages workflow for the frontend (build + deploy).
-- Add a separate Worker deployment job/workflow:
-  - Run tests (shared + worker, as applicable)
-  - `wrangler deploy` on `main` (or on tags/releases)
-  - Use GitHub Secrets for Cloudflare credentials (API token, account id, etc.)
-
-Tests:
-- Smoke test in a staging Worker environment (optional but recommended) before promoting to production.
+### CI behavior
+- Frontend deploys on `push` to `main`, on `release: published`, or manually (`workflow_dispatch`).
+- Worker deploys on `push` to `main` when `workers/collab/**` or `shared/**` changes (and also on release/manual).
 
 ---
 ## Step 12 — Polish & operational readiness

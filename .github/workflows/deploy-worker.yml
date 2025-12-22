@@ -1,0 +1,39 @@
+name: Deploy Collaboration Worker to Cloudflare
+
+on:
+  push:
+    paths:
+      - "workers/collab/**"
+      - "shared/**"
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy Worker (Wrangler)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: workers/collab
+          command: deploy
+          # Keep Worker secrets in sync from GitHub Secrets on each deploy.
+          # Each name listed here must exist in the `env:` block below.
+          secrets: |
+            SUPABASE_URL
+            SUPABASE_SERVICE_ROLE_KEY
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+          # Optional (only needed if you implement signed invites later):
+          # INVITE_SIGNING_SECRET: ${{ secrets.INVITE_SIGNING_SECRET }}

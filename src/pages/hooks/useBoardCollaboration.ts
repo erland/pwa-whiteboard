@@ -46,6 +46,12 @@ export type UseBoardCollaborationResult = {
   enabled: boolean;
   status: CollabStatus | 'disabled';
   errorText?: string;
+  /** Non-fatal, user-facing notices (e.g. soft limits / rate limiting). */
+  noticeText?: string;
+  /** True while we are attempting to reconnect after having been connected. */
+  isReconnecting: boolean;
+  /** Whether this client has ever reached the "connected" state for this board. */
+  hasEverConnected: boolean;
   role?: BoardRole;
   users: PresenceUser[];
   presenceByUserId: Record<string, PresencePayload>;

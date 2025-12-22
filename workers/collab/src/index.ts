@@ -5,6 +5,7 @@ import {
   type ClientJoinMessage,
   type ClientToServerMessage,
   type ServerToClientMessage,
+  type ServerErrorMessage,
   type BoardRole,
 } from "../../../shared/protocol";
 import {
@@ -14,6 +15,8 @@ import {
   type WhiteboardMeta,
   type WhiteboardState,
 } from "../../../shared/domain";
+
+type ServerErrorCode = ServerErrorMessage['code'];
 
 import {
   fetchBoardOwner,
@@ -160,16 +163,16 @@ function closeWithError(ws: WebSocket, boardId: string, message: string, code: n
 }
 
 
-function sendNonFatalError(ws: WebSocket, boardId: string, code: ServerToClientMessage['code'], message: string) {
+function sendNonFatalError(ws: WebSocket, boardId: string, code: ServerErrorCode, message: string) {
   try {
-    const errMsg: ServerToClientMessage = { type: 'error', boardId, code, message, fatal: false };
+    const errMsg: ServerErrorMessage = { type: 'error', boardId, code, message, fatal: false };
     ws.send(JSON.stringify(errMsg));
   } catch {
     // ignore
   }
 }
 
-function mapSoftValidationError(err: string): { code: ServerToClientMessage['code']; message: string } | null {
+function mapSoftValidationError(err: string): { code: ServerErrorCode; message: string } | null {
   // Protocol validation returns human-readable strings. We map a few common
   // "soft limit" errors to stable error codes so the UI can show better messages.
   if (err.includes('message too large')) {

@@ -14,7 +14,7 @@ class_name = "BoardRoom"
 # The first deployment should use a new tag (e.g. "v1").
 [[migrations]]
 tag = "v1"
-new_classes = ["BoardRoom"]
+new_sqlite_classes = ["BoardRoom"]
 
 [vars]
 # Optional allowlist for Origin checks, comma-separated (e.g. "https://example.com,https://user.github.io").

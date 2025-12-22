@@ -1,10 +1,6 @@
 name: Deploy Collaboration Worker to Cloudflare
 
 on:
-  push:
-    paths:
-      - "workers/collab/**"
-      - "shared/**"
   workflow_dispatch:
   release:
     types: [published]

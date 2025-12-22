@@ -251,11 +251,21 @@ const getAuthRedirectTo = () => {
         setMessage('Supabase client not available.');
         return;
       }
-      const { error } = await client.auth.signInWithOtp({ email: email.trim() });
+    
+      // Redirect back to *this* deployment (works for GitHub Pages + localhost)
+      const base = (import.meta as any).env?.BASE_URL ?? '/';
+      const emailRedirectTo = `${window.location.origin}${base}`;
+    
+      const { error } = await client.auth.signInWithOtp({
+        email: email.trim(),
+        options: { emailRedirectTo },
+      });
+    
       if (error) {
         setMessage(error.message);
         return;
       }
+    
       setMessage('Magic link sent. Check your email to finish signing in.');
     } finally {
       setAuthLoading(false);

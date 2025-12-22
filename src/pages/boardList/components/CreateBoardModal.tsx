@@ -110,10 +110,10 @@ export const CreateBoardModal: React.FC<Props> = ({
         </div>
 
         <div className="modal-footer">
-          <button type="button" onClick={onCancel} disabled={isBusy}>
+          <button type="button" className="tool-button" onClick={onCancel} disabled={isBusy}>
             Cancel
           </button>
-          <button type="button" onClick={onConfirm} disabled={isBusy}>
+          <button type="button" className="tool-button" onClick={onConfirm} disabled={isBusy}>
             {isBusy ? 'Creating…' : 'Create'}
           </button>
         </div>

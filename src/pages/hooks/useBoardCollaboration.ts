@@ -73,6 +73,14 @@ export function useBoardCollaboration({
 
   const [status, setStatus] = useState<CollabStatus | 'disabled'>(enabled ? 'idle' : 'disabled');
   const [errorText, setErrorText] = useState<string | undefined>(undefined);
+  const [noticeText, setNoticeText] = useState<string | undefined>(undefined);
+  const noticeTimerRef = useRef<number | null>(null);
+
+  const [reconnectNonce, setReconnectNonce] = useState(0);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const reconnectAttemptRef = useRef(0);
+  const hasEverConnectedRef = useRef(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
   const [role, setRole] = useState<BoardRole | undefined>(undefined);
   const [users, setUsers] = useState<PresenceUser[]>([]);
   const [presenceByUserId, setPresenceByUserId] = useState<Record<string, PresencePayload>>({});
@@ -265,7 +273,7 @@ useEffect(() => {
     }
 
     const authKey = auth.kind === 'invite' ? `invite:${auth.inviteToken}` : `owner:${auth.supabaseJwt}`;
-    const key = `${baseUrl}|${boardId}|${guestId}|${authKey}`;
+    const key = `${baseUrl}|${boardId}|${guestId}|${authKey}|r${reconnectNonce}`;
 
     if (clientRef.current && clientKeyRef.current === key) return;
 
@@ -283,8 +291,27 @@ useEffect(() => {
       {
         onStatus: (s, err) => {
           setStatus(s);
-          if (s === 'error' || s === 'closed') setErrorText(err);
-          if (s === 'connected') setErrorText(undefined);
+
+          if (s === 'connected') {
+            hasEverConnectedRef.current = true;
+            reconnectAttemptRef.current = 0;
+            setIsReconnecting(false);
+            setErrorText(undefined);
+            setNoticeText(undefined);
+            if (noticeTimerRef.current) {
+              window.clearTimeout(noticeTimerRef.current);
+              noticeTimerRef.current = null;
+            }
+            return;
+          }
+
+          if (s === 'error') {
+            setErrorText(err);
+            return;
+          }
+
+          // For 'closed' / 'connecting' we keep the last fatal error cleared.
+          if (s === 'closed') setErrorText(undefined);
         },
         onJoined: (msg) => {
           setRole(msg.role);
@@ -301,12 +328,24 @@ useEffect(() => {
         },
         onErrorMsg: (msg) => {
           const err = `${msg.code}: ${msg.message}`;
-          console.error('Collab server error:', err, msg);
-          setStatus('error');
-          setErrorText(err);
-          if (msg.message?.includes('Too many join attempts')) {
-            setCooldownUntil(Date.now() + 30_000);
+
+          // Fatal errors should break the connection (CollabClient will close).
+          if (msg.fatal) {
+            console.error('Collab server fatal error:', err, msg);
+            setErrorText(err);
+            return;
           }
+
+          // Soft errors: keep the connection alive and show a short-lived notice.
+          // Avoid spamming the console with noisy expected errors.
+          if (msg.code === 'rate_limited') {
+            // Back off a bit to avoid join storms.
+            setCooldownUntil(Date.now() + 15_000);
+          }
+
+          setNoticeText(msg.message || err);
+          if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
+          noticeTimerRef.current = window.setTimeout(() => setNoticeText(undefined), 6_000) as any;
         },
       }
     );
@@ -322,7 +361,48 @@ useEffect(() => {
         clientKeyRef.current = null;
       }
     };
-  }, [enabled, baseUrl, auth, boardId, boardMetaId, guestId, cooldownUntil, boardEnsured]);
+  }, [enabled, baseUrl, auth, boardId, boardMetaId, guestId, cooldownUntil, boardEnsured, reconnectNonce]);
+
+
+  // Auto-reconnect (best-effort). We only do this after we have successfully
+  // connected at least once; that prevents loops when credentials are wrong.
+  useEffect(() => {
+    if (!enabled) return;
+
+    const now = Date.now();
+    if (cooldownUntil && now < cooldownUntil) return;
+
+    const shouldReconnect =
+      status === 'closed' || (status === 'error' && hasEverConnectedRef.current);
+
+    if (!shouldReconnect) return;
+
+    // If a reconnect is already scheduled, don't schedule another.
+    if (reconnectTimerRef.current) return;
+
+    setIsReconnecting(true);
+
+    const attempt = reconnectAttemptRef.current + 1;
+    reconnectAttemptRef.current = attempt;
+
+    const baseDelay = 750;
+    const maxDelay = 15_000;
+    const backoff = Math.min(maxDelay, baseDelay * Math.pow(2, attempt - 1));
+    const jitter = Math.floor(backoff * (0.2 * Math.random()));
+    const delay = backoff + jitter;
+
+    reconnectTimerRef.current = window.setTimeout(() => {
+      reconnectTimerRef.current = null;
+      setReconnectNonce((n) => n + 1);
+    }, delay) as any;
+
+    return () => {
+      if (reconnectTimerRef.current) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+    };
+  }, [enabled, status, cooldownUntil]);
 
   const sendOp = (event: BoardEvent) => {
     if (!enabled || status !== 'connected' || !boardId) return;
@@ -375,6 +455,9 @@ const sendPresence = (presence: PresencePayload) => {
     enabled,
     status,
     errorText,
+    noticeText,
+    isReconnecting,
+    hasEverConnected: hasEverConnectedRef.current,
     role,
     users,
     presenceByUserId,

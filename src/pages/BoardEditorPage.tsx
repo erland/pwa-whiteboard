@@ -204,6 +204,12 @@ id } = useParams<{ id: string }>();
             onFitView={handleFitView}
           />
 
+          {collab.enabled && collab.noticeText && (
+            <div className="collab-notice" role="status" aria-live="polite">
+              {collab.noticeText}
+            </div>
+          )}
+
           <div className="board-editor-canvas-wrapper">
             {state ? (
               <div className="board-editor-canvas-stack">
@@ -233,6 +239,19 @@ id } = useParams<{ id: string }>();
                   users={collab.users.filter((u) => u.userId !== collab.selfUserId)}
                   presenceByUserId={collab.presenceByUserId}
                 />
+              )}
+
+              {collab.enabled && collab.status !== 'connected' && collab.status !== 'disabled' && (
+                <div className="collab-overlay" aria-hidden="true">
+                  <div className="collab-overlay-card">
+                    <div className="collab-overlay-title">
+                      {collab.isReconnecting || collab.hasEverConnected ? 'Reconnecting…' : 'Connecting…'}
+                    </div>
+                    <div className="collab-overlay-subtitle">
+                      {collab.errorText ? collab.errorText : 'Trying to restore real-time collaboration…'}
+                    </div>
+                  </div>
+                </div>
               )}
               </div>
             ) : (

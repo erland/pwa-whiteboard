@@ -159,9 +159,69 @@ function closeWithError(ws: WebSocket, boardId: string, message: string, code: n
   }
 }
 
+
+function sendNonFatalError(ws: WebSocket, boardId: string, code: ServerToClientMessage['code'], message: string) {
+  try {
+    const errMsg: ServerToClientMessage = { type: 'error', boardId, code, message, fatal: false };
+    ws.send(JSON.stringify(errMsg));
+  } catch {
+    // ignore
+  }
+}
+
+function mapSoftValidationError(err: string): { code: ServerToClientMessage['code']; message: string } | null {
+  // Protocol validation returns human-readable strings. We map a few common
+  // "soft limit" errors to stable error codes so the UI can show better messages.
+  if (err.includes('message too large')) {
+    return { code: 'payload_too_large', message: 'Message too large. Try again with a smaller change.' };
+  }
+  if (err.includes('text too long')) {
+    return { code: 'text_too_long', message: 'Text is too long. Please shorten it.' };
+  }
+  if (err.includes('points too long')) {
+    return { code: 'stroke_too_long', message: 'Stroke is too long. Please simplify the stroke.' };
+  }
+  return null;
+}
+
 export class BoardRoom implements DurableObject {
   private sockets = new Set<WebSocket>();
-  private metaBySocket = new WeakMap<WebSocket, ClientMeta>();
+  
+  private metrics = {
+    joins: 0,
+    leaves: 0,
+    rejectedOps: 0,
+    softLimitRejections: 0,
+    snapshotPersistCount: 0,
+    snapshotPersistMsTotal: 0,
+    snapshotPersistMsMax: 0,
+  };
+
+  private logMetric(event: string, extra: Record<string, unknown> = {}) {
+    // Privacy-aware logs: no tokens/emails/user ids.
+    try {
+      console.log(
+        JSON.stringify({
+          t: new Date().toISOString(),
+          event,
+          ...extra,
+          joins: this.metrics.joins,
+          leaves: this.metrics.leaves,
+          rejectedOps: this.metrics.rejectedOps,
+          softLimitRejections: this.metrics.softLimitRejections,
+          snapshotPersistCount: this.metrics.snapshotPersistCount,
+          snapshotPersistMsAvg:
+            this.metrics.snapshotPersistCount > 0
+              ? Math.round(this.metrics.snapshotPersistMsTotal / this.metrics.snapshotPersistCount)
+              : 0,
+          snapshotPersistMsMax: this.metrics.snapshotPersistMsMax,
+        })
+      );
+    } catch {
+      // ignore
+    }
+  }
+private metaBySocket = new WeakMap<WebSocket, ClientMeta>();
   private joinAttemptsByIp = new Map<string, { count: number; resetAt: number }>();
 
 
@@ -239,6 +299,12 @@ private presenceRateBySocket = new WeakMap<WebSocket, { windowStart: number; cou
 
       const parsed = parseAndValidateClientMessage(data, MAX_MESSAGE_BYTES);
       if (!parsed.ok) {
+        const soft = mapSoftValidationError(parsed.error);
+        if (soft) {
+          sendNonFatalError(server, boardId, soft.code, soft.message);
+          this.metrics.softLimitRejections += 1;
+          return;
+        }
         closeWithError(server, boardId, parsed.error);
         return;
       }
@@ -318,6 +384,7 @@ if (msg.type === "op") {
       message: "Viewer cannot send ops",
     };
     sendJson(server, err);
+    this.metrics.rejectedOps += 1;
     return;
   }
 
@@ -331,10 +398,12 @@ if (msg.type === "op") {
       const err: ServerToClientMessage = {
         type: 'error',
         boardId,
-        code: 'forbidden',
+        code: 'board_too_large',
         message: 'Board is too large to accept more objects',
+        fatal: false,
       };
       sendJson(server, err);
+      this.metrics.rejectedOps += 1;
       return;
     }
     if (incomingObjId && this.boardState!.objects.some((o) => o.id === incomingObjId)) {
@@ -345,6 +414,7 @@ if (msg.type === "op") {
         message: 'Duplicate object id',
       };
       sendJson(server, err);
+      this.metrics.rejectedOps += 1;
       return;
     }
   }
@@ -395,6 +465,7 @@ try {
     message: "Op rejected",
   };
   sendJson(server, err);
+  this.metrics.rejectedOps += 1;
   return;
 }
 
@@ -661,9 +732,15 @@ private async maybePersistSnapshot(boardId: string): Promise<void> {
   const snapshotJson = this.sanitizeSnapshotState(this.boardState);
 
   this.snapshotPersisting = (async () => {
-    await insertSnapshot(this.env, boardId, seq, snapshotJson);
-    await updateBoardSnapshotSeq(this.env, boardId, seq);
-  })();
+      const t0 = Date.now();
+      await insertSnapshot(this.env, boardId, seq, snapshotJson);
+      await updateBoardSnapshotSeq(this.env, boardId, seq);
+      const ms = Date.now() - t0;
+      this.metrics.snapshotPersistCount += 1;
+      this.metrics.snapshotPersistMsTotal += ms;
+      if (ms > this.metrics.snapshotPersistMsMax) this.metrics.snapshotPersistMsMax = ms;
+      this.logMetric('snapshot_persist', { board: boardId, ms });
+    })();
 
   try {
     await this.snapshotPersisting;

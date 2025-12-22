@@ -96,9 +96,14 @@ export class CollabClient {
           break;
         case 'error': {
           const errText = `${msg.code}: ${msg.message}`;
-          this.setStatus('error', errText);
+
+          // Non-fatal errors are "soft" (e.g. rate-limits, payload too large). Keep the
+          // connection alive and let the UI show a notice. Only fatal errors flip
+          // the connection status to error and close the socket.
           this.handlers.onErrorMsg?.(msg);
+
           if (msg.fatal) {
+            this.setStatus('error', errText);
             try {
               this.ws?.close();
             } catch {

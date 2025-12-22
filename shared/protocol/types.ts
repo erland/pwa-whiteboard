@@ -127,7 +127,10 @@ export type ServerErrorMessage = {
     | 'not_found'
     | 'rate_limited'
     | 'payload_too_large'
-    | 'server_error';
+    | 'server_error'
+    | 'board_too_large'
+    | 'stroke_too_long'
+    | 'text_too_long';
   message: string;
   fatal?: boolean;
 };

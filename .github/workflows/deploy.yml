@@ -39,16 +39,6 @@ jobs:
       - name: Tests
         run: npm test
 
-      - name: Debug env presence
-        run: |
-          echo "URL set? " $([ -n "${VITE_SUPABASE_URL}" ] && echo yes || echo no)
-          echo "ANON key length: " ${#VITE_SUPABASE_ANON_KEY}
-          echo "Collab URL set? " $([ -n "${VITE_COLLAB_BASE_URL}" ] && echo yes || echo no)
-        env:
-          VITE_COLLAB_BASE_URL: ${{ vars.VITE_COLLAB_BASE_URL }}
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-
       - name: Build
         run: npm run build
         env:

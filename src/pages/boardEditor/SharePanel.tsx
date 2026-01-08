@@ -7,6 +7,7 @@ import type { WhiteboardMeta, WhiteboardState } from '../../domain/types';
 import { createEmptyWhiteboardState } from '../../domain/whiteboardState';
 import { getWhiteboardRepository } from '../../infrastructure/localStorageWhiteboardRepository';
 import { buildInviteUrl, generateInviteToken, sha256Hex } from '../../share/inviteTokens';
+import { CreateInviteDialog } from './CreateInviteDialog';
 
 type InviteRole = 'viewer' | 'editor';
 
@@ -22,6 +23,7 @@ type BoardInvite = {
 type SharePanelProps = {
   boardId: string;
   boardName: string;
+  hideTitle?: boolean;
 };
 
 type SupabaseClientNonNull = Exclude<Awaited<ReturnType<typeof getSupabaseClient>>, null>;
@@ -74,7 +76,7 @@ function getAuthRedirectTo(): string {
 
 type AuthStep = 'email' | 'otp';
 
-export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) => {
+export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName, hideTitle }) => {
   const navigate = useNavigate();
   const boardIdIsUuid = isUuidLike(boardId);
 
@@ -87,11 +89,13 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
 
   const [showAllInvites, setShowAllInvites] = React.useState(false);
   const [invites, setInvites] = React.useState<BoardInvite[]>([]);
+  const [selectedInviteId, setSelectedInviteId] = React.useState<string | null>(null);
 
   // Step 3: create invites (token shown once; only the hash is stored in Supabase)
   const [createRole, setCreateRole] = React.useState<InviteRole>('viewer');
   const [createLabel, setCreateLabel] = React.useState('');
   const [createExpiryPreset, setCreateExpiryPreset] = React.useState<'7d' | '30d' | 'never'>('30d');
+  const [createDialogOpen, setCreateDialogOpen] = React.useState(false);
   const [creatingInvite, setCreatingInvite] = React.useState(false);
 
   const [lastCreatedInviteUrl, setLastCreatedInviteUrl] = React.useState<string | null>(null);
@@ -216,6 +220,17 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
     refreshAuthAndInvites().catch(() => void 0);
   }, [boardId, boardName, supabaseReady, refreshAuthAndInvites]);
 
+  // Keep selection in sync with the invite list (auto-select newest invite when none selected).
+  React.useEffect(() => {
+    if (selectedInviteId && !invites.some((i) => i.id === selectedInviteId)) {
+      setSelectedInviteId(null);
+      return;
+    }
+    if (!selectedInviteId && invites.length > 0) {
+      setSelectedInviteId(invites[0].id);
+    }
+  }, [invites, selectedInviteId]);
+
   const sendOtpToEmail = async () => {
     setMessage(null);
     if (!supabaseReady) {
@@ -309,6 +324,7 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
     await client.auth.signOut();
     setSessionEmail(null);
     setInvites([]);
+    setSelectedInviteId(null);
 
   };
 
@@ -376,6 +392,14 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
         return false;
       }
     }
+  };
+
+  const openCreateInviteDialog = () => {
+    setMessage(null);
+    setCreateLabel('');
+    setLastCreatedInviteUrl(null);
+    setLastCreatedInviteCopied(false);
+    setCreateDialogOpen(true);
   };
 
   const createInvite = async () => {
@@ -609,9 +633,15 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
     return 'Active';
   };
 
+  const selectedInvite = React.useMemo(() => invites.find((i) => i.id === selectedInviteId) ?? null, [invites, selectedInviteId]);
+  const canManageInvites = !!sessionEmail && boardIdIsUuid;
+  const selectedBusy = selectedInvite ? inviteBusyId === selectedInvite.id : false;
+  const selectedExtendPreset = selectedInvite ? getExtendPreset(selectedInvite.id) : '30d';
+  const selectedStatus = selectedInvite ? getInviteStatus(selectedInvite) : null;
+
   return (
     <section className="panel">
-      <h3>Share</h3>
+      {!hideTitle && <h3>Share</h3>}
 
       {!supabaseReady && (
         <p className="muted">
@@ -724,34 +754,125 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
               </button>
             </div>
           </div>
+        </div>
 
-          {sessionEmail && boardIdIsUuid && (
-            <div style={{ marginTop: 10 }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                <select
-                  value={createRole}
-                  onChange={(e) => setCreateRole(e.currentTarget.value as InviteRole)}
-                  disabled={creatingInvite || !supabaseReady}
-                  title="Role"
+        {invites.length === 0 && !loadingInvites && (
+          <div className="share-invite-row">
+            <div className="share-invite-header">
+              <strong>No invites yet</strong>
+            </div>
+            <div style={{ opacity: 0.8, fontSize: 12 }}>
+              Use “Create invite…” below to generate viewer/editor invite links.
+            </div>
+          </div>
+        )}
+
+        {invites.length > 0 && (
+          <div className="share-invite-row">
+            <div className="share-invite-table" role="table" aria-label="Invites">
+              <div className="share-invite-table-head" role="row">
+                <div role="columnheader">Label</div>
+                <div role="columnheader">Role</div>
+                <div role="columnheader">Created</div>
+                <div role="columnheader">Expires</div>
+              </div>
+
+              {invites.map((inv) => {
+                const status = getInviteStatus(inv);
+                const isSelected = selectedInviteId === inv.id;
+                const rowClass =
+                  'share-invite-table-row' +
+                  (isSelected ? ' selected' : '') +
+                  (status === 'Active' ? '' : ' not-active');
+
+                return (
+                  <div
+                    key={inv.id}
+                    className={rowClass}
+                    role="row"
+                    tabIndex={0}
+                    title={`${status}${inv.revoked_at ? ` • revoked ${formatMaybeDate(inv.revoked_at)}` : ''}`}
+                    onClick={() => setSelectedInviteId((prev) => (prev === inv.id ? null : inv.id))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSelectedInviteId((prev) => (prev === inv.id ? null : inv.id));
+                      }
+                    }}
+                  >
+                    <div role="cell" className="share-invite-table-cell label">
+                      {inv.label?.trim() ? inv.label : '(Unnamed)'}
+                      {status !== 'Active' && <span className="share-invite-table-status">{status}</span>}
+                    </div>
+                    <div role="cell" className="share-invite-table-cell">{inv.role}</div>
+                    <div role="cell" className="share-invite-table-cell">{formatMaybeDate(inv.created_at)}</div>
+                    <div role="cell" className="share-invite-table-cell">{inv.expires_at ? formatMaybeDate(inv.expires_at) : 'Never'}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {canManageInvites && (
+  <div className="share-invite-actions">
+    <div className="share-invite-actions-header">
+      <strong>Manage invites</strong>
+      <button
+        type="button"
+        className="tool-button"
+        onClick={openCreateInviteDialog}
+        disabled={!supabaseReady}
+        title="Create a new invite link"
+      >
+        Create invite…
+      </button>
+    </div>
+
+    <p style={{ marginTop: 8, opacity: 0.75, fontSize: 12 }}>
+      Invite links are not stored (only a token hash). If you lose a link, use “Regenerate link” to create a new one.
+    </p>
+
+    <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--color-border)' }}>
+      <div className="share-invite-actions-header">
+        <strong>Selected invite</strong>
+        <span style={{ opacity: 0.8, fontSize: 12 }}>
+          {selectedInvite ? `${selectedInvite.role} • ${selectedStatus}` : 'None'}
+        </span>
+      </div>
+
+      {!selectedInvite ? (
+        <div style={{ opacity: 0.85, fontSize: 12 }}>Select an invite in the list to manage it.</div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, fontSize: 12, opacity: 0.85 }}>
+            <span>Label: {selectedInvite.label?.trim() ? selectedInvite.label : '(Unnamed)'}</span>
+            <span>Created: {formatMaybeDate(selectedInvite.created_at)}</span>
+            <span>Expires: {selectedInvite.expires_at ? formatMaybeDate(selectedInvite.expires_at) : 'Never'}</span>
+            {selectedInvite.revoked_at && <span>Revoked: {formatMaybeDate(selectedInvite.revoked_at)}</span>}
+          </div>
+
+          <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            {!selectedInvite.revoked_at && (
+              <>
+                <button
+                  type="button"
+                  className="tool-button"
+                  onClick={() => revokeInvite(selectedInvite.id)}
+                  disabled={selectedBusy || !supabaseReady}
+                  title="Revoke this invite"
                 >
-                  <option value="viewer">viewer</option>
-                  <option value="editor">editor</option>
-                </select>
-
-                <input
-                  type="text"
-                  value={createLabel}
-                  onChange={(e) => setCreateLabel(e.currentTarget.value)}
-                  placeholder="Label (optional)"
-                  style={{ minWidth: 200 }}
-                  disabled={creatingInvite || !supabaseReady}
-                />
+                  {selectedBusy ? 'Working…' : 'Revoke'}
+                </button>
 
                 <select
-                  value={createExpiryPreset}
-                  onChange={(e) => setCreateExpiryPreset(e.currentTarget.value as '7d' | '30d' | 'never')}
-                  disabled={creatingInvite || !supabaseReady}
-                  title="Expiry"
+                  value={selectedExtendPreset}
+                  onChange={(e) =>
+                    setExtendPresetByInviteId((prev) => ({
+                      ...prev,
+                      [selectedInvite.id]: e.currentTarget.value as '7d' | '30d' | 'never',
+                    }))
+                  }
+                  disabled={selectedBusy || !supabaseReady}
+                  title="Set a new expiry"
                 >
                   <option value="7d">Expires in 7 days</option>
                   <option value="30d">Expires in 30 days</option>
@@ -761,122 +882,49 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
                 <button
                   type="button"
                   className="tool-button"
-                  onClick={createInvite}
-                  disabled={creatingInvite || !supabaseReady}
-                  title="Create a new invite link"
+                  onClick={() => setInviteExpiry(selectedInvite.id, selectedExtendPreset)}
+                  disabled={selectedBusy || !supabaseReady}
+                  title="Update expiry (can reactivate an expired invite)"
                 >
-                  {creatingInvite ? 'Creating…' : 'Create invite'}
+                  {selectedBusy ? 'Working…' : 'Set expiry'}
                 </button>
-              </div>
+              </>
+            )}
 
-              {lastCreatedInviteUrl && (
-                <div style={{ marginTop: 10 }}>
-                  <div style={{ opacity: 0.8, fontSize: 12, marginBottom: 6 }}>
-                    One-time link (only shown once — copy it now):
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                    <input type="text" readOnly value={lastCreatedInviteUrl} style={{ flex: '1 1 420px', minWidth: 260 }} />
-                    <button type="button" className="tool-button" onClick={copyLastCreatedInvite}>
-                      {lastCreatedInviteCopied ? 'Copied!' : 'Copy'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+            <button
+              type="button"
+              className="tool-button"
+              onClick={() => regenerateInvite(selectedInvite)}
+              disabled={selectedBusy || !supabaseReady}
+              title="Create a new one-time link (old link will stop working)"
+            >
+              {selectedBusy ? 'Working…' : 'Regenerate link'}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
 
-          <p style={{ marginTop: 8, opacity: 0.75, fontSize: 12 }}>
-            Invite links are not stored (only a token hash). If you lose a link, use “Regenerate link” to create a new one.
-          </p>
-        </div>
-
-        {invites.length === 0 && !loadingInvites && (
-          <div className="share-invite-row">
-            <div className="share-invite-header">
-              <strong>No invites yet</strong>
-            </div>
-            <div style={{ opacity: 0.8, fontSize: 12 }}>
-              Use the form above to create viewer/editor invites.
-            </div>
+    <CreateInviteDialog
+      isOpen={createDialogOpen}
+      role={createRole}
+      label={createLabel}
+      expiryPreset={createExpiryPreset}
+      creating={creatingInvite}
+      canCreate={canManageInvites && supabaseReady}
+      lastCreatedInviteUrl={lastCreatedInviteUrl}
+      lastCreatedInviteCopied={lastCreatedInviteCopied}
+      onChangeRole={setCreateRole}
+      onChangeLabel={setCreateLabel}
+      onChangeExpiryPreset={setCreateExpiryPreset}
+      onCreate={createInvite}
+      onCopyLastCreatedInvite={copyLastCreatedInvite}
+      onCancel={() => setCreateDialogOpen(false)}
+    />
+  </div>
+            )}
           </div>
         )}
-
-        {invites.map((inv) => {
-          const status = getInviteStatus(inv);
-          const canManage = !!sessionEmail && boardIdIsUuid;
-          const busy = inviteBusyId === inv.id;
-          const extendPreset = getExtendPreset(inv.id);
-          return (
-            <div key={inv.id} className="share-invite-row">
-              <div className="share-invite-header">
-                <strong>{inv.label?.trim() ? inv.label : '(Unnamed invite)'}</strong>
-                <span style={{ opacity: 0.8, fontSize: 12 }}>
-                  {inv.role} • {status}
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, fontSize: 12, opacity: 0.85 }}>
-                <span>Created: {formatMaybeDate(inv.created_at)}</span>
-                <span>Expires: {inv.expires_at ? formatMaybeDate(inv.expires_at) : 'Never'}</span>
-                {inv.revoked_at && <span>Revoked: {formatMaybeDate(inv.revoked_at)}</span>}
-              </div>
-
-              {canManage && (
-                <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                  {!inv.revoked_at && (
-                    <>
-                      <button
-                        type="button"
-                        className="tool-button"
-                        onClick={() => revokeInvite(inv.id)}
-                        disabled={busy || !supabaseReady}
-                        title="Revoke this invite"
-                      >
-                        {busy ? 'Working…' : 'Revoke'}
-                      </button>
-
-                      <select
-                        value={extendPreset}
-                        onChange={(e) =>
-                          setExtendPresetByInviteId((prev) => ({
-                            ...prev,
-                            [inv.id]: e.currentTarget.value as '7d' | '30d' | 'never',
-                          }))
-                        }
-                        disabled={busy || !supabaseReady}
-                        title="Set a new expiry"
-                      >
-                        <option value="7d">Expires in 7 days</option>
-                        <option value="30d">Expires in 30 days</option>
-                        <option value="never">Never expires</option>
-                      </select>
-
-                      <button
-                        type="button"
-                        className="tool-button"
-                        onClick={() => setInviteExpiry(inv.id, extendPreset)}
-                        disabled={busy || !supabaseReady}
-                        title="Update expiry (can reactivate an expired invite)"
-                      >
-                        {busy ? 'Working…' : 'Set expiry'}
-                      </button>
-                    </>
-                  )}
-
-                  <button
-                    type="button"
-                    className="tool-button"
-                    onClick={() => regenerateInvite(inv)}
-                    disabled={busy || !supabaseReady}
-                    title="Create a new one-time link (old link will stop working)"
-                  >
-                    {busy ? 'Working…' : 'Regenerate link'}
-                  </button>
-                </div>
-              )}
-            </div>
-          );
-        })}
       </div>
     </section>
   );

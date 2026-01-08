@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { WhiteboardCanvas } from '../whiteboard/WhiteboardCanvas';
 
@@ -9,7 +9,7 @@ import { ExportImportPanel } from './boardEditor/ExportImportPanel';
 import { ToolSelectorPanel } from './boardEditor/ToolSelectorPanel';
 import { ToolAndSelectionPanel } from './boardEditor/ToolAndSelectionPanel';
 import { BoardInfoPanel } from './boardEditor/BoardInfoPanel';
-import { SharePanel } from './boardEditor/SharePanel';
+import { ShareDialog } from './boardEditor/ShareDialog';
 import { useBoardEditor } from './hooks/useBoardEditor';
 
 const CANVAS_WIDTH = 960;
@@ -78,6 +78,9 @@ id } = useParams<{ id: string }>();
     return url.toString();
   }, [collab?.inviteToken]);
 
+  const [isShareOpen, setIsShareOpen] = useState(false);
+
+
   const canCopy = (state?.selectedObjectIds?.length ?? 0) > 0;
   const canPaste = !!hasClipboard;
 
@@ -129,13 +132,13 @@ id } = useParams<{ id: string }>();
     <section className="page page-board-editor">
       {/* Pass boardName instead of boardId */}
       <BoardEditorHeader
+        onOpenShare={() => setIsShareOpen(true)}
         collab={{
           status: collab.enabled ? collab.status : 'disabled',
           role: collab.role,
           usersCount: collab.users?.length ?? 0,
           errorText: collab.errorText,
         }}
-        inviteLink={inviteLink}
         boardName={boardName}
         canDelete={canCopy}
         canCopy={canCopy}
@@ -178,9 +181,7 @@ id } = useParams<{ id: string }>();
             onImportFileChange={handleImportFileChange}
           />
 
-          <SharePanel boardId={boardId} boardName={boardName} />
-
-
+          
           {/* Board Info at the very bottom */}
           {state && (
             <BoardInfoPanel
@@ -262,6 +263,14 @@ id } = useParams<{ id: string }>();
           </div>
         </div>
       </div>
-    </section>
+    
+      <ShareDialog
+        isOpen={isShareOpen}
+        boardId={boardId}
+        boardName={boardName}
+        onCancel={() => setIsShareOpen(false)}
+      />
+
+</section>
   );
 };

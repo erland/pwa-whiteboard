@@ -17,7 +17,7 @@ type BoardEditorHeaderProps = {
   onCopy?: () => void;
   onPaste?: () => void;
   collab?: CollabInfo;
-  inviteLink?: string;
+  onOpenShare?: () => void;
 };
 
 export const BoardEditorHeader: React.FC<BoardEditorHeaderProps> = ({
@@ -29,7 +29,7 @@ export const BoardEditorHeader: React.FC<BoardEditorHeaderProps> = ({
   onCopy,
   onPaste,
   collab,
-  inviteLink,
+  onOpenShare,
 }) => {
   const status = collab?.status ?? 'disabled';
   const showBadge = status !== 'disabled';
@@ -51,37 +51,6 @@ export const BoardEditorHeader: React.FC<BoardEditorHeaderProps> = ({
       ? `${label} (${collab.errorText})`
       : label;
 
-
-
-
-const [inviteCopied, setInviteCopied] = React.useState(false);
-
-const copyInviteLink = async () => {
-  if (!inviteLink) return;
-  try {
-    await navigator.clipboard.writeText(inviteLink);
-    setInviteCopied(true);
-    window.setTimeout(() => setInviteCopied(false), 1200);
-  } catch {
-    // Fallback for older browsers / insecure contexts
-    try {
-      const ta = document.createElement('textarea');
-      ta.value = inviteLink;
-      ta.style.position = 'fixed';
-      ta.style.left = '-9999px';
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-      setInviteCopied(true);
-      window.setTimeout(() => setInviteCopied(false), 1200);
-    } catch {
-      // Ignore
-    }
-  }
-};
-
   return (
     <header className="board-editor-header">
       <h1 className="board-editor-title">{boardName || 'Board'}</h1>
@@ -93,15 +62,14 @@ const copyInviteLink = async () => {
             <span>{labelWithError}</span>
           </span>
         )}
-
         <button
           type="button"
           className="tool-button"
-          onClick={copyInviteLink}
-          disabled={!inviteLink}
-          title="Copy invite link"
+          onClick={onOpenShare}
+          disabled={!onOpenShare}
+          title="Share board"
         >
-          🔗 {inviteCopied ? 'Copied!' : 'Copy invite link'}
+          🔗 Share…
         </button>
 
         <button

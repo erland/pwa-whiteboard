@@ -6,6 +6,7 @@ import { getBestLocalBoardTitle } from '../../domain/boardTitle';
 import type { WhiteboardMeta, WhiteboardState } from '../../domain/types';
 import { createEmptyWhiteboardState } from '../../domain/whiteboardState';
 import { getWhiteboardRepository } from '../../infrastructure/localStorageWhiteboardRepository';
+import { buildInviteUrl, generateInviteToken, sha256Hex } from '../../share/inviteTokens';
 
 type InviteRole = 'viewer' | 'editor';
 
@@ -84,6 +85,15 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
 
   const [showAllInvites, setShowAllInvites] = React.useState(false);
   const [invites, setInvites] = React.useState<BoardInvite[]>([]);
+
+  // Step 3: create invites (token shown once; only the hash is stored in Supabase)
+  const [createRole, setCreateRole] = React.useState<InviteRole>('viewer');
+  const [createLabel, setCreateLabel] = React.useState('');
+  const [createExpiryPreset, setCreateExpiryPreset] = React.useState<'7d' | '30d' | 'never'>('30d');
+  const [creatingInvite, setCreatingInvite] = React.useState(false);
+
+  const [lastCreatedInviteUrl, setLastCreatedInviteUrl] = React.useState<string | null>(null);
+  const [lastCreatedInviteCopied, setLastCreatedInviteCopied] = React.useState(false);
 
   const [loadingInvites, setLoadingInvites] = React.useState(false);
 
@@ -296,9 +306,117 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
 
   };
 
+  const computeExpiresAt = (preset: '7d' | '30d' | 'never'): string | null => {
+    if (preset === 'never') return null;
+    const days = preset === '7d' ? 7 : 30;
+    return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  };
 
+  const copyText = async (value: string): Promise<boolean> => {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      // Fallback for older browsers / insecure contexts
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = value;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  };
 
+  const createInvite = async () => {
+    setMessage(null);
 
+    if (!supabaseReady) {
+      setMessage('Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+      return;
+    }
+    if (!boardIdIsUuid) {
+      setMessage('This board id is local-only. Migrate it to a UUID-based id before creating invite links.');
+      return;
+    }
+
+    setCreatingInvite(true);
+    try {
+      const client = await getSupabaseClient();
+      if (!client) {
+        setMessage('Supabase client not available.');
+        return;
+      }
+
+      const { data } = await client.auth.getSession();
+      const sess = data?.session ?? null;
+      if (!sess) {
+        setMessage('You must be signed in to create invites.');
+        return;
+      }
+
+      // Ensure the board exists (owner-only via RLS). Safe to call even if already ensured.
+      const title = (await getBestLocalBoardTitle(boardId, boardName)) ?? boardName ?? 'Untitled board';
+      const ensured = await ensureBoardRowInSupabase({
+        client,
+        boardId,
+        ownerUserId: sess.user.id,
+        title,
+      });
+      if (!ensured.ok) {
+        setMessage(ensured.message);
+        return;
+      }
+
+      const inviteToken = generateInviteToken();
+      const tokenHash = await sha256Hex(inviteToken);
+      const expiresAt = computeExpiresAt(createExpiryPreset);
+      const label = createLabel.trim() ? createLabel.trim() : null;
+
+      const { error } = await client
+        .schema('whiteboard')
+        .from('board_invites')
+        .insert({
+          board_id: boardId,
+          role: createRole,
+          label,
+          token_hash: tokenHash,
+          expires_at: expiresAt,
+          created_by_user_id: sess.user.id,
+        });
+
+      if (error) {
+        setMessage(`Could not create invite: ${error.message}`);
+        return;
+      }
+
+      // Token is shown once. Only the hash is stored in Supabase.
+      const url = buildInviteUrl(inviteToken);
+      setLastCreatedInviteUrl(url);
+      setLastCreatedInviteCopied(false);
+
+      await refreshAuthAndInvites();
+      setMessage('Invite created. Copy the one-time link below (it will not be shown again).');
+    } finally {
+      setCreatingInvite(false);
+    }
+  };
+
+  const copyLastCreatedInvite = async () => {
+    if (!lastCreatedInviteUrl) return;
+    const ok = await copyText(lastCreatedInviteUrl);
+    if (ok) {
+      setLastCreatedInviteCopied(true);
+      window.setTimeout(() => setLastCreatedInviteCopied(false), 1200);
+    }
+  };
 
   const formatMaybeDate = (iso: string | null): string => {
     if (!iso) return '—';
@@ -432,9 +550,68 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
             </div>
           </div>
 
+          {sessionEmail && boardIdIsUuid && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                <select
+                  value={createRole}
+                  onChange={(e) => setCreateRole(e.currentTarget.value as InviteRole)}
+                  disabled={creatingInvite || !supabaseReady}
+                  title="Role"
+                >
+                  <option value="viewer">viewer</option>
+                  <option value="editor">editor</option>
+                </select>
+
+                <input
+                  type="text"
+                  value={createLabel}
+                  onChange={(e) => setCreateLabel(e.currentTarget.value)}
+                  placeholder="Label (optional)"
+                  style={{ minWidth: 200 }}
+                  disabled={creatingInvite || !supabaseReady}
+                />
+
+                <select
+                  value={createExpiryPreset}
+                  onChange={(e) => setCreateExpiryPreset(e.currentTarget.value as '7d' | '30d' | 'never')}
+                  disabled={creatingInvite || !supabaseReady}
+                  title="Expiry"
+                >
+                  <option value="7d">Expires in 7 days</option>
+                  <option value="30d">Expires in 30 days</option>
+                  <option value="never">Never expires</option>
+                </select>
+
+                <button
+                  type="button"
+                  className="tool-button"
+                  onClick={createInvite}
+                  disabled={creatingInvite || !supabaseReady}
+                  title="Create a new invite link"
+                >
+                  {creatingInvite ? 'Creating…' : 'Create invite'}
+                </button>
+              </div>
+
+              {lastCreatedInviteUrl && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ opacity: 0.8, fontSize: 12, marginBottom: 6 }}>
+                    One-time link (only shown once — copy it now):
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                    <input type="text" readOnly value={lastCreatedInviteUrl} style={{ flex: '1 1 420px', minWidth: 260 }} />
+                    <button type="button" className="tool-button" onClick={copyLastCreatedInvite}>
+                      {lastCreatedInviteCopied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <p style={{ marginTop: 8, opacity: 0.75, fontSize: 12 }}>
-            Invite links are not stored (only a token hash). To re-share a link later, you&apos;ll use Regenerate (coming
-            in a later step).
+            Invite links are not stored (only a token hash). If you lose a link, you&apos;ll need to regenerate it (Step 4).
           </p>
         </div>
 
@@ -444,7 +621,7 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
               <strong>No invites yet</strong>
             </div>
             <div style={{ opacity: 0.8, fontSize: 12 }}>
-              Next we&apos;ll add creating and managing multiple viewer/editor invites.
+              Use the form above to create viewer/editor invites.
             </div>
           </div>
         )}

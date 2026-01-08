@@ -102,11 +102,15 @@ function getAuthRedirectTo(): string {
   return window.location.href;
 }
 
+type AuthStep = 'email' | 'otp';
+
 export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) => {
   const navigate = useNavigate();
   const boardIdIsUuid = isUuidLike(boardId);
 
   const [email, setEmail] = React.useState('');
+  const [authStep, setAuthStep] = React.useState<AuthStep>('email');
+  const [otpToken, setOtpToken] = React.useState('');
   const [sessionEmail, setSessionEmail] = React.useState<string | null>(null);
   const [authLoading, setAuthLoading] = React.useState(false);
   const [message, setMessage] = React.useState<string | null>(null);
@@ -185,6 +189,12 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
     setSessionEmail(sess?.user?.email ?? null);
 
     if (sess) {
+      // If the user signed in (OTP or otherwise), collapse any pending OTP UI.
+      setAuthStep('email');
+      setOtpToken('');
+    }
+
+    if (sess) {
       if (!boardIdIsUuid) {
         setMessage('This board uses a local-only id and cannot be shared yet. Click "Migrate to shareable board" to create a UUID-based board id.');
         return;
@@ -232,7 +242,7 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
     refreshAuthAndInvites().catch(() => void 0);
   }, [boardId, boardName, supabaseReady, refreshAuthAndInvites]);
 
-  const signInWithEmail = async () => {
+  const sendOtpToEmail = async () => {
     setMessage(null);
     if (!supabaseReady) {
       setMessage('Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
@@ -249,21 +259,70 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
         setMessage('Supabase client not available.');
         return;
       }
-    
-      // Redirect back to *this* deployment (works for GitHub Pages + localhost)
+
+      // Keep this set as a fallback if a user clicks the link, but the primary flow is OTP.
+      // Works on localhost and GitHub Pages, and avoids import.meta (Jest-safe).
       const emailRedirectTo = getAuthRedirectTo();
 
       const { error } = await client.auth.signInWithOtp({
         email: email.trim(),
         options: { emailRedirectTo },
       });
-          
+
       if (error) {
         setMessage(error.message);
         return;
       }
-    
-      setMessage('Magic link sent. Check your email to finish signing in.');
+
+      setAuthStep('otp');
+      setOtpToken('');
+      setMessage(
+        'Code sent. Enter the one-time code from your email to finish signing in. (If your email only contains a link, update the Supabase email template to include the OTP token.)'
+      );
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const verifyOtpCode = async () => {
+    setMessage(null);
+    if (!supabaseReady) {
+      setMessage('Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+      return;
+    }
+    if (!email.trim()) {
+      setMessage('Enter the same email address you requested the code for.');
+      setAuthStep('email');
+      return;
+    }
+    if (!otpToken.trim()) {
+      setMessage('Enter the one-time code from your email.');
+      return;
+    }
+    setAuthLoading(true);
+    try {
+      const client = await getSupabaseClient();
+      if (!client) {
+        setMessage('Supabase client not available.');
+        return;
+      }
+
+      const { error } = await client.auth.verifyOtp({
+        email: email.trim(),
+        token: otpToken.trim(),
+        // Supabase email OTP uses type "email".
+        type: 'email',
+      });
+
+      if (error) {
+        setMessage(error.message);
+        return;
+      }
+
+      setAuthStep('email');
+      setOtpToken('');
+      await refreshAuthAndInvites();
+      setMessage('Signed in.');
     } finally {
       setAuthLoading(false);
     }
@@ -394,16 +453,49 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
             </span>
           ) : (
             <span className="inline-auth">
-              <input
-                type="email"
-                value={email}
-                placeholder="you@example.com"
-                onChange={(e) => setEmail(e.target.value)}
-                style={{ maxWidth: 220 }}
-              />
-              <button type="button" className="tool-button" onClick={signInWithEmail} disabled={authLoading || !supabaseReady}>
-                {authLoading ? 'Sending…' : 'Send magic link'}
-              </button>
+              {authStep === 'email' ? (
+                <>
+                  <input
+                    type="email"
+                    value={email}
+                    placeholder="you@example.com"
+                    onChange={(e) => setEmail(e.target.value)}
+                    style={{ maxWidth: 220 }}
+                  />
+                  <button type="button" className="tool-button" onClick={sendOtpToEmail} disabled={authLoading || !supabaseReady}>
+                    {authLoading ? 'Sending…' : 'Send sign-in code'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={otpToken}
+                    placeholder="One-time code"
+                    onChange={(e) => setOtpToken(e.target.value)}
+                    style={{ maxWidth: 160 }}
+                  />
+                  <button type="button" className="tool-button" onClick={verifyOtpCode} disabled={authLoading || !supabaseReady}>
+                    {authLoading ? 'Verifying…' : 'Verify code'}
+                  </button>
+                  <button
+                    type="button"
+                    className="tool-button"
+                    onClick={() => {
+                      setAuthStep('email');
+                      setOtpToken('');
+                      setMessage(null);
+                    }}
+                    disabled={authLoading}
+                  >
+                    Back
+                  </button>
+                  <button type="button" className="tool-button" onClick={sendOtpToEmail} disabled={authLoading || !supabaseReady}>
+                    Resend
+                  </button>
+                </>
+              )}
             </span>
           )}
         </span>

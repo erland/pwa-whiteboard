@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 digest*
+pwa-whiteboard*
 
 # Editor directories and files
 .vscode/*

@@ -24,6 +24,8 @@ type SharePanelProps = {
   boardName: string;
 };
 
+type SupabaseClientNonNull = Exclude<Awaited<ReturnType<typeof getSupabaseClient>>, null>;
+
 const BOARDS_INDEX_KEY = 'pwa-whiteboard.boardsIndex';
 
 function isUuidLike(id: string): boolean {
@@ -94,6 +96,10 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
 
   const [lastCreatedInviteUrl, setLastCreatedInviteUrl] = React.useState<string | null>(null);
   const [lastCreatedInviteCopied, setLastCreatedInviteCopied] = React.useState(false);
+
+  // Step 4: per-invite management actions
+  const [inviteBusyId, setInviteBusyId] = React.useState<string | null>(null);
+  const [extendPresetByInviteId, setExtendPresetByInviteId] = React.useState<Record<string, '7d' | '30d' | 'never'>>({});
 
   const [loadingInvites, setLoadingInvites] = React.useState(false);
 
@@ -312,6 +318,43 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
     return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
   };
 
+  const computeRegeneratedExpiresAt = (inv: BoardInvite): string | null => {
+    // Option A: we cannot recover old links. Regenerating creates a new token.
+    // Keep the remaining lifetime when possible, otherwise default to 30 days.
+    if (!inv.expires_at) return null;
+    const expiresMs = Date.parse(inv.expires_at);
+    if (Number.isNaN(expiresMs)) return computeExpiresAt('30d');
+    const remaining = expiresMs - Date.now();
+    if (remaining <= 0) return computeExpiresAt('30d');
+    return new Date(Date.now() + remaining).toISOString();
+  };
+
+  const getExtendPreset = (inviteId: string): '7d' | '30d' | 'never' => {
+    return extendPresetByInviteId[inviteId] ?? '30d';
+  };
+
+  const withSignedInSession = async (): Promise<
+    | { client: SupabaseClientNonNull; userId: string }
+    | null
+  > => {
+    if (!supabaseReady) {
+      setMessage('Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+      return null;
+    }
+    const client = await getSupabaseClient();
+    if (!client) {
+      setMessage('Supabase client not available.');
+      return null;
+    }
+    const { data } = await client.auth.getSession();
+    const sess = data?.session ?? null;
+    if (!sess) {
+      setMessage('You must be signed in.');
+      return null;
+    }
+    return { client, userId: sess.user.id };
+  };
+
   const copyText = async (value: string): Promise<boolean> => {
     try {
       await navigator.clipboard.writeText(value);
@@ -415,6 +458,138 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
     if (ok) {
       setLastCreatedInviteCopied(true);
       window.setTimeout(() => setLastCreatedInviteCopied(false), 1200);
+    }
+  };
+
+  const revokeInvite = async (inviteId: string): Promise<void> => {
+    setMessage(null);
+    if (inviteBusyId) return;
+    const sess = await withSignedInSession();
+    if (!sess) return;
+    if (!boardIdIsUuid) {
+      setMessage('This board id is local-only. Migrate it to a UUID-based id before managing invites.');
+      return;
+    }
+
+    setInviteBusyId(inviteId);
+    try {
+      const nowIso = new Date().toISOString();
+      const { error } = await sess.client
+        .schema('whiteboard')
+        .from('board_invites')
+        .update({ revoked_at: nowIso })
+        .eq('id', inviteId)
+        .eq('board_id', boardId);
+      if (error) {
+        setMessage(`Could not revoke invite: ${error.message}`);
+        return;
+      }
+      await refreshAuthAndInvites();
+      setMessage('Invite revoked.');
+    } finally {
+      setInviteBusyId(null);
+    }
+  };
+
+  const setInviteExpiry = async (inviteId: string, preset: '7d' | '30d' | 'never'): Promise<void> => {
+    setMessage(null);
+    if (inviteBusyId) return;
+    const sess = await withSignedInSession();
+    if (!sess) return;
+    if (!boardIdIsUuid) {
+      setMessage('This board id is local-only. Migrate it to a UUID-based id before managing invites.');
+      return;
+    }
+
+    setInviteBusyId(inviteId);
+    try {
+      const expiresAt = computeExpiresAt(preset);
+      const { error } = await sess.client
+        .schema('whiteboard')
+        .from('board_invites')
+        .update({ expires_at: expiresAt })
+        .eq('id', inviteId)
+        .eq('board_id', boardId);
+      if (error) {
+        setMessage(`Could not update expiry: ${error.message}`);
+        return;
+      }
+      await refreshAuthAndInvites();
+      setMessage('Invite expiry updated.');
+    } finally {
+      setInviteBusyId(null);
+    }
+  };
+
+  const regenerateInvite = async (inv: BoardInvite): Promise<void> => {
+    setMessage(null);
+    if (inviteBusyId) return;
+    const sess = await withSignedInSession();
+    if (!sess) return;
+    if (!boardIdIsUuid) {
+      setMessage('This board id is local-only. Migrate it to a UUID-based id before managing invites.');
+      return;
+    }
+
+    setInviteBusyId(inv.id);
+    try {
+      // Ensure the board exists (owner-only via RLS). Safe to call even if already ensured.
+      const title = (await getBestLocalBoardTitle(boardId, boardName)) ?? boardName ?? 'Untitled board';
+      const ensured = await ensureBoardRowInSupabase({
+        client: sess.client,
+        boardId,
+        ownerUserId: sess.userId,
+        title,
+      });
+      if (!ensured.ok) {
+        setMessage(ensured.message);
+        return;
+      }
+
+      // Revoke old invite (if not already revoked) and create a new invite row with a new token.
+      const nowIso = new Date().toISOString();
+      if (!inv.revoked_at) {
+        const { error: revokeErr } = await sess.client
+          .schema('whiteboard')
+          .from('board_invites')
+          .update({ revoked_at: nowIso })
+          .eq('id', inv.id)
+          .eq('board_id', boardId);
+        if (revokeErr) {
+          setMessage(`Could not revoke old invite: ${revokeErr.message}`);
+          return;
+        }
+      }
+
+      const inviteToken = generateInviteToken();
+      const tokenHash = await sha256Hex(inviteToken);
+      const expiresAt = computeRegeneratedExpiresAt(inv);
+
+      const { error: insertErr } = await sess.client
+        .schema('whiteboard')
+        .from('board_invites')
+        .insert({
+          board_id: boardId,
+          role: inv.role,
+          label: inv.label ?? null,
+          token_hash: tokenHash,
+          expires_at: expiresAt,
+          created_by_user_id: sess.userId,
+        });
+
+      if (insertErr) {
+        setMessage(`Could not regenerate invite: ${insertErr.message}`);
+        return;
+      }
+
+      const url = buildInviteUrl(inviteToken);
+      setLastCreatedInviteUrl(url);
+      setLastCreatedInviteCopied(false);
+
+      await refreshAuthAndInvites();
+      setMessage('Invite regenerated. Copy the new one-time link below (it will not be shown again).');
+    } finally {
+      setInviteBusyId(null);
     }
   };
 
@@ -611,7 +786,7 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
           )}
 
           <p style={{ marginTop: 8, opacity: 0.75, fontSize: 12 }}>
-            Invite links are not stored (only a token hash). If you lose a link, you&apos;ll need to regenerate it (Step 4).
+            Invite links are not stored (only a token hash). If you lose a link, use “Regenerate link” to create a new one.
           </p>
         </div>
 
@@ -628,6 +803,9 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
 
         {invites.map((inv) => {
           const status = getInviteStatus(inv);
+          const canManage = !!sessionEmail && boardIdIsUuid;
+          const busy = inviteBusyId === inv.id;
+          const extendPreset = getExtendPreset(inv.id);
           return (
             <div key={inv.id} className="share-invite-row">
               <div className="share-invite-header">
@@ -642,6 +820,60 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
                 <span>Expires: {inv.expires_at ? formatMaybeDate(inv.expires_at) : 'Never'}</span>
                 {inv.revoked_at && <span>Revoked: {formatMaybeDate(inv.revoked_at)}</span>}
               </div>
+
+              {canManage && (
+                <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                  {!inv.revoked_at && (
+                    <>
+                      <button
+                        type="button"
+                        className="tool-button"
+                        onClick={() => revokeInvite(inv.id)}
+                        disabled={busy || !supabaseReady}
+                        title="Revoke this invite"
+                      >
+                        {busy ? 'Working…' : 'Revoke'}
+                      </button>
+
+                      <select
+                        value={extendPreset}
+                        onChange={(e) =>
+                          setExtendPresetByInviteId((prev) => ({
+                            ...prev,
+                            [inv.id]: e.currentTarget.value as '7d' | '30d' | 'never',
+                          }))
+                        }
+                        disabled={busy || !supabaseReady}
+                        title="Set a new expiry"
+                      >
+                        <option value="7d">Expires in 7 days</option>
+                        <option value="30d">Expires in 30 days</option>
+                        <option value="never">Never expires</option>
+                      </select>
+
+                      <button
+                        type="button"
+                        className="tool-button"
+                        onClick={() => setInviteExpiry(inv.id, extendPreset)}
+                        disabled={busy || !supabaseReady}
+                        title="Update expiry (can reactivate an expired invite)"
+                      >
+                        {busy ? 'Working…' : 'Set expiry'}
+                      </button>
+                    </>
+                  )}
+
+                  <button
+                    type="button"
+                    className="tool-button"
+                    onClick={() => regenerateInvite(inv)}
+                    disabled={busy || !supabaseReady}
+                    title="Create a new one-time link (old link will stop working)"
+                  >
+                    {busy ? 'Working…' : 'Regenerate link'}
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}

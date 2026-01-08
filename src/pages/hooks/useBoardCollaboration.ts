@@ -75,9 +75,7 @@ export function useBoardCollaboration({
   const guestId = useMemo(() => getOrCreateGuestId(), []);
   const [selfUserId, setSelfUserId] = useState<string>(guestId);
 
-  const enabled = Boolean(baseUrl) && Boolean(boardId);
-
-  const [status, setStatus] = useState<CollabStatus | 'disabled'>(enabled ? 'idle' : 'disabled');
+  const [status, setStatus] = useState<CollabStatus | 'disabled'>('disabled');
   const [errorText, setErrorText] = useState<string | undefined>(undefined);
   const [noticeText, setNoticeText] = useState<string | undefined>(undefined);
   const noticeTimerRef = useRef<number | null>(null);
@@ -107,37 +105,63 @@ export function useBoardCollaboration({
   const [supabaseJwt, setSupabaseJwt] = useState<string | null>(null);
   const [boardEnsured, setBoardEnsured] = useState<boolean>(false);
 
-  // Fetch a Supabase JWT for owner-mode joins (when no invite token is present).
+  // Keep a Supabase JWT for owner-mode joins (when no invite token is present).
+  // Important: we must react to auth state changes; otherwise signing in while the board
+  // is open won't trigger collaboration until the user reloads the page.
   useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    if (inviteToken) {
+      setSupabaseJwt(null);
+      setSelfUserId(guestId);
+      return;
+    }
+
+    const client = getSupabaseClient();
+    if (!client) return;
+
     let cancelled = false;
-    async function run() {
-      if (!isSupabaseConfigured()) return;
-      if (inviteToken) {
-        setSupabaseJwt(null);
-        setSelfUserId(guestId);
-        return;
-      }
-      const client = getSupabaseClient();
-      if (!client) return;
+
+    const syncFromSession = async () => {
       const { data } = await client.auth.getSession();
       const sess = data.session;
-      const jwt = sess?.access_token ?? null;
-      if (!cancelled) {
-        setSupabaseJwt(jwt);
-        setSelfUserId(sess?.user?.id ?? guestId);
-      }
-    }
-    run().catch((err) => console.error('Failed to get supabase session', err));
+      if (cancelled) return;
+      setSupabaseJwt(sess?.access_token ?? null);
+      setSelfUserId(sess?.user?.id ?? guestId);
+    };
+
+    // Initial sync (covers already-signed-in users)
+    syncFromSession().catch((err) => console.error('Failed to get supabase session', err));
+
+    // Live updates (covers signing in/out while board stays open)
+    const { data } = client.auth.onAuthStateChange((_event, session) => {
+      if (cancelled) return;
+      setSupabaseJwt(session?.access_token ?? null);
+      setSelfUserId(session?.user?.id ?? guestId);
+    });
+
     return () => {
       cancelled = true;
+      data.subscription.unsubscribe();
     };
-  }, [inviteToken]);
+  }, [inviteToken, guestId]);
 
   const auth = useMemo(() => {
     if (inviteToken) return { kind: 'invite', inviteToken } as const;
     if (supabaseJwt) return { kind: 'owner', supabaseJwt } as const;
     return null;
   }, [inviteToken, supabaseJwt]);
+
+  const enabled = Boolean(baseUrl) && Boolean(boardId) && Boolean(auth);
+
+  // Keep status in sync with enabled/disabled transitions.
+  useEffect(() => {
+    if (!enabled) {
+      setStatus('disabled');
+    } else {
+      // Don't force-reset to idle if we are already connecting/connected.
+      setStatus((s) => (s === 'disabled' ? 'idle' : s));
+    }
+  }, [enabled]);
 
 // Ensure the board exists in Supabase before the owner joins collab.
 // Important: do NOT flip boardEnsured back to false just because the title becomes available later;
@@ -214,7 +238,7 @@ useEffect(() => {
   return () => {
     cancelled = true;
   };
-}, [boardId, inviteToken, boardName]);
+}, [boardId, inviteToken, boardName, supabaseJwt]);
 
 // If the owner renames a board later, update the title in Supabase without interrupting the websocket.
 useEffect(() => {

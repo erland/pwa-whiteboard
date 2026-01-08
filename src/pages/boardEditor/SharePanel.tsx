@@ -3,16 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { getSupabaseClient, isSupabaseConfigured } from '../../supabase/supabaseClient';
 import { ensureBoardRowInSupabase } from '../../supabase/boards';
 import { getBestLocalBoardTitle } from '../../domain/boardTitle';
-import { buildInviteUrl, generateInviteToken, sha256Hex } from '../../share/inviteTokens';
 import type { WhiteboardMeta, WhiteboardState } from '../../domain/types';
 import { createEmptyWhiteboardState } from '../../domain/whiteboardState';
 import { getWhiteboardRepository } from '../../infrastructure/localStorageWhiteboardRepository';
 
 type InviteRole = 'viewer' | 'editor';
 
-type ActiveInvite = {
+type BoardInvite = {
   id: string;
   role: InviteRole;
+  label: string | null;
   expires_at: string | null;
   revoked_at: string | null;
   created_at: string | null;
@@ -22,17 +22,6 @@ type SharePanelProps = {
   boardId: string;
   boardName: string;
 };
-
-type ExpiresPreset = '7d' | '30d' | 'never';
-
-function computeExpiresAt(preset: ExpiresPreset): string | null {
-  if (preset === 'never') return null;
-  const now = new Date();
-  const days = preset === '7d' ? 7 : 30;
-  now.setDate(now.getDate() + days);
-  return now.toISOString();
-}
-
 
 const BOARDS_INDEX_KEY = 'pwa-whiteboard.boardsIndex';
 
@@ -73,28 +62,6 @@ function writeBoardsIndex(index: WhiteboardMeta[]): void {
 }
 
 
-async function safeCopy(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    try {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.left = '-9999px';
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-}
-
 function getAuthRedirectTo(): string {
   // Send the user back to *this exact URL* after the magic link completes.
   // Works on localhost and GitHub Pages, and avoids import.meta (Jest-safe).
@@ -115,18 +82,8 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
   const [authLoading, setAuthLoading] = React.useState(false);
   const [message, setMessage] = React.useState<string | null>(null);
 
-  const [expiresPresetViewer, setExpiresPresetViewer] = React.useState<ExpiresPreset>('7d');
-  const [expiresPresetEditor, setExpiresPresetEditor] = React.useState<ExpiresPreset>('7d');
-
-  const [activeInvites, setActiveInvites] = React.useState<Record<InviteRole, ActiveInvite | null>>({
-    viewer: null,
-    editor: null,
-  });
-
-  const [lastGeneratedUrl, setLastGeneratedUrl] = React.useState<Record<InviteRole, string | null>>({
-    viewer: null,
-    editor: null,
-  });
+  const [showAllInvites, setShowAllInvites] = React.useState(false);
+  const [invites, setInvites] = React.useState<BoardInvite[]>([]);
 
   const [loadingInvites, setLoadingInvites] = React.useState(false);
 
@@ -213,15 +170,21 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
         return;
       }
 
-      // Load active invites (token itself is not stored; only hash)
+      // Load invites (token itself is not stored; only hash)
       setLoadingInvites(true);
-      const { data: invites, error: invErr } = await client
+      const nowIso = new Date().toISOString();
+
+      let q = client
         .schema('whiteboard')
         .from('board_invites')
-        .select('id, role, expires_at, revoked_at, created_at')
-        .eq('board_id', boardId)
-        .is('revoked_at', null)
-        .order('created_at', { ascending: false });
+        .select('id, role, label, expires_at, revoked_at, created_at')
+        .eq('board_id', boardId);
+
+      if (!showAllInvites) {
+        q = q.is('revoked_at', null).or(`expires_at.is.null,expires_at.gt.${nowIso}`);
+      }
+
+      const { data: invites, error: invErr } = await q.order('created_at', { ascending: false });
       setLoadingInvites(false);
 
       if (invErr) {
@@ -229,14 +192,9 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
         return;
       }
 
-      const next: Record<InviteRole, ActiveInvite | null> = { viewer: null, editor: null };
-      for (const row of invites ?? []) {
-        if (row.role === 'viewer' && !next.viewer) next.viewer = row;
-        if (row.role === 'editor' && !next.editor) next.editor = row;
-      }
-      setActiveInvites(next);
+      setInvites((invites ?? []) as BoardInvite[]);
     }
-  }, [boardId, boardName, supabaseReady]);
+  }, [boardId, boardName, supabaseReady, showAllInvites]);
 
   React.useEffect(() => {
     refreshAuthAndInvites().catch(() => void 0);
@@ -334,87 +292,28 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
     if (!client) return;
     await client.auth.signOut();
     setSessionEmail(null);
-    setActiveInvites({ viewer: null, editor: null });
-    setLastGeneratedUrl({ viewer: null, editor: null });
+    setInvites([]);
+
   };
 
-  const rotateInvite = async (role: InviteRole) => {
-    setMessage(null);
-    const client = await getSupabaseClient();
-    if (!client) return;
-    const { data } = await client.auth.getSession();
-    const sess = data?.session;
-    if (!sess) {
-      setMessage('Sign in first to create invite links.');
-      return;
-    }
 
-    const expires_at = computeExpiresAt(role === 'viewer' ? expiresPresetViewer : expiresPresetEditor);
 
-    // Revoke existing active invite for this role
-    await client
-      .schema('whiteboard')
-      .from('board_invites')
-      .update({ revoked_at: new Date().toISOString() })
-      .eq('board_id', boardId)
-      .eq('role', role)
-      .is('revoked_at', null);
 
-    // Generate token and store hash
-    const token = generateInviteToken();
-    const token_hash = await sha256Hex(token);
 
-    const { data: inserted, error } = await client
-      .schema('whiteboard')
-      .from('board_invites')
-      .insert({
-        board_id: boardId,
-        role,
-        token_hash,
-        expires_at,
-        created_by_user_id: sess.user.id,
-      })
-      .select('id, role, expires_at, revoked_at, created_at')
-      .single();
-
-    if (error) {
-      setMessage(`Could not create invite: ${error.message}`);
-      return;
-    }
-
-    const url = buildInviteUrl(token);
-    setLastGeneratedUrl((prev) => ({ ...prev, [role]: url }));
-    setActiveInvites((prev) => ({ ...prev, [role]: inserted as ActiveInvite }));
-    setMessage('Invite link created. Copy it now (the token cannot be recovered later).');
+  const formatMaybeDate = (iso: string | null): string => {
+    if (!iso) return '—';
+    const ms = Date.parse(iso);
+    if (Number.isNaN(ms)) return iso;
+    return new Date(ms).toLocaleString();
   };
 
-  const revokeInvite = async (role: InviteRole) => {
-    setMessage(null);
-    const current = activeInvites[role];
-    if (!current) return;
-    const client = await getSupabaseClient();
-    if (!client) return;
-    const { error } = await client
-      .schema('whiteboard')
-      .from('board_invites')
-      .update({ revoked_at: new Date().toISOString() })
-      .eq('id', current.id);
-    if (error) {
-      setMessage(`Could not revoke invite: ${error.message}`);
-      return;
+  const getInviteStatus = (inv: BoardInvite): 'Active' | 'Expired' | 'Revoked' => {
+    if (inv.revoked_at) return 'Revoked';
+    if (inv.expires_at) {
+      const ms = Date.parse(inv.expires_at);
+      if (!Number.isNaN(ms) && ms < Date.now()) return 'Expired';
     }
-    setActiveInvites((prev) => ({ ...prev, [role]: null }));
-    setLastGeneratedUrl((prev) => ({ ...prev, [role]: null }));
-  };
-
-  const copyLastLink = async (role: InviteRole) => {
-    const url = lastGeneratedUrl[role];
-    if (!url) {
-      setMessage('No invite URL available to copy. Generate/rotate a link first.');
-      return;
-    }
-    const ok = await safeCopy(url);
-    setMessage(ok ? 'Copied invite link.' : 'Could not copy automatically. Copy it manually from the text box.');
+    return 'Active';
   };
 
   return (
@@ -502,49 +401,70 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName }) =>
       </div>
 
       <div className="share-invites">
-        {(['viewer', 'editor'] as InviteRole[]).map((role) => {
-          const active = activeInvites[role];
-          const preset = role === 'viewer' ? expiresPresetViewer : expiresPresetEditor;
-          const setPreset = role === 'viewer' ? setExpiresPresetViewer : setExpiresPresetEditor;
-          const lastUrl = lastGeneratedUrl[role];
+        <div className="share-invite-row">
+          <div className="share-invite-header">
+            <strong>Invites</strong>
+            <span style={{ opacity: 0.8, fontSize: 12 }}>
+              {loadingInvites ? 'Loading…' : `${invites.length} ${invites.length === 1 ? 'invite' : 'invites'}`}
+            </span>
+          </div>
 
+          <div className="share-invite-controls">
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={showAllInvites}
+                onChange={(e) => setShowAllInvites(e.currentTarget.checked)}
+                disabled={!supabaseReady || loadingInvites}
+              />
+              Show revoked/expired
+            </label>
+
+            <div className="share-invite-buttons">
+              <button
+                type="button"
+                className="tool-button"
+                onClick={() => refreshAuthAndInvites()}
+                disabled={!supabaseReady || loadingInvites}
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          <p style={{ marginTop: 8, opacity: 0.75, fontSize: 12 }}>
+            Invite links are not stored (only a token hash). To re-share a link later, you&apos;ll use Regenerate (coming
+            in a later step).
+          </p>
+        </div>
+
+        {invites.length === 0 && !loadingInvites && (
+          <div className="share-invite-row">
+            <div className="share-invite-header">
+              <strong>No invites yet</strong>
+            </div>
+            <div style={{ opacity: 0.8, fontSize: 12 }}>
+              Next we&apos;ll add creating and managing multiple viewer/editor invites.
+            </div>
+          </div>
+        )}
+
+        {invites.map((inv) => {
+          const status = getInviteStatus(inv);
           return (
-            <div key={role} className="share-invite-row">
+            <div key={inv.id} className="share-invite-row">
               <div className="share-invite-header">
-                <strong>{role === 'viewer' ? 'Viewer link' : 'Editor link'}</strong>
-                <span className="muted">
-                  {loadingInvites ? 'Loading…' : active ? 'Active (token not recoverable)' : 'Disabled'}
+                <strong>{inv.label?.trim() ? inv.label : '(Unnamed invite)'}</strong>
+                <span style={{ opacity: 0.8, fontSize: 12 }}>
+                  {inv.role} • {status}
                 </span>
               </div>
 
-              <div className="share-invite-controls">
-                <label className="muted">
-                  Expires
-                  <select value={preset} onChange={(e) => setPreset(e.target.value as ExpiresPreset)} style={{ marginLeft: 8 }}>
-                    <option value="7d">7 days</option>
-                    <option value="30d">30 days</option>
-                    <option value="never">Never</option>
-                  </select>
-                </label>
-
-                <div className="share-invite-buttons">
-                  <button type="button" className="tool-button" onClick={() => rotateInvite(role)} disabled={!sessionEmail}>
-                    {active ? 'Rotate' : 'Create'}
-                  </button>
-                  <button type="button" className="tool-button" onClick={() => revokeInvite(role)} disabled={!sessionEmail || !active}>
-                    Revoke
-                  </button>
-                  <button type="button" className="tool-button" onClick={() => copyLastLink(role)} disabled={!lastUrl}>
-                    Copy
-                  </button>
-                </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, fontSize: 12, opacity: 0.85 }}>
+                <span>Created: {formatMaybeDate(inv.created_at)}</span>
+                <span>Expires: {inv.expires_at ? formatMaybeDate(inv.expires_at) : 'Never'}</span>
+                {inv.revoked_at && <span>Revoked: {formatMaybeDate(inv.revoked_at)}</span>}
               </div>
-
-              {lastUrl && (
-                <div className="share-invite-url">
-                  <input type="text" readOnly value={lastUrl} onFocus={(e) => e.currentTarget.select()} />
-                </div>
-              )}
             </div>
           );
         })}

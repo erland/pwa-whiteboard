@@ -192,3 +192,46 @@ so that later versions can add:
 
 Those later steps can reuse the event model and most of the UI, while replacing
 the local repository with one that talks to a backend and syncs events between clients.
+
+
+---
+
+## Collaboration and sharing (optional)
+
+The app can run fully **local-only** (boards stored in `localStorage`). If you configure Supabase + the worker,
+it can also support **real-time collaboration** and **share links**.
+
+### Viewer/editor invite links (Option A: hash-only tokens)
+
+Board owners can create multiple invite links with a role:
+
+- **Viewer**: can view the board
+- **Editor**: can edit the board
+
+For security, the raw invite token is **never stored** in the database — only a SHA-256 `token_hash` is stored.
+That means an invite URL is **only shown once at creation**. If you lose it, use **Regenerate link** to revoke the
+old invite and create a new one.
+
+Invites can also have an optional **label** to help you manage multiple links (e.g. “Team A (editor)”).
+
+### When collaboration connects
+
+- If you are **signed in** as the owner, collaboration connects automatically on the board page.
+- If you open a board with an **invite link**, collaboration connects using that invite (sign-in not required).
+- Otherwise, the board works in **local-only** mode without showing “Connecting…” overlays.
+
+
+## Manual QA checklist (invite management)
+
+Suggested quick checks after changes:
+
+- Create multiple invites (both viewer and editor) and verify they appear in the list.
+- Toggle “Show revoked/expired” and verify filtering works.
+- Revoke an invite and confirm it becomes unusable.
+- Extend an expired invite and confirm it becomes usable again.
+- Regenerate an invite and confirm:
+  - old invite is revoked
+  - a new invite row is created
+  - the new one-time link works
+- Sign in while a board is open and confirm collaboration connects without re-opening the board.
+

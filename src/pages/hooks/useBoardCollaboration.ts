@@ -3,44 +3,18 @@ import type { BoardEvent, WhiteboardState } from '../../domain/types';
 import type { BoardRole, PresencePayload, PresenceUser } from '../../../shared/protocol';
 import { CollabClient, type CollabStatus } from '../../collab/CollabClient';
 import { useAuth } from '../../auth/AuthContext';
-import { getBestLocalBoardTitle } from '../../domain/boardTitle';
 import { getWhiteboardServerBaseUrl } from '../../config/server';
-import { createSnapshotsApi } from '../../api/snapshotsApi';
-import { decodeSnapshotJson, encodeSnapshotJson } from '../../domain/snapshotCodec';
-function getInviteTokenFromUrl(): string | null {
-  if (typeof window === 'undefined') return null;
-  const url = new URL(window.location.href);
-  const q = url.searchParams.get('invite');
-  if (q) return q.trim();
-
-  // Allow #invite=TOKEN (useful when query params are hard to share)
-  const hash = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash;
-  const m = /(?:^|&)invite=([^&]+)/.exec(hash);
-  if (m?.[1]) return decodeURIComponent(m[1]).trim();
-
-  // If invite token was passed as 'invite=TOKEN'
-  const raw = url.searchParams.toString();
-  if (raw.startsWith('invite=')) return decodeURIComponent(raw.slice('invite='.length)).trim();
-
-  return null;
-}
-
-function getOrCreateGuestId(): string {
-  if (typeof window === 'undefined') return 'guest';
-  const key = 'pwa-whiteboard.guestId';
-  const existing = window.localStorage.getItem(key);
-  if (existing) return existing;
-  const next = 'g_' + Math.random().toString(16).slice(2) + '_' + Date.now().toString(16);
-  window.localStorage.setItem(key, next);
-  return next;
-}
+import { deriveSelfUserId, getInviteTokenFromUrl, getOrCreateGuestId } from './collab/collabIdentity';
+import { loadLatestSnapshotOrNull, useSnapshotAutosave } from './collab/useSnapshotSync';
+import { usePresenceSender } from './collab/usePresenceSender';
+import { useAutoReconnect } from './collab/useAutoReconnect';
 
 export type UseBoardCollaborationArgs = {
   boardId: string | undefined;
   /** Current local board state (used for snapshot autosave). */
   state?: WhiteboardState | null;
   boardMetaId?: string;
-  boardName?: string;
+  boardName?: string;// reserved for future use
   resetBoard: (next: any) => void;
   applyRemoteEvent: (event: BoardEvent) => void;
 };
@@ -70,13 +44,13 @@ export function useBoardCollaboration({
   boardId,
   state,
   boardMetaId,
-  boardName,
   resetBoard,
   applyRemoteEvent,
 }: UseBoardCollaborationArgs): UseBoardCollaborationResult {
   const baseUrl = getWhiteboardServerBaseUrl();
   const inviteToken = useMemo(() => getInviteTokenFromUrl(), []);
   const guestId = useMemo(() => getOrCreateGuestId(), []);
+
   const [selfUserId, setSelfUserId] = useState<string>(guestId);
 
   const [status, setStatus] = useState<CollabStatus | 'disabled'>('disabled');
@@ -85,10 +59,9 @@ export function useBoardCollaboration({
   const noticeTimerRef = useRef<number | null>(null);
 
   const [reconnectNonce, setReconnectNonce] = useState(0);
-  const reconnectTimerRef = useRef<number | null>(null);
-  const reconnectAttemptRef = useRef(0);
   const hasEverConnectedRef = useRef(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
+
   const [role, setRole] = useState<BoardRole | undefined>(undefined);
   const [users, setUsers] = useState<PresenceUser[]>([]);
   const [presenceByUserId, setPresenceByUserId] = useState<Record<string, PresencePayload>>({});
@@ -109,85 +82,28 @@ export function useBoardCollaboration({
   const { accessToken } = useAuth();
   const [boardEnsured, setBoardEnsured] = useState<boolean>(false);
 
-  // Auth is provided by OIDC (or invite token).
+  // Auth is provided by OIDC. Invite tokens are only used for HTTP accept.
   useEffect(() => {
     if (inviteToken) {
       setSelfUserId(guestId);
       return;
     }
-    // Use OIDC subject when authenticated; otherwise fall back to a stable guest id.
-    const next = (accessToken ? ((): string => {
-      try {
-        const parts = accessToken.split('.');
-        if (parts.length >= 2) {
-          const payload = JSON.parse(atob(parts[1].replace(/-/g,'+').replace(/_/g,'/')));
-          if (typeof payload.sub === 'string' && payload.sub.length) return payload.sub;
-        }
-      } catch { /* ignore */ }
-      return guestId;
-    })() : guestId);
-    setSelfUserId(next);
+    setSelfUserId(deriveSelfUserId(guestId, accessToken));
   }, [inviteToken, guestId, accessToken]);
 
-  // Collaboration requires an authenticated access token. Invite tokens are used only
-  // to accept the invite via HTTP; after that, join using the access token.
+  // Collaboration requires an authenticated access token.
   const enabled = Boolean(baseUrl) && Boolean(boardId) && Boolean(accessToken);
 
-// ---- Snapshot autosave (REST) ----
-const lastSavedSnapshotRef = useRef<string | null>(null);
-const saveTimerRef = useRef<number | null>(null);
-
-useEffect(() => {
-  if (!enabled) return;
-  if (status !== 'connected') return;
-  if (!boardId) return;
-  if (!state) return;
-  if (state.meta?.id !== boardId) return;
-  if (!(role === 'owner' || role === 'editor')) return;
-
-  // Debounce saves to avoid writing on every small interaction.
-  if (saveTimerRef.current) {
-    window.clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = null;
-  }
-
-  saveTimerRef.current = window.setTimeout(() => {
-    (async () => {
-      try {
-        if (!baseUrl || !accessToken) return;
-        const snapshotJson = encodeSnapshotJson(boardId, state);
-        if (lastSavedSnapshotRef.current === snapshotJson) return;
-
-        const api = createSnapshotsApi({ baseUrl, accessToken });
-        await api.create(boardId, snapshotJson);
-        lastSavedSnapshotRef.current = snapshotJson;
-      } catch (err) {
-        console.warn('Failed to save snapshot', err);
-      }
-    })();
-  }, 1000);
-
-  return () => {
-    if (saveTimerRef.current) {
-      window.clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-  };
-}, [
-  enabled,
-  status,
-  role,
-  boardId,
-  baseUrl,
-  accessToken,
-  // Snapshot content drivers (keep this cheap; we encode in the timer)
-  state?.objects,
-  state?.viewport?.offsetX,
-  state?.viewport?.offsetY,
-  state?.viewport?.zoom,
-  state?.selectedObjectIds,
-]);
-
+  // ---- Snapshot autosave (REST) ----
+  useSnapshotAutosave({
+    enabled,
+    status,
+    role,
+    boardId,
+    baseUrl,
+    accessToken,
+    state,
+  });
 
   // Keep status in sync with enabled/disabled transitions.
   useEffect(() => {
@@ -199,15 +115,16 @@ useEffect(() => {
     }
   }, [enabled]);
 
-// Board existence is managed by the server API (Step 4). For now, treat an enabled session as ensured.
+  // Board existence is managed by the server API (Step 4). For now, treat an enabled session as ensured.
   useEffect(() => {
     if (!boardId) {
       setBoardEnsured(false);
       return;
     }
-    // Board existence is managed by the server API (Step 4). For now, treat an enabled session as ensured.
     setBoardEnsured(Boolean(accessToken));
   }, [boardId, accessToken]);
+
+  // Clear cooldown when it expires.
   useEffect(() => {
     if (!cooldownUntil) return;
     const now = Date.now();
@@ -216,6 +133,7 @@ useEffect(() => {
     return () => window.clearTimeout(t);
   }, [cooldownUntil]);
 
+  // WebSocket connection lifecycle.
   useEffect(() => {
     if (!enabled || !baseUrl || !accessToken || !boardId) {
       clientRef.current?.close();
@@ -263,7 +181,6 @@ useEffect(() => {
 
           if (s === 'connected') {
             hasEverConnectedRef.current = true;
-            reconnectAttemptRef.current = 0;
             setIsReconnecting(false);
             setErrorText(undefined);
             setNoticeText(undefined);
@@ -283,35 +200,40 @@ useEffect(() => {
           if (s === 'closed') setErrorText(undefined);
         },
         onJoined: (msg) => {
-setRole(msg.role);
-setUsers(
-  msg.users ??
-    (msg.presentUserIds ?? []).map((userId) => ({ userId, displayName: userId, role: 'viewer' as const }))
-);
-setPresenceByUserId({});
+          setRole(msg.role);
+          setUsers(
+            msg.users ??
+              (msg.presentUserIds ?? []).map((userId) => ({
+                userId,
+                displayName: userId,
+                role: 'viewer' as const,
+              }))
+          );
+          setPresenceByUserId({});
 
-// Load the latest snapshot via REST on join (source of truth).
-(async () => {
-  try {
-    if (!baseUrl || !boardId || !accessToken) return;
-    const api = createSnapshotsApi({ baseUrl, accessToken });
-    const latest = await api.getLatest(boardId);
-    if (!latest?.snapshotJson) return;
-
-    const decoded = decodeSnapshotJson(boardId, latest.snapshotJson);
-    if (decoded) {
-      resetBoardRef.current(decoded);
-    }
-  } catch {
-    // Best-effort: if snapshots fail, keep whatever local state we have.
-  }
-})();
+          // Load the latest snapshot via REST on join (source of truth).
+          (async () => {
+            try {
+              if (!baseUrl || !boardId || !accessToken) return;
+              const decoded = await loadLatestSnapshotOrNull({ baseUrl, accessToken, boardId });
+              if (decoded) resetBoardRef.current(decoded);
+            } catch {
+              // Best-effort: if snapshots fail, keep whatever local state we have.
+            }
+          })();
         },
         onOp: (msg) => {
           if (msg.op) applyRemoteEventRef.current(msg.op);
         },
         onPresence: (msg) => {
-          setUsers(msg.users ?? (msg.presentUserIds ?? []).map((userId) => ({ userId, displayName: userId, role: 'viewer' as const })));
+          setUsers(
+            msg.users ??
+              (msg.presentUserIds ?? []).map((userId) => ({
+                userId,
+                displayName: userId,
+                role: 'viewer' as const,
+              }))
+          );
           setPresenceByUserId({});
         },
         onErrorMsg: (msg) => {
@@ -325,7 +247,6 @@ setPresenceByUserId({});
           }
 
           // Soft errors: keep the connection alive and show a short-lived notice.
-          // Avoid spamming the console with noisy expected errors.
           if (msg.code === 'rate_limited') {
             // Back off a bit to avoid join storms.
             setCooldownUntil(Date.now() + 15_000);
@@ -349,95 +270,34 @@ setPresenceByUserId({});
         clientKeyRef.current = null;
       }
     };
-  }, [enabled, baseUrl, accessToken, boardId, boardMetaId, guestId, cooldownUntil, boardEnsured, reconnectNonce]);
+  }, [
+    enabled,
+    baseUrl,
+    accessToken,
+    boardId,
+    boardMetaId,
+    guestId,
+    cooldownUntil,
+    boardEnsured,
+    reconnectNonce,
+  ]);
 
+  // Auto-reconnect (best-effort).
+  useAutoReconnect({
+    enabled,
+    status,
+    cooldownUntil,
+    hasEverConnectedRef,
+    setIsReconnecting,
+    setReconnectNonce,
+  });
 
-  // Auto-reconnect (best-effort). We only do this after we have successfully
-  // connected at least once; that prevents loops when credentials are wrong.
-  useEffect(() => {
-    if (!enabled) return;
-
-    const now = Date.now();
-    if (cooldownUntil && now < cooldownUntil) return;
-
-    const shouldReconnect =
-      status === 'closed' || (status === 'error' && hasEverConnectedRef.current);
-
-    if (!shouldReconnect) return;
-
-    // If a reconnect is already scheduled, don't schedule another.
-    if (reconnectTimerRef.current) return;
-
-    setIsReconnecting(true);
-
-    const attempt = reconnectAttemptRef.current + 1;
-    reconnectAttemptRef.current = attempt;
-
-    const baseDelay = 750;
-    const maxDelay = 15_000;
-    const backoff = Math.min(maxDelay, baseDelay * Math.pow(2, attempt - 1));
-    const jitter = Math.floor(backoff * (0.2 * Math.random()));
-    const delay = backoff + jitter;
-
-    reconnectTimerRef.current = window.setTimeout(() => {
-      reconnectTimerRef.current = null;
-      setReconnectNonce((n) => n + 1);
-    }, delay) as any;
-
-    return () => {
-      if (reconnectTimerRef.current) {
-        window.clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
-    };
-  }, [enabled, status, cooldownUntil]);
-
-  const sendOp = (event: BoardEvent) => {
-    if (!enabled || status !== 'connected' || !boardId) return;
-    clientRef.current?.sendOp(event, boardId);
-  };
-
-// Throttle presence to avoid spamming the server (and to play nicely with server-side rate limits).
-const PRESENCE_THROTTLE_MS = 120;
-const pendingPresenceRef = useRef<PresencePayload | null>(null);
-const presenceTimerRef = useRef<number | null>(null);
-const lastPresenceSentAtRef = useRef<number>(0);
-
-const flushPresence = () => {
-  presenceTimerRef.current = null;
-  if (!enabled || status !== 'connected' || !boardId) return;
-
-  const pending = pendingPresenceRef.current;
-  if (!pending) return;
-
-  const now = Date.now();
-  const elapsed = now - lastPresenceSentAtRef.current;
-  if (elapsed < PRESENCE_THROTTLE_MS) {
-    presenceTimerRef.current = window.setTimeout(flushPresence, PRESENCE_THROTTLE_MS - elapsed) as any;
-    return;
-  }
-
-  pendingPresenceRef.current = null;
-  lastPresenceSentAtRef.current = now;
-  clientRef.current?.sendPresence(boardId, pending);
-
-  // If something arrived while we sent (rare), schedule another tick.
-  if (pendingPresenceRef.current && !presenceTimerRef.current) {
-    presenceTimerRef.current = window.setTimeout(flushPresence, PRESENCE_THROTTLE_MS) as any;
-  }
-};
-
-const sendPresence = (presence: PresencePayload) => {
-  if (!enabled || status !== 'connected' || !boardId) return;
-
-  // Merge presence updates (latest wins).
-  pendingPresenceRef.current = { ...(pendingPresenceRef.current ?? {}), ...(presence ?? {}) };
-
-  if (!presenceTimerRef.current) {
-    presenceTimerRef.current = window.setTimeout(flushPresence, PRESENCE_THROTTLE_MS) as any;
-  }
-};
-
+  const { sendOp, sendPresence } = usePresenceSender({
+    enabled,
+    status,
+    boardId,
+    clientRef,
+  });
 
   return {
     enabled,

@@ -2,7 +2,7 @@
 
 This folder will contain **environment-agnostic** code shared between:
 - the React web app (`src/`), and
-- the Cloudflare Worker / Durable Object collaboration backend (`workers/collab/`).
+- the java-whiteboard-server backend (protocol definitions are shared for client-side validation/tests).
 
 Planned contents:
 - `protocol/`: message types + validation for the collaboration WebSocket protocol

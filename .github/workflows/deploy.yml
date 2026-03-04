@@ -42,10 +42,13 @@ jobs:
       - name: Build
         run: npm run build
         env:
+          VITE_WHITEBOARD_SERVER_BASE_URL: ${{ vars.VITE_WHITEBOARD_SERVER_BASE_URL }}
+          VITE_OIDC_ISSUER: ${{ vars.VITE_OIDC_ISSUER }}
+          VITE_OIDC_CLIENT_ID: ${{ vars.VITE_OIDC_CLIENT_ID }}
+          VITE_OIDC_REDIRECT_URI: ${{ vars.VITE_OIDC_REDIRECT_URI }}
+          VITE_OIDC_POST_LOGOUT_REDIRECT_URI: ${{ vars.VITE_OIDC_POST_LOGOUT_REDIRECT_URI }}
+          VITE_OIDC_SCOPE: ${{ vars.VITE_OIDC_SCOPE }}
           # Public (safe to expose in a client build). Prefer GitHub "Variables" for these.
-          VITE_COLLAB_BASE_URL: ${{ vars.VITE_COLLAB_BASE_URL }}
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
 
       - name: SPA fallback (GitHub Pages)
         run: cp dist/index.html dist/404.html

@@ -36,39 +36,13 @@ export type WhiteboardOp = BoardEvent;
 // Client -> Server messages
 // ----------------------------
 
-export type JoinAuth =
-  | { kind: 'owner'; accessToken: string }
-  | { kind: 'invite'; inviteToken: string };
-
-export type ClientJoinMessage = {
-  type: 'join';
-  boardId: string;
-  /**
-   * Optional last sequence number the client believes it has applied.
-   * Used as a hint for debugging/sanity checks.
-   */
-  clientKnownSeq?: number;
-  auth: JoinAuth;
-  /** Guest/client presentation preferences (not trusted identity). */
-  client?: {
-    guestId?: string;
-    displayName?: string;
-    color?: string;
-  };
-};
-
 export type ClientOpMessage = {
   type: 'op';
-  boardId: string;
-  clientOpId: string;
-  baseSeq: number;
+  /** Optional client-generated id used only for correlation; server may ignore it. */
+  clientOpId?: string;
+  /** Optional optimistic hint; server may ignore it. */
+  baseSeq?: number;
   op: WhiteboardOp;
-};
-
-export type ClientPresenceMessage = {
-  type: 'presence';
-  boardId: string;
-  presence: PresencePayload;
 };
 
 export type ClientPingMessage = {
@@ -77,9 +51,7 @@ export type ClientPingMessage = {
 };
 
 export type ClientToServerMessage =
-  | ClientJoinMessage
   | ClientOpMessage
-  | ClientPresenceMessage
   | ClientPingMessage;
 
 // ----------------------------
@@ -89,30 +61,38 @@ export type ClientToServerMessage =
 export type ServerJoinedMessage = {
   type: 'joined';
   boardId: string;
+  /** Authenticated user id (JWT subject). */
+  userId: string;
+  /** Role for this user in the board (normalized to lowercase). */
   role: BoardRole;
-  /** Current room sequence number. */
-  seq: number;
-  /** Optional snapshot of the current board state. */
+  /** Current presence list as user ids (some servers also include richer user objects). */
+  presentUserIds?: string[];
+  /** Optional pointer (e.g. latest snapshot version). */
   snapshot?: unknown;
-  snapshotSeq?: number;
+  /** Optional full snapshot payload (server-dependent). */
+  latestSnapshot?: unknown;
+  /** Optional debug timestamp. */
+  serverNow?: string;
+  /** Back-compat: some servers send users[] instead of presentUserIds. */
   users?: PresenceUser[];
 };
 
 export type ServerOpMessage = {
   type: 'op';
-  boardId: string;
+  boardId?: string;
   seq: number;
   op: WhiteboardOp;
-  authorId: string;
+  authorId?: string;
   /** Echo of the originating client op id (when known). */
   clientOpId?: string;
 };
 
 export type ServerPresenceMessage = {
   type: 'presence';
-  boardId: string;
-  /** Full user list snapshot for now (simple, easy). */
-  users: PresenceUser[];
+  boardId?: string;
+  /** Presence updates (joins/leaves) - server may provide either ids or user objects. */
+  presentUserIds?: string[];
+  users?: PresenceUser[];
   /** Optional per-user presence payloads. */
   presenceByUserId?: Record<string, PresencePayload>;
 };

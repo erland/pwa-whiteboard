@@ -15,7 +15,6 @@ import type { BoardEvent } from '../domain';
 import type {
   BoardRole,
   ClientToServerMessage,
-  JoinAuth,
   PresencePayload,
   PresenceUser,
   ServerToClientMessage,
@@ -42,7 +41,15 @@ function isInt(v: unknown): v is number {
 }
 
 function isBoardRole(v: unknown): v is BoardRole {
-  return v === 'owner' || v === 'editor' || v === 'viewer';
+  return v === 'owner' || v === 'editor' || v === 'viewer' || v === 'OWNER' || v === 'EDITOR' || v === 'VIEWER';
+}
+
+function normalizeBoardRole(v: unknown): BoardRole | null {
+  if (v === 'OWNER') return 'owner';
+  if (v === 'EDITOR') return 'editor';
+  if (v === 'VIEWER') return 'viewer';
+  if (v === 'owner' || v === 'editor' || v === 'viewer') return v;
+  return null;
 }
 
 function withinChars(s: string, max: number): boolean {
@@ -358,33 +365,6 @@ function validatePresencePayload(v: unknown): ValidationResult<PresencePayload> 
   return { ok: true, value: out };
 }
 
-function validateJoinAuth(v: unknown): ValidationResult<JoinAuth> {
-  if (!isRecord(v)) return { ok: false, error: 'auth must be an object' };
-  if (!isString(v.kind)) return { ok: false, error: 'auth.kind must be a string' };
-
-  if (v.kind === 'owner') {
-    if (!isString(v.accessToken) || v.accessToken.length === 0) {
-      return { ok: false, error: 'auth.accessToken must be a non-empty string' };
-    }
-    if (v.accessToken.length > MAX_TOKEN_CHARS) {
-      return { ok: false, error: `auth.accessToken too long (max ${MAX_TOKEN_CHARS})` };
-    }
-    return { ok: true, value: { kind: 'owner', accessToken: v.accessToken } };
-  }
-
-  if (v.kind === 'invite') {
-    if (!isString(v.inviteToken) || v.inviteToken.length === 0) {
-      return { ok: false, error: 'auth.inviteToken must be a non-empty string' };
-    }
-    if (v.inviteToken.length > MAX_TOKEN_CHARS) {
-      return { ok: false, error: `auth.inviteToken too long (max ${MAX_TOKEN_CHARS})` };
-    }
-    return { ok: true, value: { kind: 'invite', inviteToken: v.inviteToken } };
-  }
-
-  return { ok: false, error: 'auth.kind must be "owner" or "invite"' };
-}
-
 /**
  * Validate a client -> server message after JSON parsing.
  */
@@ -392,76 +372,24 @@ export function validateClientToServerMessage(v: unknown): ValidationResult<Clie
   if (!isRecord(v)) return { ok: false, error: 'message must be an object' };
   if (!isString(v.type)) return { ok: false, error: 'message.type must be a string' };
 
-  if (v.type === 'join') {
-    if (!isString(v.boardId) || !withinChars(v.boardId, MAX_BOARD_ID_CHARS)) {
-      return { ok: false, error: `join.boardId must be a non-empty string (<=${MAX_BOARD_ID_CHARS})` };
-    }
-
-    const authRes = validateJoinAuth(v.auth);
-    if (!authRes.ok) return authRes;
-
-    if (v.clientKnownSeq !== undefined && !isInt(v.clientKnownSeq)) {
-      return { ok: false, error: 'join.clientKnownSeq must be an integer' };
-    }
-
-    if (v.client !== undefined) {
-      if (!isRecord(v.client)) return { ok: false, error: 'join.client must be an object' };
-      if (v.client.guestId !== undefined) {
-        if (!isString(v.client.guestId) || !withinChars(v.client.guestId, MAX_USER_ID_CHARS)) {
-          return { ok: false, error: `join.client.guestId must be <=${MAX_USER_ID_CHARS}` };
-        }
-      }
-      if (!optionalWithinChars(v.client.displayName, MAX_DISPLAY_NAME_CHARS)) {
-        return { ok: false, error: `join.client.displayName must be <=${MAX_DISPLAY_NAME_CHARS}` };
-      }
-      if (!optionalWithinChars(v.client.color, MAX_COLOR_CHARS)) {
-        return { ok: false, error: `join.client.color must be <=${MAX_COLOR_CHARS}` };
-      }
-    }
-
-    return {
-      ok: true,
-      value: {
-        type: 'join',
-        boardId: v.boardId,
-        auth: authRes.value,
-        clientKnownSeq: v.clientKnownSeq as number | undefined,
-        client: v.client as any,
-      },
-    };
-  }
-
   if (v.type === 'op') {
-    if (!isString(v.boardId) || !withinChars(v.boardId, MAX_BOARD_ID_CHARS)) {
-      return { ok: false, error: `op.boardId must be a non-empty string (<=${MAX_BOARD_ID_CHARS})` };
+    if (v.clientOpId !== undefined && (!isString(v.clientOpId) || !withinChars(v.clientOpId, MAX_CLIENT_OP_ID_CHARS))) {
+      return { ok: false, error: `op.clientOpId must be <=${MAX_CLIENT_OP_ID_CHARS}` };
     }
-    if (!isString(v.clientOpId) || !withinChars(v.clientOpId, MAX_CLIENT_OP_ID_CHARS)) {
-      return { ok: false, error: `op.clientOpId must be a non-empty string (<=${MAX_CLIENT_OP_ID_CHARS})` };
-    }
-    if (!isInt(v.baseSeq) || v.baseSeq < 0) {
+    if (v.baseSeq !== undefined && (!isInt(v.baseSeq) || v.baseSeq < 0)) {
       return { ok: false, error: 'op.baseSeq must be a non-negative integer' };
     }
-    const opRes = validateBoardEvent(v.op, v.boardId);
+    const opRes = validateBoardEvent(v.op);
     if (!opRes.ok) return opRes;
     return {
       ok: true,
       value: {
         type: 'op',
-        boardId: v.boardId,
-        clientOpId: v.clientOpId,
-        baseSeq: v.baseSeq,
+        clientOpId: v.clientOpId as string | undefined,
+        baseSeq: v.baseSeq as number | undefined,
         op: opRes.value,
       },
     };
-  }
-
-  if (v.type === 'presence') {
-    if (!isString(v.boardId) || !withinChars(v.boardId, MAX_BOARD_ID_CHARS)) {
-      return { ok: false, error: `presence.boardId must be a non-empty string (<=${MAX_BOARD_ID_CHARS})` };
-    }
-    const presRes = validatePresencePayload(v.presence);
-    if (!presRes.ok) return presRes;
-    return { ok: true, value: { type: 'presence', boardId: v.boardId, presence: presRes.value } };
   }
 
   if (v.type === 'ping') {
@@ -483,16 +411,15 @@ function validatePresenceUser(v: unknown): ValidationResult<PresenceUser> {
   if (v.color !== undefined && (!isString(v.color) || v.color.length > MAX_COLOR_CHARS)) {
     return { ok: false, error: `user.color must be <=${MAX_COLOR_CHARS}` };
   }
-  if (!isBoardRole(v.role)) {
-    return { ok: false, error: 'user.role must be owner|editor|viewer' };
-  }
+  const role = normalizeBoardRole(v.role);
+  if (!role) return { ok: false, error: 'user.role must be owner|editor|viewer' };
   return {
     ok: true,
     value: {
       userId: v.userId,
       displayName: v.displayName,
       color: v.color as string | undefined,
-      role: v.role,
+      role,
     },
   };
 }
@@ -508,8 +435,20 @@ export function validateServerToClientMessage(v: unknown): ValidationResult<Serv
     if (!isString(v.boardId) || !withinChars(v.boardId, MAX_BOARD_ID_CHARS)) {
       return { ok: false, error: `joined.boardId must be a non-empty string (<=${MAX_BOARD_ID_CHARS})` };
     }
-    if (!isBoardRole(v.role)) return { ok: false, error: 'joined.role must be owner|editor|viewer' };
-    if (!isInt(v.seq) || v.seq < 0) return { ok: false, error: 'joined.seq must be a non-negative integer' };
+    if (!isString(v.userId) || !withinChars(v.userId, MAX_USER_ID_CHARS)) {
+      return { ok: false, error: `joined.userId must be a non-empty string (<=${MAX_USER_ID_CHARS})` };
+    }
+    const role = normalizeBoardRole(v.role);
+    if (!role) return { ok: false, error: 'joined.role must be owner|editor|viewer' };
+
+    if (v.presentUserIds !== undefined) {
+      if (!Array.isArray(v.presentUserIds)) return { ok: false, error: 'joined.presentUserIds must be an array' };
+      for (const id of v.presentUserIds) {
+        if (!isString(id) || !withinChars(id, MAX_USER_ID_CHARS)) {
+          return { ok: false, error: `joined.presentUserIds must contain strings <=${MAX_USER_ID_CHARS}` };
+        }
+      }
+    }
 
     let users: PresenceUser[] | undefined;
     if (v.users !== undefined) {
@@ -522,62 +461,73 @@ export function validateServerToClientMessage(v: unknown): ValidationResult<Serv
       }
     }
 
-    if (v.snapshotSeq !== undefined && (!isInt(v.snapshotSeq) || v.snapshotSeq < 0)) {
-      return { ok: false, error: 'joined.snapshotSeq must be a non-negative integer' };
-    }
-
     return {
       ok: true,
       value: {
         type: 'joined',
         boardId: v.boardId,
-        role: v.role,
-        seq: v.seq,
+        userId: v.userId,
+        role,
+        presentUserIds: v.presentUserIds as string[] | undefined,
         snapshot: v.snapshot,
-        snapshotSeq: v.snapshotSeq as number | undefined,
+        latestSnapshot: (v as any).latestSnapshot,
+        serverNow: (v as any).serverNow,
         users,
       },
     };
   }
 
   if (v.type === 'op') {
-    if (!isString(v.boardId) || !withinChars(v.boardId, MAX_BOARD_ID_CHARS)) {
-      return { ok: false, error: `op.boardId must be a non-empty string (<=${MAX_BOARD_ID_CHARS})` };
+    if (v.boardId !== undefined && (!isString(v.boardId) || !withinChars(v.boardId, MAX_BOARD_ID_CHARS))) {
+      return { ok: false, error: `op.boardId must be <=${MAX_BOARD_ID_CHARS}` };
     }
     if (!isInt(v.seq) || v.seq < 0) return { ok: false, error: 'op.seq must be a non-negative integer' };
-    if (!isString(v.authorId) || !withinChars(v.authorId, MAX_USER_ID_CHARS)) {
-      return { ok: false, error: `op.authorId must be a non-empty string (<=${MAX_USER_ID_CHARS})` };
+    if (v.authorId !== undefined && (!isString(v.authorId) || !withinChars(v.authorId, MAX_USER_ID_CHARS))) {
+      return { ok: false, error: `op.authorId must be <=${MAX_USER_ID_CHARS}` };
     }
     if (v.clientOpId !== undefined && (!isString(v.clientOpId) || v.clientOpId.length > MAX_CLIENT_OP_ID_CHARS)) {
       return { ok: false, error: `op.clientOpId must be <=${MAX_CLIENT_OP_ID_CHARS}` };
     }
     if (v.op === undefined) return { ok: false, error: 'op.op is required' };
-    const opRes = validateBoardEvent(v.op, v.boardId);
+    const opRes = validateBoardEvent(v.op);
     if (!opRes.ok) return opRes;
 
     return {
       ok: true,
       value: {
         type: 'op',
-        boardId: v.boardId,
+        boardId: v.boardId as string | undefined,
         seq: v.seq,
         op: opRes.value,
-        authorId: v.authorId,
+        authorId: v.authorId as string | undefined,
         clientOpId: v.clientOpId as string | undefined,
       },
     };
   }
 
   if (v.type === 'presence') {
-    if (!isString(v.boardId) || !withinChars(v.boardId, MAX_BOARD_ID_CHARS)) {
-      return { ok: false, error: `presence.boardId must be a non-empty string (<=${MAX_BOARD_ID_CHARS})` };
+    if (v.boardId !== undefined && (!isString(v.boardId) || !withinChars(v.boardId, MAX_BOARD_ID_CHARS))) {
+      return { ok: false, error: `presence.boardId must be <=${MAX_BOARD_ID_CHARS}` };
     }
-    if (!Array.isArray(v.users)) return { ok: false, error: 'presence.users must be an array' };
-    const users: PresenceUser[] = [];
-    for (const u of v.users) {
-      const res = validatePresenceUser(u);
-      if (!res.ok) return { ok: false, error: `presence.users: ${res.error}` };
-      users.push(res.value);
+
+    let users: PresenceUser[] | undefined;
+    if (v.users !== undefined) {
+      if (!Array.isArray(v.users)) return { ok: false, error: 'presence.users must be an array' };
+      users = [];
+      for (const u of v.users) {
+        const res = validatePresenceUser(u);
+        if (!res.ok) return { ok: false, error: `presence.users: ${res.error}` };
+        users.push(res.value);
+      }
+    }
+
+    if (v.presentUserIds !== undefined) {
+      if (!Array.isArray(v.presentUserIds)) return { ok: false, error: 'presence.presentUserIds must be an array' };
+      for (const id of v.presentUserIds) {
+        if (!isString(id) || !withinChars(id, MAX_USER_ID_CHARS)) {
+          return { ok: false, error: `presence.presentUserIds must contain strings <=${MAX_USER_ID_CHARS}` };
+        }
+      }
     }
 
     let presenceByUserId: Record<string, PresencePayload> | undefined;
@@ -592,7 +542,16 @@ export function validateServerToClientMessage(v: unknown): ValidationResult<Serv
       }
     }
 
-    return { ok: true, value: { type: 'presence', boardId: v.boardId, users, presenceByUserId } };
+    return {
+      ok: true,
+      value: {
+        type: 'presence',
+        boardId: v.boardId as string | undefined,
+        presentUserIds: v.presentUserIds as string[] | undefined,
+        users,
+        presenceByUserId,
+      },
+    };
   }
 
   if (v.type === 'error') {

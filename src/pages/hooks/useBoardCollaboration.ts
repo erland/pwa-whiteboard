@@ -4,6 +4,7 @@ import type { BoardRole, PresencePayload, PresenceUser } from '../../../shared/p
 import { CollabClient, type CollabStatus } from '../../collab/CollabClient';
 import { useAuth } from '../../auth/AuthContext';
 import { getBestLocalBoardTitle } from '../../domain/boardTitle';
+import { getWhiteboardServerBaseUrl } from '../../config/server';
 function getInviteTokenFromUrl(): string | null {
   if (typeof window === 'undefined') return null;
   const url = new URL(window.location.href);
@@ -68,7 +69,7 @@ export function useBoardCollaboration({
   resetBoard,
   applyRemoteEvent,
 }: UseBoardCollaborationArgs): UseBoardCollaborationResult {
-  const baseUrl = (globalThis as any).__VITE_COLLAB_BASE_URL as string | undefined;
+  const baseUrl = getWhiteboardServerBaseUrl();
   const inviteToken = useMemo(() => getInviteTokenFromUrl(), []);
   const guestId = useMemo(() => getOrCreateGuestId(), []);
   const [selfUserId, setSelfUserId] = useState<string>(guestId);
@@ -123,13 +124,9 @@ export function useBoardCollaboration({
     setSelfUserId(next);
   }, [inviteToken, guestId, accessToken]);
 
-  const auth = useMemo(() => {
-    if (inviteToken) return { kind: 'invite', inviteToken } as const;
-    if (accessToken) return { kind: 'owner', accessToken } as const;
-    return null;
-  }, [inviteToken, accessToken]);
-
-  const enabled = Boolean(baseUrl) && Boolean(boardId) && Boolean(auth);
+  // Collaboration requires an authenticated access token. Invite tokens are used only
+  // to accept the invite via HTTP; after that, join using the access token.
+  const enabled = Boolean(baseUrl) && Boolean(boardId) && Boolean(accessToken);
 
   // Keep status in sync with enabled/disabled transitions.
   useEffect(() => {
@@ -142,14 +139,14 @@ export function useBoardCollaboration({
   }, [enabled]);
 
 // Board existence is managed by the server API (Step 4). For now, treat an enabled session as ensured.
-useEffect(() => {
-  if (!boardId) {
-    setBoardEnsured(false);
-    return;
-  }
-  // If we can attempt collaboration (have auth), consider the board ensured for websocket purposes.
-  setBoardEnsured(Boolean(auth));
-}, [boardId, auth]);
+  useEffect(() => {
+    if (!boardId) {
+      setBoardEnsured(false);
+      return;
+    }
+    // Board existence is managed by the server API (Step 4). For now, treat an enabled session as ensured.
+    setBoardEnsured(Boolean(accessToken));
+  }, [boardId, accessToken]);
   useEffect(() => {
     if (!cooldownUntil) return;
     const now = Date.now();
@@ -159,7 +156,7 @@ useEffect(() => {
   }, [cooldownUntil]);
 
   useEffect(() => {
-    if (!enabled || !baseUrl || !auth || !boardId) {
+    if (!enabled || !baseUrl || !accessToken || !boardId) {
       clientRef.current?.close();
       clientRef.current = null;
       clientKeyRef.current = null;
@@ -167,16 +164,14 @@ useEffect(() => {
       return;
     }
 
-    // Owner-mode requires the board row to exist in Supabase before we join.
-    if (auth.kind === 'owner') {
-      if (!boardEnsured) {
-        setStatus('connecting');
-        return;
-      }
-      if (boardMetaId && boardMetaId !== boardId) {
-        setStatus('connecting');
-        return;
-      }
+    // Wait until board metadata is resolved (some routes pass boardMetaId separately).
+    if (!boardEnsured) {
+      setStatus('connecting');
+      return;
+    }
+    if (boardMetaId && boardMetaId !== boardId) {
+      setStatus('connecting');
+      return;
     }
 
     // Cooldown after rate-limit errors (prevents reconnect storms)
@@ -186,8 +181,7 @@ useEffect(() => {
       return;
     }
 
-    const authKey = auth.kind === 'invite' ? `invite:${auth.inviteToken}` : `owner:${auth.accessToken}`;
-    const key = `${baseUrl}|${boardId}|${guestId}|${authKey}|r${reconnectNonce}`;
+    const key = `${baseUrl}|${boardId}|${guestId}|token:${accessToken}|r${reconnectNonce}`;
 
     if (clientRef.current && clientKeyRef.current === key) return;
 
@@ -198,7 +192,7 @@ useEffect(() => {
       {
         baseUrl,
         boardId,
-        auth,
+        accessToken,
         guestId,
         displayName: 'Guest',
       },
@@ -229,15 +223,26 @@ useEffect(() => {
         },
         onJoined: (msg) => {
           setRole(msg.role);
-          setUsers(msg.users ?? []);
+          setUsers(msg.users ?? (msg.presentUserIds ?? []).map((userId) => ({ userId, displayName: userId, role: 'viewer' as const })));
           setPresenceByUserId({});
-          if (msg.snapshot) resetBoardRef.current(msg.snapshot);
+          const snap: any = (msg as any).latestSnapshot ?? msg.snapshot;
+          const snapJson = (snap && typeof (snap as any).snapshotJson === 'string') ? (snap as any).snapshotJson : undefined;
+          if (snapJson) {
+            try {
+              resetBoardRef.current(JSON.parse(snapJson));
+            } catch {
+              // ignore
+            }
+          } else if (snap) {
+            // If server sends the snapshot as an object, accept it as-is.
+            resetBoardRef.current(snap);
+          }
         },
         onOp: (msg) => {
           if (msg.op) applyRemoteEventRef.current(msg.op);
         },
         onPresence: (msg) => {
-          setUsers(msg.users ?? []);
+          setUsers(msg.users ?? (msg.presentUserIds ?? []).map((userId) => ({ userId, displayName: userId, role: 'viewer' as const })));
           setPresenceByUserId({});
         },
         onErrorMsg: (msg) => {
@@ -275,7 +280,7 @@ useEffect(() => {
         clientKeyRef.current = null;
       }
     };
-  }, [enabled, baseUrl, auth, boardId, boardMetaId, guestId, cooldownUntil, boardEnsured, reconnectNonce]);
+  }, [enabled, baseUrl, accessToken, boardId, boardMetaId, guestId, cooldownUntil, boardEnsured, reconnectNonce]);
 
 
   // Auto-reconnect (best-effort). We only do this after we have successfully

@@ -1,7 +1,6 @@
 import { toWsUrl } from './collabUrl';
 import type {
   BoardRole,
-  JoinAuth,
   ClientToServerMessage,
   PresencePayload,
   ServerToClientMessage,
@@ -23,7 +22,7 @@ export type CollabClientHandlers = {
 export type CollabClientOptions = {
   baseUrl: string;
   boardId: string;
-  auth: JoinAuth;
+  accessToken: string;
   guestId?: string;
   displayName?: string;
   color?: string;
@@ -53,7 +52,10 @@ export class CollabClient {
     this.manualClose = false;
     this.connecting = true;
 
-    const url = toWsUrl(this.opts.baseUrl, `/collab/${encodeURIComponent(this.opts.boardId)}`);
+    const url = toWsUrl(
+      this.opts.baseUrl,
+      `/ws/boards/${encodeURIComponent(this.opts.boardId)}?access_token=${encodeURIComponent(this.opts.accessToken)}`
+    );
     this.setStatus('connecting');
 
     const ws = new WebSocket(url);
@@ -61,18 +63,7 @@ export class CollabClient {
 
     ws.onopen = () => {
       this.connecting = false;
-      // Join
-      const join: ClientToServerMessage = {
-        type: 'join',
-        boardId: this.opts.boardId,
-        auth: this.opts.auth,
-        client: {
-          guestId: this.opts.guestId,
-          displayName: this.opts.displayName,
-          color: this.opts.color,
-        },
-      };
-      ws.send(JSON.stringify(join));
+      // Server sends `joined` immediately after successful connect + auth.
     };
 
     ws.onmessage = (evt) => {
@@ -154,7 +145,6 @@ export class CollabClient {
     const clientOpId = generateClientOpId();
     const msg: ClientToServerMessage = {
       type: 'op',
-      boardId,
       clientOpId,
       baseSeq: baseSeq ?? 0,
       op,
@@ -164,13 +154,10 @@ export class CollabClient {
   }
 
   sendPresence(boardId: string, presence: PresencePayload) {
-    if (!this.ws || this.status !== 'connected') return;
-    const msg: ClientToServerMessage = {
-      type: 'presence',
-      boardId,
-      presence,
-    };
-    this.ws.send(JSON.stringify(msg));
+    // Current server protocol does not accept client-side presence payloads.
+    // Keep the method for UI compatibility; it is intentionally a no-op.
+    void boardId;
+    void presence;
   }
 
   private setStatus(next: CollabStatus, error?: string) {

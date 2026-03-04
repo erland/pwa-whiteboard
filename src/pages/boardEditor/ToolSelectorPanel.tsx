@@ -2,12 +2,14 @@ import React from 'react';
 import type { ToolInstanceDefinition, ToolInstanceId } from '../../whiteboard/boardTypes';
 
 type ToolSelectorPanelProps = {
+  isReadOnly?: boolean;
   toolbox: readonly ToolInstanceDefinition[];
   activeToolInstanceId: ToolInstanceId;
   onChangeToolInstance: (id: ToolInstanceId) => void;
 };
 
 export const ToolSelectorPanel: React.FC<ToolSelectorPanelProps> = ({
+  isReadOnly,
   toolbox,
   activeToolInstanceId,
   onChangeToolInstance,
@@ -22,6 +24,7 @@ export const ToolSelectorPanel: React.FC<ToolSelectorPanelProps> = ({
           type="button"
           className={`tool-button ${activeToolInstanceId === tool.id ? 'active' : ''}`}
           onClick={() => onChangeToolInstance(tool.id)}
+          disabled={!!isReadOnly && tool.baseToolId !== 'select'}
           aria-pressed={activeToolInstanceId === tool.id}
         >
           {tool.icon ? `${tool.icon} ` : ''}

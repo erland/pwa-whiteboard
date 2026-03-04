@@ -40,7 +40,10 @@ const collab = useBoardCollaboration({
 
 const canSendOps = collab.enabled && collab.status === 'connected' && (collab.role === 'owner' || collab.role === 'editor');
 
+const isReadOnly = collab.enabled && collab.status === 'connected' && collab.role === 'viewer';
+
 const dispatchOpEvent = (event: any) => {
+  if (isReadOnly) return;
   if (canSendOps) {
     collab.sendOp(event);
     return;
@@ -88,6 +91,7 @@ const sendPresence = (presence: PresencePayload) => {
     handleUpdateObject,
     handleTransientObjectPatch,
   } = useBoardMutations({
+    isReadOnly,
     state,
     dispatchEvent: dispatchOpEvent,
     applyTransientObjectPatch,
@@ -110,6 +114,12 @@ const sendPresence = (presence: PresencePayload) => {
     canvasHeight: logicalCanvasHeight,
   });
 
+
+  const pasteFromClipboardSafe = () => {
+    if (isReadOnly) return;
+    clipboardActions.pasteFromClipboard();
+  };
+
   const {
     zoomPercent,
     handleViewportChange: _handleViewportChange,
@@ -129,6 +139,7 @@ const sendPresence = (presence: PresencePayload) => {
     handleDeleteSelection,
     updateSelectionProp
   } = useBoardSelection({
+    isReadOnly,
     state,
     dispatchEvent: dispatchEventWithLocalOnly,
   });
@@ -147,8 +158,8 @@ const sendPresence = (presence: PresencePayload) => {
     setViewport
   });
 
-  const canUndo = !!state && state.history.pastEvents.length > 0;
-  const canRedo = !!state && state.history.futureEvents.length > 0;
+  const canUndo = !isReadOnly && !!state && state.history.pastEvents.length > 0;
+  const canRedo = !isReadOnly && !!state && state.history.futureEvents.length > 0;
 const handleSelectionChange = (selectedIds: string[]) => {
   _handleSelectionChange(selectedIds);
   // Broadcast as presence (not as ops)
@@ -174,6 +185,16 @@ const handleViewportChange = (patch: any) => {
 const handleCursorWorldMove = (pos: { x: number; y: number }) => {
   if (!collab.enabled) return;
   sendPresence({ cursor: { x: pos.x, y: pos.y } });
+};
+
+const undoSafe = () => {
+  if (isReadOnly) return;
+  undo();
+};
+
+const redoSafe = () => {
+  if (isReadOnly) return;
+  redo();
 };
 
 
@@ -213,13 +234,15 @@ const handleCursorWorldMove = (pos: { x: number; y: number }) => {
     selectedObjects,
     updateSelectionProp,
     collab,
+    isReadOnly,
     handleCursorWorldMove,
     canUndo,
     canRedo,
-    undo,
-    redo,
+    undo: undoSafe,
+    redo: redoSafe,
 
     // Copy/paste actions (wired to clipboard storage; UI comes in the next step)
     ...clipboardActions,
+    pasteFromClipboard: pasteFromClipboardSafe,
   };
 }

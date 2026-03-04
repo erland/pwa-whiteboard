@@ -8,6 +8,7 @@ import { ToolSettingsPanel } from './panels/ToolSettingsPanel';
 import { SelectionToolPanel } from './panels/SelectionToolPanel';
 
 type ToolAndSelectionPanelProps = {
+  isReadOnly?: boolean;
   boardTypeDef: BoardTypeDefinition;
   activeTool: DrawingTool;
   strokeColor: string;
@@ -27,6 +28,7 @@ type ToolAndSelectionPanelProps = {
 };
 
 export const ToolAndSelectionPanel: React.FC<ToolAndSelectionPanelProps> = ({
+  isReadOnly,
   boardTypeDef,
   activeTool,
   strokeColor,
@@ -46,6 +48,7 @@ export const ToolAndSelectionPanel: React.FC<ToolAndSelectionPanelProps> = ({
 
       {activeTool !== 'select' && (
         <ToolSettingsPanel
+          isReadOnly={isReadOnly}
           boardTypeDef={boardTypeDef}
           activeTool={activeTool}
           strokeColor={strokeColor}
@@ -59,6 +62,7 @@ export const ToolAndSelectionPanel: React.FC<ToolAndSelectionPanelProps> = ({
 
       {activeTool === 'select' && (
         <SelectionToolPanel
+          isReadOnly={isReadOnly}
           selection={selection}
           updateSelectionProp={updateSelectionProp}
         />

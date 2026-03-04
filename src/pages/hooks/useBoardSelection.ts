@@ -9,11 +9,12 @@ type WhiteboardStateForSelection = {
 };
 
 type UseBoardSelectionArgs = {
+  isReadOnly?: boolean;
   state: (WhiteboardStateForSelection & { history?: any }) | null;
   dispatchEvent: (event: BoardEvent) => void;
 };
 
-export function useBoardSelection({ state, dispatchEvent }: UseBoardSelectionArgs) {
+export function useBoardSelection({ state, dispatchEvent, isReadOnly }: UseBoardSelectionArgs) {
   const selectedObjects: WhiteboardObject[] =
     state && state.selectedObjectIds.length > 0
       ? state.objects.filter((obj) => state.selectedObjectIds.includes(obj.id))
@@ -34,6 +35,7 @@ export function useBoardSelection({ state, dispatchEvent }: UseBoardSelectionArg
 
   const handleDeleteSelection = () => {
     if (!state || state.selectedObjectIds.length === 0) return;
+    if (isReadOnly) return;
     const count = state.selectedObjectIds.length;
     const confirmed = window.confirm(
       `Delete ${count} selected object${count === 1 ? '' : 's'}? This cannot be undone.`
@@ -69,6 +71,7 @@ export function useBoardSelection({ state, dispatchEvent }: UseBoardSelectionArg
     value: WhiteboardObject[K]
   ) => void = (key, value) => {
     if (!state || selectedObjects.length === 0) return;
+    if (isReadOnly) return;
     const now = new Date().toISOString();
     selectedObjects.forEach((obj) => {
       const event: BoardEvent = {

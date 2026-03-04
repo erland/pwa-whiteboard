@@ -5,6 +5,7 @@ import type { SelectionDetails } from '../useSelectionDetails';
 import { EDITABLE_PROP_DEFS, type EditablePropKey } from '../../../whiteboard/tools/selectionRegistry';
 
 type Props = {
+  isReadOnly?: boolean;
   selection: SelectionDetails;
   updateSelectionProp: <K extends keyof WhiteboardObject>(
     key: K,
@@ -116,6 +117,7 @@ function renderEditablePropControl(
 }
 
 export const SelectionToolPanel: React.FC<Props> = ({
+  isReadOnly,
   selection,
   updateSelectionProp
 }) => {
@@ -146,7 +148,7 @@ export const SelectionToolPanel: React.FC<Props> = ({
         .map((key) => {
           const shared = selection.sharedEditableValues[key];
           if (!hasValue(shared as any)) return null;
-          return renderEditablePropControl(key, shared, lockedKeys.has(key), updateSelectionProp);
+          return renderEditablePropControl(key, shared, lockedKeys.has(key) || !!isReadOnly, updateSelectionProp);
         })}
 
       {/* Capability-driven text editing (only for single selection, to preserve v1 UX) */}
@@ -159,7 +161,7 @@ export const SelectionToolPanel: React.FC<Props> = ({
             <textarea
               className="text-input"
               value={(singleObj?.text ?? '') as string}
-              disabled={lockedKeys.has('text')}
+              disabled={lockedKeys.has('text') || !!isReadOnly}
               onChange={(e) => updateSelectionProp('text' as any, e.target.value as any)}
             />
           </div>

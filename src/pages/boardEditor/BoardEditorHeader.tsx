@@ -10,6 +10,7 @@ type CollabInfo = {
 
 type BoardEditorHeaderProps = {
   boardName?: string;
+  isReadOnly?: boolean;
   canDelete?: boolean;
   canCopy?: boolean;
   canPaste?: boolean;
@@ -22,6 +23,7 @@ type BoardEditorHeaderProps = {
 
 export const BoardEditorHeader: React.FC<BoardEditorHeaderProps> = ({
   boardName,
+  isReadOnly,
   canDelete,
   canCopy,
   canPaste,
@@ -85,7 +87,7 @@ export const BoardEditorHeader: React.FC<BoardEditorHeaderProps> = ({
           type="button"
           className="tool-button"
           onClick={onPaste}
-          disabled={!canPaste}
+          disabled={!canPaste || !!isReadOnly}
           title="Paste"
         >
           ⎘ Paste
@@ -94,7 +96,7 @@ export const BoardEditorHeader: React.FC<BoardEditorHeaderProps> = ({
           type="button"
           className="tool-button"
           onClick={onDelete}
-          disabled={!canDelete}
+          disabled={!canDelete || !!isReadOnly}
           title="Delete selection"
         >
           🗑 Delete

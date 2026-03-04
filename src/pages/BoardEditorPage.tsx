@@ -64,6 +64,7 @@ id } = useParams<{ id: string }>();
     pasteFromClipboard,
 
     collab,
+    isReadOnly,
     handleCursorWorldMove,
 } = useBoardEditor(id);
 
@@ -101,6 +102,7 @@ id } = useParams<{ id: string }>();
       // Delete selection with Delete/Backspace (when not typing in an input).
       // Note: We intentionally keep this independent from Ctrl/Cmd.
       if (keyRaw === 'Backspace' || keyRaw === 'Delete') {
+        if (isReadOnly) return;
         if (!canCopy) return;
         e.preventDefault();
         handleDeleteSelection();
@@ -118,6 +120,7 @@ id } = useParams<{ id: string }>();
         copySelectionToClipboard();
       }
       if (key === 'v') {
+        if (isReadOnly) return;
         if (!canPaste) return;
         e.preventDefault();
         pasteFromClipboard();
@@ -140,7 +143,8 @@ id } = useParams<{ id: string }>();
           errorText: collab.errorText,
         }}
         boardName={boardName}
-        canDelete={canCopy}
+        isReadOnly={isReadOnly}
+        canDelete={canCopy && !isReadOnly}
         canCopy={canCopy}
         canPaste={canPaste}
         onDelete={handleDeleteSelection}
@@ -153,12 +157,14 @@ id } = useParams<{ id: string }>();
           {/* Tools first */}
           <ToolSelectorPanel
             toolbox={toolbox}
+            isReadOnly={isReadOnly}
             activeToolInstanceId={activeToolInstanceId}
             onChangeToolInstance={setActiveToolInstanceId}
           />
 
           {/* Then Tools & Selection */}
           <ToolAndSelectionPanel
+            isReadOnly={isReadOnly}
             boardTypeDef={boardTypeDef}
             activeTool={activeTool}
             strokeColor={strokeColor}
@@ -268,6 +274,7 @@ id } = useParams<{ id: string }>();
         isOpen={isShareOpen}
         boardId={boardId}
         boardName={boardName}
+        isReadOnly={isReadOnly}
         onCancel={() => setIsShareOpen(false)}
       />
 

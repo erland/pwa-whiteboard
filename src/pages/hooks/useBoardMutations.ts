@@ -3,18 +3,21 @@ import { generateEventId } from './boardEvents';
 import type { BoardEvent, WhiteboardObject } from '../../domain/types';
 
 export type UseBoardMutationsArgs = {
+  isReadOnly?: boolean;
   state: { meta: { id: string } } | null;
   dispatchEvent: (event: BoardEvent) => void;
   applyTransientObjectPatch: (objectId: string, patch: Partial<WhiteboardObject>) => void;
 };
 
 export function useBoardMutations({
+  isReadOnly,
   state,
   dispatchEvent,
   applyTransientObjectPatch,
 }: UseBoardMutationsArgs) {
   const handleCreateObject = (object: WhiteboardObject) => {
     if (!state) return;
+    if (isReadOnly) return;
     const now = new Date().toISOString();
     const event: BoardEvent = {
       id: generateEventId(),
@@ -27,12 +30,14 @@ export function useBoardMutations({
   };
 
   const handleTransientObjectPatch = (objectId: string, patch: Partial<WhiteboardObject>) => {
+    if (isReadOnly) return;
     // Apply live interaction patches without creating undo/redo history.
     applyTransientObjectPatch(objectId as any, patch);
   };
 
   const handleUpdateObject = (objectId: string, patch: Partial<WhiteboardObject>) => {
     if (!state) return;
+    if (isReadOnly) return;
     const now = new Date().toISOString();
     const event: BoardEvent = {
       id: generateEventId(),

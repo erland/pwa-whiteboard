@@ -16,6 +16,7 @@ import {
 } from '../../../whiteboard/boardTypes';
 
 type Props = {
+  isReadOnly?: boolean;
   boardTypeDef: BoardTypeDefinition;
   activeTool: DrawingTool;
   strokeColor: string;
@@ -41,6 +42,7 @@ function getToolPropValue(
 }
 
 export const ToolSettingsPanel: React.FC<Props> = ({
+  isReadOnly,
   boardTypeDef,
   activeTool,
   strokeColor,
@@ -72,7 +74,7 @@ export const ToolSettingsPanel: React.FC<Props> = ({
       {editableProps.map((key) => {
         const def = EDITABLE_PROP_DEFS[key];
         const value = getToolPropValue(key, strokeColor, strokeWidth, toolProps);
-        const disabled = lockedKeys.has(key);
+        const disabled = lockedKeys.has(key) || !!isReadOnly;
 
         if (def.control.kind === 'color') {
           // Match current selection UI behavior: don't show fill controls unless a fill is set.

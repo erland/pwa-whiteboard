@@ -11,6 +11,7 @@ import { initSupabaseAuthFromUrl } from './supabase/supabaseClient';
 (globalThis as any).__VITE_SUPABASE_URL = (import.meta as any).env?.VITE_SUPABASE_URL;
 (globalThis as any).__VITE_SUPABASE_ANON_KEY = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY;
 (globalThis as any).__VITE_COLLAB_BASE_URL = (import.meta as any).env?.VITE_COLLAB_BASE_URL;
+(globalThis as any).__VITE_WHITEBOARD_SERVER_BASE_URL = (import.meta as any).env?.VITE_WHITEBOARD_SERVER_BASE_URL;
 (globalThis as any).__VITE_BASE_URL = (import.meta as any).env?.BASE_URL;
 
 

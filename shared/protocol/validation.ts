@@ -363,13 +363,13 @@ function validateJoinAuth(v: unknown): ValidationResult<JoinAuth> {
   if (!isString(v.kind)) return { ok: false, error: 'auth.kind must be a string' };
 
   if (v.kind === 'owner') {
-    if (!isString(v.supabaseJwt) || v.supabaseJwt.length === 0) {
-      return { ok: false, error: 'auth.supabaseJwt must be a non-empty string' };
+    if (!isString(v.accessToken) || v.accessToken.length === 0) {
+      return { ok: false, error: 'auth.accessToken must be a non-empty string' };
     }
-    if (v.supabaseJwt.length > MAX_TOKEN_CHARS) {
-      return { ok: false, error: `auth.supabaseJwt too long (max ${MAX_TOKEN_CHARS})` };
+    if (v.accessToken.length > MAX_TOKEN_CHARS) {
+      return { ok: false, error: `auth.accessToken too long (max ${MAX_TOKEN_CHARS})` };
     }
-    return { ok: true, value: { kind: 'owner', supabaseJwt: v.supabaseJwt } };
+    return { ok: true, value: { kind: 'owner', accessToken: v.accessToken } };
   }
 
   if (v.kind === 'invite') {

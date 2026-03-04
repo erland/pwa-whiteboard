@@ -10,7 +10,7 @@ describe('protocol validation', () => {
     const msg = {
       type: 'join',
       boardId: 'board-1',
-      auth: { kind: 'owner', supabaseJwt: 'jwt' },
+      auth: { kind: 'owner', accessToken: 'jwt' },
       clientKnownSeq: 0,
       client: { guestId: 'g1', displayName: 'Guest', color: '#fff' },
     };

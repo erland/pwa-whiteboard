@@ -2,10 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BoardEvent } from '../../domain/types';
 import type { BoardRole, PresencePayload, PresenceUser } from '../../../shared/protocol';
 import { CollabClient, type CollabStatus } from '../../collab/CollabClient';
-import { getSupabaseClient, isSupabaseConfigured } from '../../supabase/supabaseClient';
+import { useAuth } from '../../auth/AuthContext';
 import { getBestLocalBoardTitle } from '../../domain/boardTitle';
-import { ensureBoardRowInSupabase, updateBoardTitleInSupabase } from '../../supabase/boards';
-
 function getInviteTokenFromUrl(): string | null {
   if (typeof window === 'undefined') return null;
   const url = new URL(window.location.href);
@@ -102,54 +100,34 @@ export function useBoardCollaboration({
     applyRemoteEventRef.current = applyRemoteEvent;
   }, [applyRemoteEvent]);
 
-  const [supabaseJwt, setSupabaseJwt] = useState<string | null>(null);
+  const { accessToken } = useAuth();
   const [boardEnsured, setBoardEnsured] = useState<boolean>(false);
 
-  // Keep a Supabase JWT for owner-mode joins (when no invite token is present).
-  // Important: we must react to auth state changes; otherwise signing in while the board
-  // is open won't trigger collaboration until the user reloads the page.
+  // Auth is provided by OIDC (or invite token).
   useEffect(() => {
-    if (!isSupabaseConfigured()) return;
     if (inviteToken) {
-      setSupabaseJwt(null);
       setSelfUserId(guestId);
       return;
     }
-
-    const client = getSupabaseClient();
-    if (!client) return;
-
-    let cancelled = false;
-
-    const syncFromSession = async () => {
-      const { data } = await client.auth.getSession();
-      const sess = data.session;
-      if (cancelled) return;
-      setSupabaseJwt(sess?.access_token ?? null);
-      setSelfUserId(sess?.user?.id ?? guestId);
-    };
-
-    // Initial sync (covers already-signed-in users)
-    syncFromSession().catch((err) => console.error('Failed to get supabase session', err));
-
-    // Live updates (covers signing in/out while board stays open)
-    const { data } = client.auth.onAuthStateChange((_event, session) => {
-      if (cancelled) return;
-      setSupabaseJwt(session?.access_token ?? null);
-      setSelfUserId(session?.user?.id ?? guestId);
-    });
-
-    return () => {
-      cancelled = true;
-      data.subscription.unsubscribe();
-    };
-  }, [inviteToken, guestId]);
+    // Use OIDC subject when authenticated; otherwise fall back to a stable guest id.
+    const next = (accessToken ? ((): string => {
+      try {
+        const parts = accessToken.split('.');
+        if (parts.length >= 2) {
+          const payload = JSON.parse(atob(parts[1].replace(/-/g,'+').replace(/_/g,'/')));
+          if (typeof payload.sub === 'string' && payload.sub.length) return payload.sub;
+        }
+      } catch { /* ignore */ }
+      return guestId;
+    })() : guestId);
+    setSelfUserId(next);
+  }, [inviteToken, guestId, accessToken]);
 
   const auth = useMemo(() => {
     if (inviteToken) return { kind: 'invite', inviteToken } as const;
-    if (supabaseJwt) return { kind: 'owner', supabaseJwt } as const;
+    if (accessToken) return { kind: 'owner', accessToken } as const;
     return null;
-  }, [inviteToken, supabaseJwt]);
+  }, [inviteToken, accessToken]);
 
   const enabled = Boolean(baseUrl) && Boolean(boardId) && Boolean(auth);
 
@@ -163,109 +141,15 @@ export function useBoardCollaboration({
     }
   }, [enabled]);
 
-// Ensure the board exists in Supabase before the owner joins collab.
-// Important: do NOT flip boardEnsured back to false just because the title becomes available later;
-// otherwise React effect cleanups will close the websocket mid-connect.
-const ensuredBoardIdRef = useRef<string | null>(null);
-
+// Board existence is managed by the server API (Step 4). For now, treat an enabled session as ensured.
 useEffect(() => {
-  let cancelled = false;
-  async function ensureRow() {
-    if (!boardId) {
-      ensuredBoardIdRef.current = null;
-      setBoardEnsured(false);
-      return;
-    }
-    if (inviteToken) {
-      // Invite-based sessions don't create boards in Supabase.
-      ensuredBoardIdRef.current = boardId;
-      setBoardEnsured(true);
-      return;
-    }
-    if (!isSupabaseConfigured()) {
-      // No Supabase configured => can't ensure; treat as ensured so local-only can still work.
-      ensuredBoardIdRef.current = boardId;
-      setBoardEnsured(true);
-      return;
-    }
-
-    // Only reset when the boardId changes.
-    if (ensuredBoardIdRef.current !== boardId) {
-      setBoardEnsured(false);
-    }
-
-    const client = getSupabaseClient();
-    if (!client) {
-      setBoardEnsured(false);
-      return;
-    }
-    const { data } = await client.auth.getSession();
-    const sess = data.session;
-    if (!sess) {
-      setBoardEnsured(false);
-      return;
-    }
-
-    setSelfUserId(sess.user.id);
-
-    const title = (await getBestLocalBoardTitle(boardId, boardName)) ?? 'Untitled board';
-
-    const ensured = await ensureBoardRowInSupabase({
-      client,
-      boardId,
-      ownerUserId: sess.user.id,
-      title,
-    });
-
-    if (cancelled) return;
-    if (!ensured.ok) {
-      console.error('Failed to ensure board exists in Supabase', ensured.message);
-      setErrorText(ensured.message);
-      setBoardEnsured(false);
-      return;
-    }
-
-    ensuredBoardIdRef.current = boardId;
-    setBoardEnsured(true);
-  }
-
-  ensureRow().catch((err) => {
-    console.error('Failed to ensure board exists in Supabase', err);
-    setErrorText(`Supabase ensure failed: ${String(err)}`);
+  if (!boardId) {
     setBoardEnsured(false);
-  });
-
-  return () => {
-    cancelled = true;
-  };
-}, [boardId, inviteToken, boardName, supabaseJwt]);
-
-// If the owner renames a board later, update the title in Supabase without interrupting the websocket.
-useEffect(() => {
-  let cancelled = false;
-  async function pushRename() {
-    if (!boardId) return;
-    if (inviteToken) return;
-    if (!boardEnsured) return;
-    if (!isSupabaseConfigured()) return;
-    const title = boardName?.trim();
-    if (!title) return;
-
-    const client = getSupabaseClient();
-    if (!client) return;
-    const { data } = await client.auth.getSession();
-    const sess = data.session;
-    if (!sess) return;
-
-    const res = await updateBoardTitleInSupabase({ client, boardId, title });
-    if (cancelled) return;
-    if (!res.ok) console.warn('Failed to update board title in Supabase', res.message);
+    return;
   }
-  pushRename().catch((err) => console.error('Failed to update board title in Supabase', err));
-  return () => {
-    cancelled = true;
-  };
-}, [boardId, boardName, boardEnsured, inviteToken]);
+  // If we can attempt collaboration (have auth), consider the board ensured for websocket purposes.
+  setBoardEnsured(Boolean(auth));
+}, [boardId, auth]);
   useEffect(() => {
     if (!cooldownUntil) return;
     const now = Date.now();
@@ -302,7 +186,7 @@ useEffect(() => {
       return;
     }
 
-    const authKey = auth.kind === 'invite' ? `invite:${auth.inviteToken}` : `owner:${auth.supabaseJwt}`;
+    const authKey = auth.kind === 'invite' ? `invite:${auth.inviteToken}` : `owner:${auth.accessToken}`;
     const key = `${baseUrl}|${boardId}|${guestId}|${authKey}|r${reconnectNonce}`;
 
     if (clientRef.current && clientKeyRef.current === key) return;

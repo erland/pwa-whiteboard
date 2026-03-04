@@ -37,7 +37,7 @@ export type WhiteboardOp = BoardEvent;
 // ----------------------------
 
 export type JoinAuth =
-  | { kind: 'owner'; supabaseJwt: string }
+  | { kind: 'owner'; accessToken: string }
   | { kind: 'invite'; inviteToken: string };
 
 export type ClientJoinMessage = {

@@ -1,5 +1,7 @@
 import type { BoardsIndex, BoardsRepository } from '../domain/boardsIndex';
 import type { BoardTypeId, WhiteboardId, WhiteboardMeta } from '../domain/types';
+import { isWhiteboardServerConfigured } from '../config/server';
+import * as boardsApi from '../api/boardsApi';
 
 const BOARDS_INDEX_KEY = 'pwa-whiteboard.boardsIndex';
 const BOARD_STATE_PREFIX = 'pwa-whiteboard.board.';
@@ -140,11 +142,38 @@ class LocalStorageBoardsRepository implements BoardsRepository {
   }
 }
 
+class RestBoardsRepository implements BoardsRepository {
+  async listBoards(): Promise<BoardsIndex> {
+    const boards = await boardsApi.listBoards();
+    // Sort by updatedAt descending
+    return [...boards].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+  }
+
+  async createBoard(name: string, boardType?: BoardTypeId): Promise<WhiteboardMeta> {
+    const nextType = isBoardType(boardType) ? boardType : DEFAULT_BOARD_TYPE;
+    return boardsApi.createBoard({ name: name.trim() || 'Untitled board', boardType: nextType });
+  }
+
+  async renameBoard(id: WhiteboardId, name: string): Promise<void> {
+    await boardsApi.renameBoard(id, name.trim() || 'Untitled board');
+  }
+
+  async setBoardType(id: WhiteboardId, boardType: BoardTypeId): Promise<void> {
+    const nextType = isBoardType(boardType) ? boardType : DEFAULT_BOARD_TYPE;
+    boardsApi.setPersistedBoardType(id, nextType);
+  }
+
+  async deleteBoard(id: WhiteboardId): Promise<void> {
+    await boardsApi.deleteBoard(id);
+  }
+}
+
 let instance: BoardsRepository | null = null;
 
 export function getBoardsRepository(): BoardsRepository {
   if (!instance) {
-    instance = new LocalStorageBoardsRepository();
+    // When server API is configured, prefer REST-based boards.
+    instance = isWhiteboardServerConfigured() ? new RestBoardsRepository() : new LocalStorageBoardsRepository();
   }
   return instance;
 }

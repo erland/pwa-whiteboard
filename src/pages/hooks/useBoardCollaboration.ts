@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { BoardEvent } from '../../domain/types';
+import type { BoardEvent, WhiteboardState } from '../../domain/types';
 import type { BoardRole, PresencePayload, PresenceUser } from '../../../shared/protocol';
 import { CollabClient, type CollabStatus } from '../../collab/CollabClient';
 import { useAuth } from '../../auth/AuthContext';
 import { getBestLocalBoardTitle } from '../../domain/boardTitle';
 import { getWhiteboardServerBaseUrl } from '../../config/server';
+import { createSnapshotsApi } from '../../api/snapshotsApi';
+import { decodeSnapshotJson, encodeSnapshotJson } from '../../domain/snapshotCodec';
 function getInviteTokenFromUrl(): string | null {
   if (typeof window === 'undefined') return null;
   const url = new URL(window.location.href);
@@ -35,6 +37,8 @@ function getOrCreateGuestId(): string {
 
 export type UseBoardCollaborationArgs = {
   boardId: string | undefined;
+  /** Current local board state (used for snapshot autosave). */
+  state?: WhiteboardState | null;
   boardMetaId?: string;
   boardName?: string;
   resetBoard: (next: any) => void;
@@ -64,6 +68,7 @@ export type UseBoardCollaborationResult = {
 
 export function useBoardCollaboration({
   boardId,
+  state,
   boardMetaId,
   boardName,
   resetBoard,
@@ -127,6 +132,62 @@ export function useBoardCollaboration({
   // Collaboration requires an authenticated access token. Invite tokens are used only
   // to accept the invite via HTTP; after that, join using the access token.
   const enabled = Boolean(baseUrl) && Boolean(boardId) && Boolean(accessToken);
+
+// ---- Snapshot autosave (REST) ----
+const lastSavedSnapshotRef = useRef<string | null>(null);
+const saveTimerRef = useRef<number | null>(null);
+
+useEffect(() => {
+  if (!enabled) return;
+  if (status !== 'connected') return;
+  if (!boardId) return;
+  if (!state) return;
+  if (state.meta?.id !== boardId) return;
+  if (!(role === 'owner' || role === 'editor')) return;
+
+  // Debounce saves to avoid writing on every small interaction.
+  if (saveTimerRef.current) {
+    window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = null;
+  }
+
+  saveTimerRef.current = window.setTimeout(() => {
+    (async () => {
+      try {
+        if (!baseUrl || !accessToken) return;
+        const snapshotJson = encodeSnapshotJson(boardId, state);
+        if (lastSavedSnapshotRef.current === snapshotJson) return;
+
+        const api = createSnapshotsApi({ baseUrl, accessToken });
+        await api.create(boardId, snapshotJson);
+        lastSavedSnapshotRef.current = snapshotJson;
+      } catch (err) {
+        console.warn('Failed to save snapshot', err);
+      }
+    })();
+  }, 1000);
+
+  return () => {
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+  };
+}, [
+  enabled,
+  status,
+  role,
+  boardId,
+  baseUrl,
+  accessToken,
+  // Snapshot content drivers (keep this cheap; we encode in the timer)
+  state?.objects,
+  state?.viewport?.offsetX,
+  state?.viewport?.offsetY,
+  state?.viewport?.zoom,
+  state?.selectedObjectIds,
+]);
+
 
   // Keep status in sync with enabled/disabled transitions.
   useEffect(() => {
@@ -222,21 +283,29 @@ export function useBoardCollaboration({
           if (s === 'closed') setErrorText(undefined);
         },
         onJoined: (msg) => {
-          setRole(msg.role);
-          setUsers(msg.users ?? (msg.presentUserIds ?? []).map((userId) => ({ userId, displayName: userId, role: 'viewer' as const })));
-          setPresenceByUserId({});
-          const snap: any = (msg as any).latestSnapshot ?? msg.snapshot;
-          const snapJson = (snap && typeof (snap as any).snapshotJson === 'string') ? (snap as any).snapshotJson : undefined;
-          if (snapJson) {
-            try {
-              resetBoardRef.current(JSON.parse(snapJson));
-            } catch {
-              // ignore
-            }
-          } else if (snap) {
-            // If server sends the snapshot as an object, accept it as-is.
-            resetBoardRef.current(snap);
-          }
+setRole(msg.role);
+setUsers(
+  msg.users ??
+    (msg.presentUserIds ?? []).map((userId) => ({ userId, displayName: userId, role: 'viewer' as const }))
+);
+setPresenceByUserId({});
+
+// Load the latest snapshot via REST on join (source of truth).
+(async () => {
+  try {
+    if (!baseUrl || !boardId || !accessToken) return;
+    const api = createSnapshotsApi({ baseUrl, accessToken });
+    const latest = await api.getLatest(boardId);
+    if (!latest?.snapshotJson) return;
+
+    const decoded = decodeSnapshotJson(boardId, latest.snapshotJson);
+    if (decoded) {
+      resetBoardRef.current(decoded);
+    }
+  } catch {
+    // Best-effort: if snapshots fail, keep whatever local state we have.
+  }
+})();
         },
         onOp: (msg) => {
           if (msg.op) applyRemoteEventRef.current(msg.op);

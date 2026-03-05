@@ -1,4 +1,6 @@
 import React from 'react';
+import { isWhiteboardServerConfigured } from '../../config/server';
+import { isOidcConfigured } from '../../auth/oidc';
 import type { BoardRole } from '../../../shared/protocol';
 
 type CollabInfo = {
@@ -35,6 +37,7 @@ export const BoardEditorHeader: React.FC<BoardEditorHeaderProps> = ({
 }) => {
   const status = collab?.status ?? 'disabled';
   const showBadge = status !== 'disabled';
+  const canShare = isWhiteboardServerConfigured() && isOidcConfigured();
 
   const label =
     status === 'connected'
@@ -64,6 +67,8 @@ export const BoardEditorHeader: React.FC<BoardEditorHeaderProps> = ({
             <span>{labelWithError}</span>
           </span>
         )}
+        {canShare && (
+
         <button
           type="button"
           className="tool-button"
@@ -73,6 +78,7 @@ export const BoardEditorHeader: React.FC<BoardEditorHeaderProps> = ({
         >
           🔗 Share…
         </button>
+        )}
 
         <button
           type="button"

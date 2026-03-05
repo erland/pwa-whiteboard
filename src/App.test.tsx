@@ -4,6 +4,21 @@ import { MemoryRouter } from 'react-router-dom';
 import App from './App';
 import { WhiteboardProvider } from './whiteboard/WhiteboardStore';
 
+// App routing renders pages that depend on auth context. For this lightweight
+// smoke test we mock auth to avoid wiring up OIDC/session state.
+jest.mock('./auth/AuthContext', () => ({
+  useAuth: () => ({
+    configured: false,
+    authenticated: false,
+    accessToken: null,
+    displayName: null,
+    subject: null,
+    login: async () => {},
+    logout: async () => {},
+    refreshFromStorage: () => {},
+  }),
+}));
+
 describe('App', () => {
   it('renders header and board list heading', async () => {
     render(

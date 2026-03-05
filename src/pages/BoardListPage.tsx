@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
+import { ApiError } from '../api/httpClient';
+import { isWhiteboardServerConfigured } from '../config/server';
 import type { BoardTypeId, WhiteboardMeta } from '../domain/types';
 import { createEmptyWhiteboardState } from '../domain/whiteboardState';
 import { getBoardsRepository } from '../infrastructure/localStorageBoardsRepository';
@@ -23,6 +26,7 @@ export const BoardListPage: React.FC = () => {
   const [boards, setBoards] = useState<WhiteboardMeta[]>([]);
   const [loadState, setLoadState] = useState<LoadState>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [needsAuth, setNeedsAuth] = useState(false);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createName, setCreateName] = useState('New board');
@@ -36,11 +40,51 @@ export const BoardListPage: React.FC = () => {
   const [isImporting, setIsImporting] = useState(false);
 
   const navigate = useNavigate();
+  const auth = useAuth();
+
+  const serverConfigured = isWhiteboardServerConfigured();
+
+  const ensureSignedIn = async (): Promise<boolean> => {
+    if (!serverConfigured) return true;
+    if (!auth.configured) {
+      setError('Authentication is not configured. Please provide OIDC settings in config.json.');
+      setLoadState('error');
+      return false;
+    }
+    if (auth.authenticated) return true;
+    setNeedsAuth(true);
+    setError('Sign in is required to use server-backed boards.');
+    setLoadState('error');
+    // Trigger login redirect.
+    await auth.login();
+    return false;
+  };
 
   useEffect(() => {
+    // If server mode is enabled, don't load boards until auth is available.
+    // Otherwise we can race the OIDC redirect callback (code -> token exchange)
+    // and end up with a 401 until the user refreshes.
+    if (serverConfigured) {
+      if (!auth.configured) {
+        setBoards([]);
+        setNeedsAuth(false);
+        setError('Authentication is not configured. Please provide OIDC settings in config.json.');
+        setLoadState('error');
+        return;
+      }
+      if (!auth.authenticated) {
+        setBoards([]);
+        setNeedsAuth(true);
+        setError('Sign in is required to load your boards.');
+        setLoadState('error');
+        return;
+      }
+    }
+
     const repo = getBoardsRepository();
     setLoadState('loading');
     setError(null);
+    setNeedsAuth(false);
 
     repo
       .listBoards()
@@ -50,10 +94,15 @@ export const BoardListPage: React.FC = () => {
       })
       .catch((err) => {
         console.error('Failed to load boards index', err);
-        setError('Failed to load boards.');
+        if (serverConfigured && err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+          setNeedsAuth(true);
+          setError('Sign in is required to load your boards.');
+        } else {
+          setError('Failed to load boards.');
+        }
         setLoadState('error');
       });
-  }, []);
+  }, [serverConfigured, auth.configured, auth.authenticated]);
 
   const boardTypeOptions = useMemo(
     () =>
@@ -97,6 +146,7 @@ export const BoardListPage: React.FC = () => {
   };
 
   const handleCreateBoard = async () => {
+    if (!(await ensureSignedIn())) return;
     const name = createName.trim();
     if (!name) {
       window.alert('Please enter a board name.');
@@ -118,6 +168,7 @@ export const BoardListPage: React.FC = () => {
   };
 
   const handleConfirmImport = async () => {
+    if (!(await ensureSignedIn())) return;
     if (!importData) return;
 
     const name = importName.trim();
@@ -276,7 +327,16 @@ export const BoardListPage: React.FC = () => {
       />
 
       {loadState === 'loading' && <p>Loading boards…</p>}
-      {loadState === 'error' && <p className="error-text">{error}</p>}
+      {loadState === 'error' && (
+        <div>
+          <p className="error-text">{error}</p>
+          {needsAuth && auth.configured && (
+            <button className="primary" onClick={() => auth.login()} style={{ marginTop: 12 }}>
+              Sign in
+            </button>
+          )}
+        </div>
+      )}
 
       {loadState === 'loaded' && boards.length === 0 && (
         <p>You have no boards yet. Click “New board” to create your first one.</p>

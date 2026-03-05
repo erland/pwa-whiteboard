@@ -68,8 +68,12 @@ function http() {
 }
 
 export async function listBoards(): Promise<WhiteboardMeta[]> {
-  const res = await http().get<{ boards: ServerBoard[] }>('/boards');
-  return (res.boards ?? []).map(serverBoardToMeta);
+  // Server returns a bare JSON array (List<BoardResponse>)
+  const boards = await http().get<ServerBoard[]>('/boards');
+  // Hide archived boards on the front page.
+  // Server uses status values like "ACTIVE" / "ARCHIVED".
+  const activeBoards = boards.filter((b) => String(b.status ?? '').toUpperCase() !== 'ARCHIVED');
+  return activeBoards.map(serverBoardToMeta);
 }
 
 export async function createBoard(args: { name: string; boardType: BoardTypeId }): Promise<WhiteboardMeta> {

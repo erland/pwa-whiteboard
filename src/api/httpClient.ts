@@ -87,9 +87,12 @@ export function createHttpClient(args: CreateHttpClientArgs): HttpClient {
 
     const token = getAccessToken ? await getAccessToken() : null;
     if (typeof token === 'string' && token.trim().length > 0) {
+      // Avoid accidentally sending duplicate Authorization values if callers included
+      // their own casing (e.g. `authorization`) in req.headers.
+      for (const k of Object.keys(headers)) {
+        if (k.toLowerCase() === 'authorization') delete (headers as any)[k];
+      }
       headers.Authorization = `Bearer ${token}`;
-      // Some proxies/middleware can be picky about header casing.
-      headers.authorization = headers.Authorization;
     }
 
     let body: BodyInit | null | undefined = req.body;

@@ -1,0 +1,9 @@
+{
+  "apiBaseUrl": "https://example.org/api",
+  "wsBaseUrl": "wss://example.org",
+  "oidc": {
+    "issuer": "https://example.org/auth/realms/whiteboard",
+    "clientId": "pwa-whiteboard",
+    "scope": "openid profile email"
+  }
+}

@@ -27,8 +27,8 @@ function exposeViteEnvToGlobals() {
 function applyRuntimeConfigToGlobals(cfg: any) {
   if (!cfg) return;
 
-  if (typeof cfg.apiBaseUrl === 'string') (globalThis as any).__VITE_API_BASE_URL = cfg.apiBaseUrl;
-  if (typeof cfg.wsBaseUrl === 'string') (globalThis as any).__VITE_WS_BASE_URL = cfg.wsBaseUrl;
+  if (typeof cfg.apiBaseUrl === 'string' && cfg.apiBaseUrl.trim().length) (globalThis as any).__VITE_API_BASE_URL = cfg.apiBaseUrl;
+  if (typeof cfg.wsBaseUrl === 'string' && cfg.wsBaseUrl.trim().length) (globalThis as any).__VITE_WS_BASE_URL = cfg.wsBaseUrl;
 
   const oidc = cfg.oidc;
   if (oidc && typeof oidc === 'object') {

@@ -8,6 +8,9 @@ import { AuthProvider } from './auth/AuthContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Expose selected Vite env vars on globalThis so non-ESM test environments (Jest) don't choke on import.meta.env
+(globalThis as any).__VITE_API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL;
+(globalThis as any).__VITE_WS_BASE_URL = (import.meta as any).env?.VITE_WS_BASE_URL;
+// Legacy (backward compatible)
 (globalThis as any).__VITE_WHITEBOARD_SERVER_BASE_URL = (import.meta as any).env?.VITE_WHITEBOARD_SERVER_BASE_URL;
 (globalThis as any).__VITE_OIDC_ISSUER = (import.meta as any).env?.VITE_OIDC_ISSUER;
 (globalThis as any).__VITE_OIDC_CLIENT_ID = (import.meta as any).env?.VITE_OIDC_CLIENT_ID;

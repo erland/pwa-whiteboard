@@ -1,5 +1,5 @@
 import type { BoardTypeId, WhiteboardId, WhiteboardMeta } from '../domain/types';
-import { getWhiteboardServerBaseUrl } from '../config/server';
+import { getApiBaseUrl } from '../config/server';
 import { getAccessToken } from '../auth/oidc';
 import { createHttpClient } from './httpClient';
 
@@ -62,7 +62,7 @@ function serverBoardToMeta(b: ServerBoard): WhiteboardMeta {
 
 function http() {
   return createHttpClient({
-    baseUrl: getWhiteboardServerBaseUrl(),
+    baseUrl: getApiBaseUrl()!,
     getAccessToken,
   });
 }

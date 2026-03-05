@@ -1,4 +1,4 @@
-import { getWhiteboardServerBaseUrl } from '../config/server';
+import { getApiBaseUrl } from '../config/server';
 import { getAccessToken } from '../auth/oidc';
 import { createHttpClient } from './httpClient';
 
@@ -18,7 +18,7 @@ export type ValidateInviteResponse = {
 
 function http() {
   return createHttpClient({
-    baseUrl: getWhiteboardServerBaseUrl(),
+    baseUrl: getApiBaseUrl()!,
     getAccessToken,
   });
 }

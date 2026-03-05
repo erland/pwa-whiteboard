@@ -1,9 +1,17 @@
 /**
  * Whiteboard server base URL configuration.
  *
- * The backend base URL is read from `VITE_WHITEBOARD_SERVER_BASE_URL`.
- * In the browser runtime it is exposed on `globalThis.__VITE_WHITEBOARD_SERVER_BASE_URL`
- * by `src/main.tsx` so Jest/unit tests (which don't run Vite) can still access it.
+ * New configuration (preferred):
+ *   - VITE_API_BASE_URL  (REST) e.g. https://example.org/api
+ *   - VITE_WS_BASE_URL   (WebSocket) e.g. wss://example.org
+ *
+ * Backward compatibility:
+ *   - VITE_WHITEBOARD_SERVER_BASE_URL (legacy). If set, it is used as API base URL.
+ *     If WS base URL is not provided, we derive it from API base URL by stripping a
+ *     trailing "/api" segment when present.
+ *
+ * In the browser runtime these values are exposed on globalThis by src/main.tsx so
+ * Jest/unit tests (which don't run Vite) can still access them.
  */
 
 function normalizeBaseUrl(url: string): string {
@@ -11,16 +19,46 @@ function normalizeBaseUrl(url: string): string {
   return url.trim().replace(/\/+$/, '');
 }
 
-export function getWhiteboardServerBaseUrl(): string | undefined {
-  const raw = (globalThis as any).__VITE_WHITEBOARD_SERVER_BASE_URL as string | undefined;
+function stripTrailingApiSegment(url: string): string {
+  // If API base is ".../api", derive WS base as "..." (common server routing).
+  return url.replace(/\/api$/i, '');
+}
+
+function readGlobal(name: string): string | undefined {
+  return (globalThis as any)[name] as string | undefined;
+}
+
+export function getApiBaseUrl(): string | undefined {
+  const raw =
+    readGlobal('__VITE_API_BASE_URL') ??
+    readGlobal('__VITE_WHITEBOARD_SERVER_BASE_URL'); // legacy
+
   if (!raw) return undefined;
   const normalized = normalizeBaseUrl(raw);
   return normalized.length ? normalized : undefined;
 }
 
+export function getWsBaseUrl(): string | undefined {
+  const explicit = readGlobal('__VITE_WS_BASE_URL');
+  if (explicit) {
+    const normalized = normalizeBaseUrl(explicit);
+    return normalized.length ? normalized : undefined;
+  }
+
+  const api = getApiBaseUrl();
+  if (!api) return undefined;
+  return stripTrailingApiSegment(api);
+}
+
 export function isWhiteboardServerConfigured(): boolean {
-  return !!getWhiteboardServerBaseUrl();
+  // REST base URL is required for the app to operate against the new backend.
+  return !!getApiBaseUrl();
+}
+
+// Backward-compatible alias for older imports (prefer getApiBaseUrl)
+export function getWhiteboardServerBaseUrl(): string | undefined {
+  return getApiBaseUrl();
 }
 
 // Exported for tests
-export const __test__ = { normalizeBaseUrl };
+export const __test__ = { normalizeBaseUrl, stripTrailingApiSegment };

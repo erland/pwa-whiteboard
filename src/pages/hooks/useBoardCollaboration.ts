@@ -3,7 +3,7 @@ import type { BoardEvent, WhiteboardState } from '../../domain/types';
 import type { BoardRole, PresencePayload, PresenceUser } from '../../../shared/protocol';
 import { CollabClient, type CollabStatus } from '../../collab/CollabClient';
 import { useAuth } from '../../auth/AuthContext';
-import { getWhiteboardServerBaseUrl } from '../../config/server';
+import { getApiBaseUrl, getWsBaseUrl } from '../../config/server';
 import { deriveSelfUserId, getInviteTokenFromUrl, getOrCreateGuestId } from './collab/collabIdentity';
 import { loadLatestSnapshotOrNull, useSnapshotAutosave } from './collab/useSnapshotSync';
 import { usePresenceSender } from './collab/usePresenceSender';
@@ -47,7 +47,8 @@ export function useBoardCollaboration({
   resetBoard,
   applyRemoteEvent,
 }: UseBoardCollaborationArgs): UseBoardCollaborationResult {
-  const baseUrl = getWhiteboardServerBaseUrl();
+  const apiBaseUrl = getApiBaseUrl();
+  const wsBaseUrl = getWsBaseUrl();
   const inviteToken = useMemo(() => getInviteTokenFromUrl(), []);
   const guestId = useMemo(() => getOrCreateGuestId(), []);
 
@@ -92,7 +93,7 @@ export function useBoardCollaboration({
   }, [inviteToken, guestId, accessToken]);
 
   // Collaboration requires an authenticated access token.
-  const enabled = Boolean(baseUrl) && Boolean(boardId) && Boolean(accessToken);
+  const enabled = Boolean(apiBaseUrl) && Boolean(wsBaseUrl) && Boolean(boardId) && Boolean(accessToken);
 
   // ---- Snapshot autosave (REST) ----
   useSnapshotAutosave({
@@ -100,7 +101,7 @@ export function useBoardCollaboration({
     status,
     role,
     boardId,
-    baseUrl,
+    baseUrl: apiBaseUrl!,
     accessToken,
     state,
   });
@@ -135,7 +136,7 @@ export function useBoardCollaboration({
 
   // WebSocket connection lifecycle.
   useEffect(() => {
-    if (!enabled || !baseUrl || !accessToken || !boardId) {
+    if (!enabled || !wsBaseUrl || !accessToken || !boardId) {
       clientRef.current?.close();
       clientRef.current = null;
       clientKeyRef.current = null;
@@ -160,7 +161,7 @@ export function useBoardCollaboration({
       return;
     }
 
-    const key = `${baseUrl}|${boardId}|${guestId}|token:${accessToken}|r${reconnectNonce}`;
+    const key = `${wsBaseUrl}|${boardId}|${guestId}|token:${accessToken}|r${reconnectNonce}`;
 
     if (clientRef.current && clientKeyRef.current === key) return;
 
@@ -169,7 +170,7 @@ export function useBoardCollaboration({
 
     const client = new CollabClient(
       {
-        baseUrl,
+        baseUrl: apiBaseUrl!,
         boardId,
         accessToken,
         guestId,
@@ -214,8 +215,8 @@ export function useBoardCollaboration({
           // Load the latest snapshot via REST on join (source of truth).
           (async () => {
             try {
-              if (!baseUrl || !boardId || !accessToken) return;
-              const decoded = await loadLatestSnapshotOrNull({ baseUrl, accessToken, boardId });
+              if (!apiBaseUrl || !boardId || !accessToken) return;
+              const decoded = await loadLatestSnapshotOrNull({ baseUrl: apiBaseUrl, accessToken, boardId });
               if (decoded) resetBoardRef.current(decoded);
             } catch {
               // Best-effort: if snapshots fail, keep whatever local state we have.
@@ -272,7 +273,8 @@ export function useBoardCollaboration({
     };
   }, [
     enabled,
-    baseUrl,
+    apiBaseUrl,
+    wsBaseUrl,
     accessToken,
     boardId,
     boardMetaId,

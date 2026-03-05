@@ -170,7 +170,9 @@ export function useBoardCollaboration({
 
     const client = new CollabClient(
       {
-        baseUrl: apiBaseUrl!,
+        // IMPORTANT: WebSocket base URL is NOT under /api (REST base).
+        // Use the derived/configured WS base here so we connect to /ws/boards/...
+        baseUrl: wsBaseUrl,
         boardId,
         accessToken,
         guestId,

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAuth } from '../../auth/AuthContext';
-import { acceptInvite, createBoardInvite, validateInvite, type InvitePermission } from '../../api/invitesApi';
+import { acceptInvite, createBoardInvite, validateInvite, type InvitePermission, type InvitePermissionInput } from '../../api/invitesApi';
 
 type SharePanelProps = {
   boardId: string;
@@ -91,7 +91,7 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName, hide
     setCreating(true);
     setLastCreatedInviteCopied(false);
     try {
-      const permission: InvitePermission = createRole === 'editor' ? 'EDITOR' : 'VIEWER';
+      const permission: InvitePermission = createRole === 'editor' ? 'editor' : 'viewer';
       const created = await createBoardInvite({ boardId, permission });
       setLastCreatedInviteUrl(buildInviteUrl(created.token));
     } catch (e) {

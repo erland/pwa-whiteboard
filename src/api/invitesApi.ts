@@ -2,7 +2,15 @@ import { getApiBaseUrl } from '../config/server';
 import { getAccessToken } from '../auth/oidc';
 import { createHttpClient } from './httpClient';
 
-export type InvitePermission = 'VIEWER' | 'EDITOR';
+function normalizePermission(p: InvitePermissionInput): InvitePermission {
+  const v = String(p).toLowerCase();
+  if (v === 'viewer' || v === 'editor') return v;
+  // fallback (should never happen if UI is typed)
+  return 'viewer';
+}
+
+export type InvitePermission = 'viewer' | 'editor';
+export type InvitePermissionInput = 'VIEWER' | 'EDITOR' | InvitePermission;
 
 export type CreateInviteResponse = {
   token: string;
@@ -25,11 +33,11 @@ function http() {
 
 export async function createBoardInvite(args: {
   boardId: string;
-  permission: InvitePermission;
+  permission: InvitePermissionInput;
 }): Promise<CreateInviteResponse> {
   const boardId = encodeURIComponent(args.boardId);
   return await http().post<CreateInviteResponse>(`/boards/${boardId}/invites`, {
-    json: { permission: args.permission },
+    json: { permission: normalizePermission(args.permission) },
   });
 }
 

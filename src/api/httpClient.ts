@@ -86,7 +86,11 @@ export function createHttpClient(args: CreateHttpClientArgs): HttpClient {
     };
 
     const token = getAccessToken ? await getAccessToken() : null;
-    if (token) headers.Authorization = `Bearer ${token}`;
+    if (typeof token === 'string' && token.trim().length > 0) {
+      headers.Authorization = `Bearer ${token}`;
+      // Some proxies/middleware can be picky about header casing.
+      headers.authorization = headers.Authorization;
+    }
 
     let body: BodyInit | null | undefined = req.body;
     if (req.json !== undefined) {

@@ -132,3 +132,24 @@ test('rejects malformed op payload cleanly', () => {
     expect(res.ok).toBe(true);
   });
 });
+
+
+  test('validates server joined from java server shape (yourUserId + users minimal)', () => {
+    const res = validateServerToClientMessage({
+      type: 'joined',
+      boardId: 'b',
+      yourUserId: 'alice',
+      // permission/role intentionally omitted (server currently doesn't send it)
+      users: [{ userId: 'alice', joinedAt: new Date().toISOString() }],
+      latestSnapshotVersion: 1,
+      latestSnapshot: { schemaVersion: 1, events: [] },
+    } as any);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.userId).toBe('alice');
+      // default role
+      expect(res.value.role).toBe('editor');
+      expect(res.value.users?.[0].userId).toBe('alice');
+    }
+  });
+

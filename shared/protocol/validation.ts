@@ -432,13 +432,21 @@ export function validateServerToClientMessage(v: unknown): ValidationResult<Serv
   if (!isString(v.type)) return { ok: false, error: 'message.type must be a string' };
 
   if (v.type === 'joined') {
+    // Accept both client-style and server-style joined messages.
+    // Server (java-whiteboard-server) uses: { yourUserId, permission?, users:[{userId, joinedAt}], latestSnapshotVersion, latestSnapshot }
+    // Client prefers: { userId, role, users:[{userId, displayName, role}] }
     if (!isString(v.boardId) || !withinChars(v.boardId, MAX_BOARD_ID_CHARS)) {
       return { ok: false, error: `joined.boardId must be a non-empty string (<=${MAX_BOARD_ID_CHARS})` };
     }
-    if (!isString(v.userId) || !withinChars(v.userId, MAX_USER_ID_CHARS)) {
+
+    const rawUserId = (v as any).userId ?? (v as any).yourUserId;
+    if (!isString(rawUserId) || !withinChars(rawUserId, MAX_USER_ID_CHARS)) {
       return { ok: false, error: `joined.userId must be a non-empty string (<=${MAX_USER_ID_CHARS})` };
     }
-    const role = normalizeBoardRole(v.role);
+
+    // Role is optional in server messages; default to 'editor' (safe for UX) and let REST permissions be the source of truth.
+    const rawRole = (v as any).role ?? (v as any).permission;
+    const role = rawRole !== undefined ? normalizeBoardRole(rawRole) : 'editor';
     if (!role) return { ok: false, error: 'joined.role must be owner|editor|viewer' };
 
     if (v.presentUserIds !== undefined) {
@@ -450,14 +458,26 @@ export function validateServerToClientMessage(v: unknown): ValidationResult<Serv
       }
     }
 
+    // users[] is optional and server-dependent. Accept either PresenceUser[] or minimal objects with userId.
     let users: PresenceUser[] | undefined;
-    if (v.users !== undefined) {
-      if (!Array.isArray(v.users)) return { ok: false, error: 'joined.users must be an array' };
+    if ((v as any).users !== undefined) {
+      const rawUsers = (v as any).users;
+      if (!Array.isArray(rawUsers)) return { ok: false, error: 'joined.users must be an array' };
       users = [];
-      for (const u of v.users) {
-        const res = validatePresenceUser(u);
-        if (!res.ok) return { ok: false, error: `joined.users: ${res.error}` };
-        users.push(res.value);
+      for (const u of rawUsers) {
+        if (isRecord(u) && isString((u as any).userId)) {
+          const maybePresence = validatePresenceUser(u);
+          if (maybePresence.ok) {
+            users.push(maybePresence.value);
+          } else {
+            // Minimal fallback
+            const id = (u as any).userId as string;
+            if (!withinChars(id, MAX_USER_ID_CHARS)) return { ok: false, error: 'joined.users.userId too long' };
+            users.push({ userId: id, displayName: id, role: 'viewer' });
+          }
+        } else {
+          return { ok: false, error: 'joined.users items must be objects with userId' };
+        }
       }
     }
 
@@ -466,10 +486,10 @@ export function validateServerToClientMessage(v: unknown): ValidationResult<Serv
       value: {
         type: 'joined',
         boardId: v.boardId,
-        userId: v.userId,
+        userId: rawUserId,
         role,
-        presentUserIds: v.presentUserIds as string[] | undefined,
-        snapshot: v.snapshot,
+        presentUserIds: (v as any).presentUserIds as string[] | undefined,
+        snapshot: (v as any).snapshot,
         latestSnapshot: (v as any).latestSnapshot,
         serverNow: (v as any).serverNow,
         users,
@@ -477,12 +497,13 @@ export function validateServerToClientMessage(v: unknown): ValidationResult<Serv
     };
   }
 
-  if (v.type === 'op') {
+if (v.type === 'op') {
     if (v.boardId !== undefined && (!isString(v.boardId) || !withinChars(v.boardId, MAX_BOARD_ID_CHARS))) {
       return { ok: false, error: `op.boardId must be <=${MAX_BOARD_ID_CHARS}` };
     }
     if (!isInt(v.seq) || v.seq < 0) return { ok: false, error: 'op.seq must be a non-negative integer' };
-    if (v.authorId !== undefined && (!isString(v.authorId) || !withinChars(v.authorId, MAX_USER_ID_CHARS))) {
+    const rawAuthorId = (v as any).authorId ?? (v as any).from;
+    if (rawAuthorId !== undefined && (!isString(rawAuthorId) || !withinChars(rawAuthorId, MAX_USER_ID_CHARS))) {
       return { ok: false, error: `op.authorId must be <=${MAX_USER_ID_CHARS}` };
     }
     if (v.clientOpId !== undefined && (!isString(v.clientOpId) || v.clientOpId.length > MAX_CLIENT_OP_ID_CHARS)) {
@@ -499,7 +520,7 @@ export function validateServerToClientMessage(v: unknown): ValidationResult<Serv
         boardId: v.boardId as string | undefined,
         seq: v.seq,
         op: opRes.value,
-        authorId: v.authorId as string | undefined,
+        authorId: rawAuthorId as string | undefined,
         clientOpId: v.clientOpId as string | undefined,
       },
     };
@@ -511,13 +532,23 @@ export function validateServerToClientMessage(v: unknown): ValidationResult<Serv
     }
 
     let users: PresenceUser[] | undefined;
-    if (v.users !== undefined) {
-      if (!Array.isArray(v.users)) return { ok: false, error: 'presence.users must be an array' };
+    if ((v as any).users !== undefined) {
+      const rawUsers = (v as any).users;
+      if (!Array.isArray(rawUsers)) return { ok: false, error: 'presence.users must be an array' };
       users = [];
-      for (const u of v.users) {
-        const res = validatePresenceUser(u);
-        if (!res.ok) return { ok: false, error: `presence.users: ${res.error}` };
-        users.push(res.value);
+      for (const u of rawUsers) {
+        if (isRecord(u) && isString((u as any).userId)) {
+          const maybePresence = validatePresenceUser(u);
+          if (maybePresence.ok) {
+            users.push(maybePresence.value);
+          } else {
+            const id = (u as any).userId as string;
+            if (!withinChars(id, MAX_USER_ID_CHARS)) return { ok: false, error: 'presence.users.userId too long' };
+            users.push({ userId: id, displayName: id, role: 'viewer' });
+          }
+        } else {
+          return { ok: false, error: 'presence.users items must be objects with userId' };
+        }
       }
     }
 

@@ -52,10 +52,11 @@ export class CollabClient {
     this.manualClose = false;
     this.connecting = true;
 
-    const url = toWsUrl(
-      this.opts.baseUrl,
-      `/ws/boards/${encodeURIComponent(this.opts.boardId)}?access_token=${encodeURIComponent(this.opts.accessToken)}`
-    );
+    const url0 = toWsUrl(this.opts.baseUrl, `/ws/boards/${encodeURIComponent(this.opts.boardId)}`);
+    const u = new URL(url0);
+    // Ensure we never send duplicate access_token params (e.g. if a baseUrl was misconfigured with a query).
+    u.searchParams.set('access_token', this.opts.accessToken);
+    const url = u.toString();
     this.setStatus('connecting');
 
     const ws = new WebSocket(url);

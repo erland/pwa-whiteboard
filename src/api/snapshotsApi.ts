@@ -4,7 +4,8 @@ export type SnapshotResponse = {
   id: string;
   boardId: string;
   version: number;
-  snapshotJson: string;
+  // Server returns the snapshot payload as a JSON object under `snapshot`.
+  snapshot: unknown;
   createdAt: string;
 };
 
@@ -35,7 +36,16 @@ export function createSnapshotsApi(args: { baseUrl: string; accessToken: string 
     },
 
     async create(boardId: string, snapshotJson: string): Promise<SnapshotResponse> {
-      return client.post<SnapshotResponse>(`/boards/${encodeURIComponent(boardId)}/snapshots`, { json: { snapshotJson } });
+      // Server expects { snapshot: <json> } (see CreateSnapshotRequest.snapshot()).
+      // Client uses a JSON string, so parse it before sending.
+      let snapshot: unknown;
+      try {
+        snapshot = JSON.parse(snapshotJson);
+      } catch (e) {
+        throw new Error(`Invalid snapshot JSON: ${(e as Error)?.message ?? String(e)}`);
+      }
+
+      return client.post<SnapshotResponse>(`/boards/${encodeURIComponent(boardId)}/snapshots`, { json: { snapshot } });
     },
   };
 }

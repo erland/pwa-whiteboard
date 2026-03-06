@@ -124,5 +124,11 @@ export function getWhiteboardServerBaseUrl(): string | undefined {
   return getApiBaseUrl();
 }
 
+
+export function isOidcConfigured(): boolean {
+  const issuer = readGlobal('__VITE_OIDC_ISSUER');
+  const clientId = readGlobal('__VITE_OIDC_CLIENT_ID');
+  return !!(issuer && issuer.trim().length && clientId && clientId.trim().length);
+}
 // Exported for tests
 export const __test__ = { normalizeBaseUrl, stripTrailingSegment, toWsOrigin };

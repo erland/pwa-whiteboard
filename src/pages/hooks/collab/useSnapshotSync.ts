@@ -70,6 +70,8 @@ export function useSnapshotAutosave({
     baseUrl,
     accessToken,
     // Snapshot content drivers (keep this cheap; we encode in the timer)
+    // Note: objects may be mutated in-place, so rely on meta.updatedAt as the primary change signal.
+    state?.meta?.updatedAt,
     state?.objects,
     state?.viewport?.offsetX,
     state?.viewport?.offsetY,
@@ -86,6 +88,7 @@ export async function loadLatestSnapshotOrNull(args: {
   const { baseUrl, accessToken, boardId } = args;
   const api = createSnapshotsApi({ baseUrl, accessToken });
   const latest = await api.getLatest(boardId);
-  if (!latest?.snapshotJson) return null;
-  return decodeSnapshotJson(boardId, latest.snapshotJson);
+	const snapshotJson = latest?.snapshot ? JSON.stringify(latest.snapshot) : null;
+	if (!snapshotJson) return null;
+	return decodeSnapshotJson(boardId, snapshotJson);
 }

@@ -22,7 +22,8 @@ export type CollabClientHandlers = {
 export type CollabClientOptions = {
   baseUrl: string;
   boardId: string;
-  accessToken: string;
+  accessToken?: string;
+  inviteToken?: string;
   guestId?: string;
   displayName?: string;
   color?: string;
@@ -54,8 +55,20 @@ export class CollabClient {
 
     const url0 = toWsUrl(this.opts.baseUrl, `/ws/boards/${encodeURIComponent(this.opts.boardId)}`);
     const u = new URL(url0);
-    // Ensure we never send duplicate access_token params (e.g. if a baseUrl was misconfigured with a query).
-    u.searchParams.set('access_token', this.opts.accessToken);
+    // Apply auth.
+    // Browser WebSocket API can't set Authorization headers, so we support query params.
+    // Server prefers Authorization header, but also accepts access_token and invite.
+    if (this.opts.accessToken && this.opts.accessToken.trim()) {
+      u.searchParams.set('access_token', this.opts.accessToken.trim());
+      u.searchParams.delete('invite');
+    } else if (this.opts.inviteToken && this.opts.inviteToken.trim()) {
+      u.searchParams.set('invite', this.opts.inviteToken.trim());
+      u.searchParams.delete('access_token');
+    } else {
+      // No auth - server will likely reject.
+      u.searchParams.delete('access_token');
+      u.searchParams.delete('invite');
+    }
     const url = u.toString();
     this.setStatus('connecting');
 

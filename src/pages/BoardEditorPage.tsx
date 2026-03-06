@@ -1,6 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { WhiteboardCanvas } from '../whiteboard/WhiteboardCanvas';
+
+import { useAuth } from '../auth/AuthContext';
+import { isWhiteboardServerConfigured, isOidcConfigured } from '../config/server';
+import { acceptInvite, validateInvite } from '../api/invitesApi';
 
 import { BoardEditorHeader } from './boardEditor/BoardEditorHeader';
 import { RemoteCursorsOverlay } from './boardEditor/RemoteCursorsOverlay';
@@ -16,11 +20,179 @@ const CANVAS_WIDTH = 960;
 const CANVAS_HEIGHT = 540;
 
 export const BoardEditorPage: React.FC = () => {
-  const {
-id } = useParams<{ id: string }>();
-
+  const { id } = useParams<{ id: string }>();
   const boardId = id ?? '';
 
+  const navigate = useNavigate();
+  const auth = useAuth();
+
+  const serverConfigured = isWhiteboardServerConfigured();
+  const oidcConfigured = isOidcConfigured();
+
+  const initialInviteToken = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const url = new URL(window.location.href);
+      const q = url.searchParams.get('invite');
+      return q ? q.trim() : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const [inviteToken, setInviteToken] = useState<string | null>(initialInviteToken);
+
+  // When opening an invite link unauthenticated, allow user to choose:
+  //  - sign in (accept invite via REST)
+  //  - continue as guest (use invite token for WS join)
+  const [allowGuestInvite, setAllowGuestInvite] = useState(false);
+
+  const [inviteInfo, setInviteInfo] = useState<{ permission?: string; expiresAt?: string } | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [acceptingInvite, setAcceptingInvite] = useState(false);
+  const [inviteAccepted, setInviteAccepted] = useState(false);
+
+  const isInviteFlow = !!inviteToken && serverConfigured && oidcConfigured;
+
+  // If authenticated and invite token exists, accept it via REST (so permissions are persisted server-side).
+  useEffect(() => {
+    if (!isInviteFlow) return;
+    if (!inviteToken) return;
+    if (!auth.authenticated) return;
+
+    let cancelled = false;
+    setAcceptingInvite(true);
+    setInviteError(null);
+
+    (async () => {
+      try {
+        const v = await validateInvite(inviteToken);
+        if (cancelled) return;
+        if (v?.valid) {
+          setInviteInfo({ permission: v.permission, expiresAt: v.expiresAt });
+        }
+        await acceptInvite(inviteToken);
+        if (cancelled) return;
+        setInviteAccepted(true);
+
+        // Remove invite token from URL after acceptance (avoids re-accept loops and leaking token).
+        const url = new URL(window.location.href);
+        url.searchParams.delete('invite');
+        window.history.replaceState({}, '', url.toString());
+        setInviteToken(null);
+      } catch (e: any) {
+        if (cancelled) return;
+        const msg = e?.message ? String(e.message) : 'Failed to accept invite.';
+        setInviteError(msg);
+      } finally {
+        if (!cancelled) setAcceptingInvite(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isInviteFlow, inviteToken, auth.authenticated]);
+
+  // Invite gate: show only when invite link is present, server+OIDC configured, and user is not authenticated,
+  // unless they explicitly choose to continue as guest.
+  if (isInviteFlow && !auth.authenticated && !allowGuestInvite) {
+    return (
+      <section className="page page-board-editor">
+        <div style={{ maxWidth: 720, margin: '2rem auto', padding: '1rem' }}>
+          <h2>Invite link</h2>
+          <p>This board was shared with you. Choose how you want to open it:</p>
+          <ul>
+            <li><strong>Sign in</strong> to accept the invite and persist your access.</li>
+            <li><strong>Open without signing in</strong> to join via the invite token (guest access).</li>
+          </ul>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  sessionStorage.setItem('pwa-whiteboard.postLoginRedirect', window.location.href);
+                } catch {
+                  // ignore
+                }
+                auth.login();
+              }}
+            >
+              Sign in
+            </button>
+            <button type="button" onClick={() => setAllowGuestInvite(true)}>
+              Open without signing in
+            </button>
+            <button type="button" onClick={() => navigate('/')}>
+              Cancel
+            </button>
+          </div>
+          <p style={{ marginTop: '1rem', opacity: 0.8 }}>
+            Tip: If you just want local drawing without a server, open the app without an invite link.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+
+
+  // If we have an invite link and the user is authenticated, accept the invite *before* mounting the editor content.
+  // This avoids a race where the editor tries to load snapshots / join WS before permissions are granted.
+  if (isInviteFlow && auth.authenticated && !allowGuestInvite && !inviteAccepted) {
+    return (
+      <section className="page page-board-editor">
+        <div style={{ maxWidth: 720, margin: '2rem auto', padding: '1rem' }}>
+          <h2>Opening shared board…</h2>
+          {acceptingInvite ? <p>Accepting invite…</p> : null}
+          {inviteError ? (
+            <>
+              <p style={{ color: 'crimson' }}>{inviteError}</p>
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Retry by toggling state; effect depends on auth + inviteToken.
+                    setInviteError(null);
+                    setAcceptingInvite(false);
+                    // Trigger effect by setting token (no-op but stable)
+                    setInviteToken((t) => (t ? t : t));
+                  }}
+                >
+                  Retry
+                </button>
+                <button type="button" onClick={() => navigate('/')}>Back</button>
+              </div>
+            </>
+          ) : null}
+        </div>
+      </section>
+    );
+  }
+  return (
+    <BoardEditorContent
+      boardId={boardId}
+      inviteToken={allowGuestInvite ? inviteToken : null}
+      serverConfigured={serverConfigured}
+      oidcConfigured={oidcConfigured}
+      acceptingInvite={acceptingInvite}
+      inviteError={inviteError}
+      inviteAccepted={inviteAccepted}
+    />
+  );
+};
+
+const BoardEditorContent: React.FC<{
+  boardId: string;
+  inviteToken: string | null;
+  serverConfigured: boolean;
+  oidcConfigured: boolean;
+  acceptingInvite: boolean;
+  inviteError: string | null;
+  inviteAccepted: boolean;
+}> = ({ boardId, inviteToken, serverConfigured, oidcConfigured, acceptingInvite, inviteError, inviteAccepted }) => {
+  const navigate = useNavigate();
+  const auth = useAuth();
   const {
     state,
     boardTypeDef,
@@ -66,7 +238,7 @@ id } = useParams<{ id: string }>();
     collab,
     isReadOnly,
     handleCursorWorldMove,
-} = useBoardEditor(id);
+} = useBoardEditor(boardId);
 
   // Derive board name from state (adjust if your meta shape differs)
   const boardName = state?.meta?.name ?? 'Untitled board';
@@ -133,6 +305,13 @@ id } = useParams<{ id: string }>();
 
   return (
     <section className="page page-board-editor">
+      {inviteToken && serverConfigured && oidcConfigured && (
+        <div className="collab-notice" role="status" aria-live="polite">
+          {acceptingInvite && 'Accepting invite…'}
+          {inviteError && `Invite error: ${inviteError}`}
+          {inviteAccepted && !acceptingInvite && !inviteError && 'Invite accepted.'}
+        </div>
+      )}
       {/* Pass boardName instead of boardId */}
       <BoardEditorHeader
         onOpenShare={() => setIsShareOpen(true)}

@@ -5,6 +5,7 @@ import { CollabClient, type CollabStatus } from '../../collab/CollabClient';
 import { useAuth } from '../../auth/AuthContext';
 import { getApiBaseUrl, getWsBaseUrl } from '../../config/server';
 import { deriveSelfUserId, getInviteTokenFromUrl, getOrCreateGuestId } from './collab/collabIdentity';
+import { decodeSnapshotJson } from '../../domain/snapshotCodec';
 import { loadLatestSnapshotOrNull, useSnapshotAutosave } from './collab/useSnapshotSync';
 import { usePresenceSender } from './collab/usePresenceSender';
 import { useAutoReconnect } from './collab/useAutoReconnect';
@@ -40,6 +41,15 @@ export type UseBoardCollaborationResult = {
   sendPresence: (presence: PresencePayload) => void;
 };
 
+function normalizeQueryToken(t: string | null | undefined, key: string): string | null {
+    const s = (t ?? '').trim();
+    if (!s) return null;
+    const idx = s.lastIndexOf(`${key}=`);
+    if (idx >= 0) return s.substring(idx + key.length + 1).replace(/^[?&]/, '').trim();
+    return s.replace(/^[?&]/, '').trim();
+}
+
+
 export function useBoardCollaboration({
   boardId,
   state,
@@ -49,8 +59,20 @@ export function useBoardCollaboration({
 }: UseBoardCollaborationArgs): UseBoardCollaborationResult {
   const apiBaseUrl = getApiBaseUrl();
   const wsBaseUrl = getWsBaseUrl();
-  const inviteToken = useMemo(() => getInviteTokenFromUrl(), []);
+
+  const auth = useAuth();
+  const rawAccessToken = auth.accessToken;
+  const accessToken = normalizeQueryToken(rawAccessToken, 'access_token') ?? rawAccessToken;
+  const user = auth.user;
+  const isAuthenticated = Boolean(accessToken);
+
+  const inviteParam = useMemo(() => normalizeQueryToken(getInviteTokenFromUrl(), 'invite'), []);
+  const inviteToken = useMemo(() => (isAuthenticated ? null : inviteParam), [inviteParam, isAuthenticated]);
+
   const guestId = useMemo(() => getOrCreateGuestId(), []);
+  const displayName = isAuthenticated
+    ? user?.name ?? user?.preferred_username ?? user?.email ?? 'User'
+    : 'Guest';
 
   const [selfUserId, setSelfUserId] = useState<string>(guestId);
 
@@ -79,13 +101,13 @@ export function useBoardCollaboration({
   useEffect(() => {
     applyRemoteEventRef.current = applyRemoteEvent;
   }, [applyRemoteEvent]);
-
-  const { accessToken } = useAuth();
   const [boardEnsured, setBoardEnsured] = useState<boolean>(false);
 
-  // Auth is provided by OIDC. Invite tokens are only used for HTTP accept.
+  // Auth is provided by OIDC when signed in.
+  // For invite links, the server also allows anonymous WS join when `invite` is provided on the WS URL.
+  // In that mode we keep a stable guestId as the local identity.
   useEffect(() => {
-    if (inviteToken) {
+    if (inviteToken || !accessToken) {
       setSelfUserId(guestId);
       return;
     }
@@ -93,11 +115,13 @@ export function useBoardCollaboration({
   }, [inviteToken, guestId, accessToken]);
 
   // Collaboration requires an authenticated access token.
-  const enabled = Boolean(apiBaseUrl) && Boolean(wsBaseUrl) && Boolean(boardId) && Boolean(accessToken);
+  const wsEnabled = Boolean(apiBaseUrl) && Boolean(wsBaseUrl) && Boolean(boardId) && (Boolean(accessToken) || Boolean(inviteToken));
+  const restEnabled = Boolean(apiBaseUrl) && Boolean(boardId) && Boolean(accessToken);
+  const enabled = wsEnabled;
 
   // ---- Snapshot autosave (REST) ----
   useSnapshotAutosave({
-    enabled,
+    enabled: restEnabled,
     status,
     role,
     boardId,
@@ -122,8 +146,9 @@ export function useBoardCollaboration({
       setBoardEnsured(false);
       return;
     }
-    setBoardEnsured(Boolean(accessToken));
-  }, [boardId, accessToken]);
+    // If we have an invite token, we are allowed to attempt a WS join even without an access token.
+    setBoardEnsured(Boolean(accessToken) || Boolean(inviteToken));
+  }, [boardId, accessToken, inviteToken]);
 
   // Clear cooldown when it expires.
   useEffect(() => {
@@ -136,7 +161,7 @@ export function useBoardCollaboration({
 
   // WebSocket connection lifecycle.
   useEffect(() => {
-    if (!enabled || !wsBaseUrl || !accessToken || !boardId) {
+    if (!enabled || !wsBaseUrl || !boardId || (!accessToken && !inviteToken)) {
       clientRef.current?.close();
       clientRef.current = null;
       clientKeyRef.current = null;
@@ -161,7 +186,8 @@ export function useBoardCollaboration({
       return;
     }
 
-    const key = `${wsBaseUrl}|${boardId}|${guestId}|token:${accessToken}|r${reconnectNonce}`;
+    const authKey = accessToken ? `token:${accessToken}` : `invite:${inviteToken}`;
+    const key = `${wsBaseUrl}|${boardId}|${guestId}|${authKey}|r${reconnectNonce}`;
 
     if (clientRef.current && clientKeyRef.current === key) return;
 
@@ -175,8 +201,9 @@ export function useBoardCollaboration({
         baseUrl: wsBaseUrl,
         boardId,
         accessToken,
+        inviteToken,
         guestId,
-        displayName: 'Guest',
+        displayName,
       },
       {
         onStatus: (s, err) => {
@@ -214,7 +241,22 @@ export function useBoardCollaboration({
           );
           setPresenceByUserId({});
 
-          // Load the latest snapshot via REST on join (source of truth).
+
+          // If the server provided a snapshot in the WS joined message (used for anonymous invite joins),
+          // apply it immediately.
+          try {
+            const snap = (msg.latestSnapshot ?? msg.snapshot) as any;
+            if (snap && !accessToken) {
+              // Server sends JSON object; our decoder expects a JSON string.
+                            const decoded = decodeSnapshotJson(boardId, JSON.stringify(snap));
+              if (decoded) resetBoardRef.current(decoded);
+            }
+          } catch {
+            // ignore
+          }
+
+          // Load the latest snapshot via REST on join (source of truth) when authenticated.
+
           (async () => {
             try {
               if (!apiBaseUrl || !boardId || !accessToken) return;

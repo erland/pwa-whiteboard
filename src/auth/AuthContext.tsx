@@ -32,11 +32,27 @@ function buildState(): AuthState {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = React.useState<AuthState>(() => buildState());
 
+  const POST_LOGIN_REDIRECT_KEY = 'pwa-whiteboard.postLoginRedirect';
+
   React.useEffect(() => {
     // Handle OIDC redirect callback if present (code -> tokens)
     handleLoginRedirectCallbackIfPresent()
       .then((handled) => {
-        if (handled) setState(buildState());
+        if (handled) {
+          setState(buildState());
+          try {
+            const target = sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
+            if (target) {
+              sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
+              // Avoid infinite loops; only redirect if we're not already at target.
+              if (typeof window !== 'undefined' && window.location.href !== target) {
+                window.location.replace(target);
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
       })
       .catch(() => {
         // ignore; UI can show unauthenticated

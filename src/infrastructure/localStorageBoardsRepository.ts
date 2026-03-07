@@ -155,7 +155,7 @@ class RestBoardsRepository implements BoardsRepository {
 
   async setBoardType(id: WhiteboardId, boardType: BoardTypeId): Promise<void> {
     const nextType = coerceBoardType(boardType);
-    boardsApi.setPersistedBoardType(id, nextType);
+    await boardsApi.setBoardTypeRemote(id, nextType);
   }
 
   async deleteBoard(id: WhiteboardId): Promise<void> {

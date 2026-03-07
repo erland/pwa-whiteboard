@@ -79,6 +79,7 @@ Example response item:
   "id": "b1",
   "name": "Team board",
   "type": "whiteboard",
+  "boardType": "advanced",
   "ownerUserId": "alice",
   "status": "active",
   "createdAt": "2026-03-01T10:00:00Z",
@@ -95,7 +96,8 @@ Example response item:
 ```json
 {
   "name": "Team board",
-  "type": "whiteboard"
+  "type": "whiteboard",
+  "boardType": "advanced"
 }
 ```
 
@@ -115,8 +117,7 @@ Example response item:
 
 ```json
 {
-  "name": "Renamed board",
-  "type": "whiteboard"
+  "name": "Renamed board"
 }
 ```
 
@@ -132,9 +133,10 @@ Example response item:
 The PWA client now calls **`PATCH /boards/{id}`** when renaming, which matches the Java server endpoint **`PATCH /api/boards/{id}`**.
 
 Notes:
-- the request body is still `{ name, type }`
-- the client still sends the coarse server `type` as `"whiteboard"`
-- richer client board type semantics are still persisted separately in local storage until a later step formalizes the end state
+- `BoardResponse` now includes both coarse `type` and canonical `boardType`
+- create requests send both `{ name, type, boardType }`
+- rename-only updates may send `{ name }`
+- board-type changes send `{ type: "whiteboard", boardType }`
 
 ## 4.2 Snapshots
 
@@ -422,12 +424,12 @@ The client now treats board type as a **domain/editor concern**, not as a direct
 Current formalized end state:
 - `WhiteboardMeta.boardType` is the canonical board type used by editor policies, toolbox composition, and imports/exports.
 - persisted board snapshots/state remain the source of truth for that value.
-- Java server `board.type` is treated as a coarse board kind and is currently sent as `whiteboard`.
-- a local browser cache may retain board types for REST-backed board-list rendering, but that cache is only a read-model optimization.
+- Java server now persists `boardType` explicitly alongside coarse `board.type`.
+- `board.type` remains the coarse board kind and is currently sent as `whiteboard`.
 
 Practical implication:
 - when deciding editor behavior, always read `meta.boardType`, never `ServerBoard.type`.
-- when talking to the current Java server board CRUD API, always send the coarse server kind, not the richer client board type.
+- when talking to the Java server board CRUD API, create requests send both `type` and `boardType`, and board-type updates patch `boardType` explicitly.
 
 ## 6. Known drifts to resolve in later steps
 
@@ -439,12 +441,11 @@ Practical implication:
    - client models a joined role
    - server does not currently send role in the joined message
 
-3. **Board type semantics are formally split for now**
-   - client `boardType` (`advanced | freehand | mindmap`) is the canonical editor-policy value
-   - server `board.type` is treated as a coarse board kind and currently remains `whiteboard`
-   - canonical persistence for `boardType` is `WhiteboardMeta.boardType` inside snapshot/state payloads
-   - the client may cache `boardType` locally for faster REST board-list rendering in the same browser
-   - until the server exposes a first-class `boardType`, cross-device board lists may still temporarily show the fallback type before a snapshot is loaded on that device
+3. **Board type model is now split but explicitly represented server-side**
+   - client `boardType` (`advanced | freehand | mindmap`) remains the canonical editor-policy value
+   - server now persists `boardType` explicitly in board CRUD responses
+   - server `board.type` remains the coarse board kind and currently stays `whiteboard`
+   - snapshots still remain the safest source of truth for full editor behavior across time
 
 4. **Invite validation response under-modeled on client**
    - server returns `reason`

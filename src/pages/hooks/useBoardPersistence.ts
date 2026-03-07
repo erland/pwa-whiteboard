@@ -4,6 +4,7 @@ import type { WhiteboardMeta, WhiteboardState, WhiteboardObject } from '../../do
 import { DEFAULT_BOARD_TYPE } from '../../domain/boardType';
 import { getWhiteboardRepository } from '../../infrastructure/localStorageWhiteboardRepository';
 import { getBoardsRepository } from '../../infrastructure/localStorageBoardsRepository';
+import { isWhiteboardServerConfigured } from '../../config/server';
 import {
   getBoardType,
   getLockedObjectProps,
@@ -37,10 +38,12 @@ export function useBoardPersistence({ id, state, resetBoard }: UseBoardPersisten
         if (existing) {
           // Load persisted state
           resetBoard(existing);
-          try {
-            await boardsRepo.setBoardType(existing.meta.id, existing.meta.boardType);
-          } catch {
-            // Best-effort read-model sync only.
+          if (!isWhiteboardServerConfigured()) {
+            try {
+              await boardsRepo.setBoardType(existing.meta.id, existing.meta.boardType);
+            } catch {
+              // Best-effort read-model sync only.
+            }
           }
           return;
         }

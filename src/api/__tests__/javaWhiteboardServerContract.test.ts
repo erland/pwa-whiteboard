@@ -16,9 +16,10 @@ describe('javaWhiteboardServerContract freeze', () => {
     const req: CreateBoardRequest = {
       name: 'Board',
       type: 'whiteboard',
+      boardType: 'advanced',
     };
 
-    expect(req).toEqual({ name: 'Board', type: 'whiteboard' });
+    expect(req).toEqual({ name: 'Board', type: 'whiteboard', boardType: 'advanced' });
   });
 
   it('captures snapshot create as an opaque JSON payload under snapshot', () => {

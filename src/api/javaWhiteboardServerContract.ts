@@ -2,13 +2,6 @@ import type { JsonValue } from './httpClient';
 
 /**
  * Frozen description of the current java-whiteboard-server HTTP + WebSocket wire contract.
- *
- * Purpose:
- * - make the current backend contract explicit in one place
- * - give the client a stable import for request/response DTOs during migration
- * - document the contract as it actually exists today, not as we want it to look later
- *
- * This file intentionally mirrors server naming and field casing.
  */
 
 export type ServerBoardStatus = 'active' | 'archived' | 'deleted' | string;
@@ -19,6 +12,7 @@ export type ServerBoard = {
   id: string;
   name: string;
   type: string;
+  boardType?: string;
   ownerUserId: string;
   status: ServerBoardStatus;
   createdAt: string;
@@ -28,11 +22,13 @@ export type ServerBoard = {
 export type CreateBoardRequest = {
   name: string;
   type: string;
+  boardType: string;
 };
 
 export type UpdateBoardRequest = {
   name?: string;
   type?: string;
+  boardType?: string;
 };
 
 export type ServerSnapshotResponse = {

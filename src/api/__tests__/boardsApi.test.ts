@@ -1,4 +1,4 @@
-import { createBoard, deleteBoard, listBoards, renameBoard } from '../boardsApi';
+import { createBoard, deleteBoard, listBoards, renameBoard, setBoardTypeRemote } from '../boardsApi';
 
 class TestHeaders {
   private map: Record<string, string>;
@@ -74,12 +74,13 @@ describe('boardsApi', () => {
     globalThis.fetch = jest.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
       expect(String(url)).toBe('http://localhost:8080/api/boards/b-1');
       expect(init?.method).toBe('PATCH');
-      expect(init?.body).toBe(JSON.stringify({ name: 'Renamed board', type: 'whiteboard' }));
+      expect(init?.body).toBe(JSON.stringify({ name: 'Renamed board' }));
       return new TestResponse(
         JSON.stringify({
           id: 'b-1',
           name: 'Renamed board',
           type: 'whiteboard',
+          boardType: 'mindmap',
           ownerUserId: 'alice',
           status: 'active',
           createdAt: '2026-03-01T10:00:00Z',
@@ -90,13 +91,12 @@ describe('boardsApi', () => {
     }) as any;
 
     const board = await renameBoard('b-1', 'Renamed board');
-    expect(board.name).toBe('Renamed board');
-    expect(board.id).toBe('b-1');
+    expect(board).toMatchObject({ name: 'Renamed board', id: 'b-1', boardType: 'mindmap' });
   });
 
-  test('listBoards filters archived boards and preserves persisted board type when present', async () => {
+  test('listBoards prefers server boardType when present', async () => {
     const localStorage = {
-      getItem: jest.fn(() => JSON.stringify({ 'b-1': 'mindmap' })),
+      getItem: jest.fn(() => JSON.stringify({ 'b-1': 'advanced' })),
       setItem: jest.fn(),
       removeItem: jest.fn(),
     };
@@ -113,6 +113,7 @@ describe('boardsApi', () => {
             id: 'b-1',
             name: 'Board one',
             type: 'whiteboard',
+            boardType: 'mindmap',
             ownerUserId: 'alice',
             status: 'active',
             createdAt: '2026-03-01T10:00:00Z',
@@ -122,6 +123,7 @@ describe('boardsApi', () => {
             id: 'b-2',
             name: 'Archived board',
             type: 'whiteboard',
+            boardType: 'freehand',
             ownerUserId: 'alice',
             status: 'ARCHIVED',
             createdAt: '2026-03-01T10:00:00Z',
@@ -137,7 +139,7 @@ describe('boardsApi', () => {
     expect(boards[0]).toMatchObject({ id: 'b-1', boardType: 'mindmap' });
   });
 
-  test('createBoard persists the richer client board type locally while sending the coarse server type', async () => {
+  test('createBoard sends and returns the real boardType via the server API', async () => {
     const localStorage = {
       getItem: jest.fn(() => null),
       setItem: jest.fn(),
@@ -151,12 +153,13 @@ describe('boardsApi', () => {
 
     globalThis.fetch = jest.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       expect(init?.method).toBe('POST');
-      expect(init?.body).toBe(JSON.stringify({ name: 'New board', type: 'whiteboard' }));
+      expect(init?.body).toBe(JSON.stringify({ name: 'New board', type: 'whiteboard', boardType: 'freehand' }));
       return new TestResponse(
         JSON.stringify({
           id: 'b-3',
           name: 'New board',
           type: 'whiteboard',
+          boardType: 'freehand',
           ownerUserId: 'alice',
           status: 'active',
           createdAt: '2026-03-01T10:00:00Z',
@@ -168,13 +171,34 @@ describe('boardsApi', () => {
 
     const board = await createBoard({ name: 'New board', boardType: 'freehand' });
     expect(board.boardType).toBe('freehand');
-    expect(localStorage.setItem).toHaveBeenCalledWith(
-      'pwa-whiteboard.boardTypeMap',
-      JSON.stringify({ 'b-3': 'freehand' })
-    );
+    expect(localStorage.setItem).not.toHaveBeenCalled();
   });
 
-  test('deleteBoard calls the board archive endpoint and clears the persisted board type cache', async () => {
+  test('setBoardTypeRemote patches the real boardType to the server', async () => {
+    globalThis.fetch = jest.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(url)).toBe('http://localhost:8080/api/boards/b-7');
+      expect(init?.method).toBe('PATCH');
+      expect(init?.body).toBe(JSON.stringify({ type: 'whiteboard', boardType: 'mindmap' }));
+      return new TestResponse(
+        JSON.stringify({
+          id: 'b-7',
+          name: 'Strategy board',
+          type: 'whiteboard',
+          boardType: 'mindmap',
+          ownerUserId: 'alice',
+          status: 'active',
+          createdAt: '2026-03-01T10:00:00Z',
+          updatedAt: '2026-03-01T10:10:00Z',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      ) as any;
+    }) as any;
+
+    const board = await setBoardTypeRemote('b-7', 'mindmap');
+    expect(board.boardType).toBe('mindmap');
+  });
+
+  test('deleteBoard calls the board archive endpoint', async () => {
     const localStorage = {
       getItem: jest.fn(() => JSON.stringify({ 'b-4': 'mindmap', 'b-9': 'advanced' })),
       setItem: jest.fn(),
@@ -193,9 +217,5 @@ describe('boardsApi', () => {
     }) as any;
 
     await expect(deleteBoard('b-4')).resolves.toBeUndefined();
-    expect(localStorage.setItem).toHaveBeenCalledWith(
-      'pwa-whiteboard.boardTypeMap',
-      JSON.stringify({ 'b-9': 'advanced' })
-    );
   });
 });

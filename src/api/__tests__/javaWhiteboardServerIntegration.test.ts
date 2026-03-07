@@ -117,6 +117,7 @@ describe('java whiteboard server REST contract integration', () => {
               id: 'b-1',
               name: 'Existing board',
               type: 'whiteboard',
+              boardType: 'advanced',
               ownerUserId: 'alice',
               status: 'active',
               createdAt: '2026-03-01T10:00:00Z',
@@ -132,12 +133,13 @@ describe('java whiteboard server REST contract integration', () => {
           Authorization: 'Bearer token-123',
           'Content-Type': 'application/json',
         });
-        expect(init?.body).toBe(JSON.stringify({ name: 'Created board', type: 'whiteboard' }));
+        expect(init?.body).toBe(JSON.stringify({ name: 'Created board', type: 'whiteboard', boardType: 'mindmap' }));
         return new TestResponse(
           JSON.stringify({
             id: 'b-2',
             name: 'Created board',
             type: 'whiteboard',
+            boardType: 'mindmap',
             ownerUserId: 'alice',
             status: 'active',
             createdAt: '2026-03-01T10:01:00Z',
@@ -148,12 +150,13 @@ describe('java whiteboard server REST contract integration', () => {
       },
       (_url, init) => {
         expect(init?.method).toBe('PATCH');
-        expect(init?.body).toBe(JSON.stringify({ name: 'Renamed board', type: 'whiteboard' }));
+        expect(init?.body).toBe(JSON.stringify({ name: 'Renamed board' }));
         return new TestResponse(
           JSON.stringify({
             id: 'b-2',
             name: 'Renamed board',
             type: 'whiteboard',
+            boardType: 'mindmap',
             ownerUserId: 'alice',
             status: 'active',
             createdAt: '2026-03-01T10:01:00Z',

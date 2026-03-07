@@ -6,10 +6,9 @@ import type { BoardTypeId } from './types';
  * End state decision for the current client/server split:
  * - `boardType` is a client/domain concept and is authoritative in `WhiteboardMeta`
  *   and persisted snapshots/state.
- * - the Java server's `board.type` field is treated as a coarse server-side kind/
- *   transport discriminator, not as the editor policy type.
- * - until the server exposes a first-class boardType field, the REST read model may
- *   cache boardType locally for faster board-list rendering in the same browser.
+ * - the Java server persists both a coarse `type` field and the richer `boardType` field.
+ * - `boardType` is the editor policy type and should round-trip through the server API.
+ * - `type` remains a coarse server-side kind / transport discriminator.
  */
 export const DEFAULT_BOARD_TYPE: BoardTypeId = 'advanced';
 

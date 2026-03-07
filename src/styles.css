@@ -103,7 +103,23 @@ a:hover {
   gap: 0.75rem;
 }
 
-.theme-toggle {
+.auth-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.auth-display-name {
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.theme-toggle,
+.auth-toggle {
   border-radius: 999px;
   padding: 0.3rem 0.7rem;
   border: 1px solid var(--color-border);
@@ -117,18 +133,27 @@ a:hover {
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
 
-.theme-toggle:hover {
+.theme-toggle:hover,
+.auth-toggle:hover {
   border-color: var(--color-accent);
   background: var(--color-accent-soft);
 }
 
-.theme-toggle:focus-visible {
+.theme-toggle:focus-visible,
+.auth-toggle:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
-.theme-toggle:active {
+.theme-toggle:active,
+.auth-toggle:active {
   transform: translateY(1px) scale(0.99);
+}
+
+
+.auth-toggle:disabled {
+  opacity: 0.65;
+  cursor: wait;
 }
 
 .app-nav a {

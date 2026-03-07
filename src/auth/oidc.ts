@@ -245,16 +245,18 @@ export async function handleLoginRedirectCallbackIfPresent(): Promise<boolean> {
 }
 
 export async function startLogout(): Promise<void> {
-  clearTokens();
-
-  const { postLogoutRedirectUri } = getEnv();
+  const { clientId, postLogoutRedirectUri } = getEnv();
   const idToken = getIdToken();
+
+  clearPkce();
+  clearTokens();
 
   try {
     const discovery = await getDiscovery();
-    if (discovery.end_session_endpoint && idToken) {
+    if (discovery.end_session_endpoint) {
       const url = new URL(discovery.end_session_endpoint);
-      url.searchParams.set('id_token_hint', idToken);
+      if (idToken) url.searchParams.set('id_token_hint', idToken);
+      if (clientId) url.searchParams.set('client_id', clientId);
       if (postLogoutRedirectUri) url.searchParams.set('post_logout_redirect_uri', postLogoutRedirectUri);
       window.location.assign(url.toString());
       return;

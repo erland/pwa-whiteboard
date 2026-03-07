@@ -2,11 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { Link, Route, Routes } from 'react-router-dom';
 import { BoardListPage } from './pages/BoardListPage';
 import { BoardEditorPage } from './pages/BoardEditorPage';
+import { useAuth } from './auth/AuthContext';
 
 type Theme = 'light' | 'dark';
 
 const App: React.FC = () => {
+  const auth = useAuth();
   const [theme, setTheme] = useState<Theme>('dark');
+  const [authAction, setAuthAction] = useState<'idle' | 'signing-in' | 'signing-out'>('idle');
 
   // Initialize theme from localStorage or system preference
   useEffect(() => {
@@ -40,7 +43,34 @@ const App: React.FC = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   };
 
+  const handleSignIn = async () => {
+    if (!auth.configured || authAction !== 'idle') return;
+    setAuthAction('signing-in');
+    try {
+      await auth.login();
+    } finally {
+      setAuthAction('idle');
+    }
+  };
+
+  const handleSignOut = async () => {
+    if (!auth.configured || authAction !== 'idle') return;
+    setAuthAction('signing-out');
+    try {
+      await auth.logout();
+    } finally {
+      setAuthAction('idle');
+    }
+  };
+
   const themeLabel = theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
+  const authButtonLabel = auth.authenticated
+    ? authAction === 'signing-out'
+      ? 'Signing out…'
+      : 'Sign out'
+    : authAction === 'signing-in'
+      ? 'Signing in…'
+      : 'Sign in';
 
   return (
     <div className="app-root">
@@ -49,7 +79,7 @@ const App: React.FC = () => {
           <span className="app-logo">🧩</span>
           <span>PWA Whiteboard</span>
         </div>
-        <nav className="app-nav">
+        <nav className="app-nav" aria-label="Main navigation">
           <Link to="/">Boards</Link>
           <button
             type="button"
@@ -59,6 +89,24 @@ const App: React.FC = () => {
           >
             {theme === 'dark' ? '☀ Light' : '🌙 Dark'}
           </button>
+          {auth.configured && (
+            <div className="auth-actions">
+              {auth.authenticated && auth.displayName && (
+                <span className="auth-display-name" title={auth.displayName}>
+                  {auth.displayName}
+                </span>
+              )}
+              <button
+                type="button"
+                className="auth-toggle"
+                onClick={auth.authenticated ? handleSignOut : handleSignIn}
+                disabled={authAction !== 'idle'}
+                aria-label={authButtonLabel}
+              >
+                {authButtonLabel}
+              </button>
+            </div>
+          )}
         </nav>
       </header>
       <main className="app-main">

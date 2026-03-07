@@ -192,6 +192,57 @@ describe("useBoardListPageModel board source view model", () => {
     expect(screen.getByTestId("needs-auth")).toHaveTextContent("false");
   });
 
+
+  test("shows local drafts alongside invited boards when server mode is signed out", async () => {
+    mockIsWhiteboardServerConfigured.mockReturnValue(true);
+    mockGetLocalBoardsRepository.mockReturnValue({
+      listBoards: jest.fn().mockResolvedValue([
+        {
+          id: "local-draft-signed-out-1",
+          name: "Signed-out draft",
+          boardType: "advanced",
+          createdAt: "2026-03-07T10:15:00Z",
+          updatedAt: "2026-03-07T10:20:00Z",
+        },
+      ]),
+      createBoard: jest.fn(),
+      renameBoard: jest.fn(),
+      deleteBoard: jest.fn(),
+    });
+    mockGetInvitedBoardsRepository.mockReturnValue({
+      listInvitedBoards: jest.fn().mockResolvedValue([
+        {
+          boardId: "invite-signed-out-1",
+          title: "Shared board",
+          inviteToken: "token-signed-out-1",
+          permission: "viewer",
+          expiresAt: null,
+          lastOpenedAt: "2026-03-07T13:00:00Z",
+        },
+      ]),
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes>
+          <Route
+            path="/"
+            element={<ModelProbe auth={{ configured: true, authenticated: false, login: jest.fn() }} />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(screen.getByTestId("load-state")).toHaveTextContent("loaded"));
+    expect(screen.getByTestId("sections")).toHaveTextContent(
+      "invited:Invited boards:1|local:Local drafts:1"
+    );
+    expect(screen.getByTestId("boards")).toHaveTextContent(
+      "invite-signed-out-1,local-draft-signed-out-1"
+    );
+    expect(screen.getByTestId("needs-auth")).toHaveTextContent("false");
+  });
+
   test("keeps sign-in prompt behavior when server mode is signed out and no invited boards exist", async () => {
     mockIsWhiteboardServerConfigured.mockReturnValue(true);
     mockGetLocalBoardsRepository.mockReturnValue({

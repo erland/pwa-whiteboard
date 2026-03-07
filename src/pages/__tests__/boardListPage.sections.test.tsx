@@ -149,6 +149,46 @@ describe('BoardListPage section rendering', () => {
 });
 
 
+
+  test('renders Local drafts in signed-out server mode when browser-local boards exist', async () => {
+    mockIsWhiteboardServerConfigured.mockReturnValue(true);
+    mockUseAuth.mockReturnValue({
+      configured: true,
+      authenticated: false,
+      login: jest.fn(),
+    });
+    mockGetLocalBoardsRepository.mockReturnValue({
+      listBoards: jest.fn().mockResolvedValue([
+        {
+          id: 'local-draft-signed-out-2',
+          name: 'Signed-out browser draft',
+          boardType: 'advanced',
+          createdAt: '2026-03-07T11:50:00Z',
+          updatedAt: '2026-03-07T11:55:00Z',
+        },
+      ]),
+      createBoard: jest.fn(),
+      renameBoard: jest.fn(),
+      deleteBoard: jest.fn(),
+    });
+    mockGetInvitedBoardsRepository.mockReturnValue({
+      listInvitedBoards: jest.fn().mockResolvedValue([]),
+    });
+
+    render(
+      <MemoryRouter>
+        <BoardListPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Local drafts' })).toBeInTheDocument();
+    expect(screen.getByText('Signed-out browser draft')).toBeInTheDocument();
+    expect(
+      screen.getByText('Local drafts stay in this browser and are not uploaded to the server automatically.')
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Sign in is required to load your boards.')).not.toBeInTheDocument();
+  });
+
   test('renders Local drafts with a note in authenticated server mode when browser-local boards exist', async () => {
     mockIsWhiteboardServerConfigured.mockReturnValue(true);
     mockUseAuth.mockReturnValue({

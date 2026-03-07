@@ -114,7 +114,7 @@ describe("BoardListPage server workflow verification", () => {
     expect(screen.getByText("Local drafts stay in this browser and are not uploaded to the server automatically.")).toBeInTheDocument();
   });
 
-  test("server-backed unauthenticated workflow shows invited boards when present", async () => {
+  test("server-backed unauthenticated workflow shows invited boards and local drafts when present without forcing sign-in", async () => {
     const login = jest.fn().mockResolvedValue(undefined);
     mockUseAuth.mockReturnValue({
       configured: true,
@@ -125,7 +125,7 @@ describe("BoardListPage server workflow verification", () => {
       listBoards: jest.fn().mockResolvedValue([
         {
           id: "local-hidden-1",
-          name: "Hidden local draft",
+          name: "Visible local draft",
           boardType: "advanced",
           updatedAt: "2026-03-07T12:09:00Z",
           createdAt: "2026-03-07T12:09:00Z",
@@ -155,9 +155,13 @@ describe("BoardListPage server workflow verification", () => {
     );
 
     expect(await screen.findByText("Guest board")).toBeInTheDocument();
+    expect(screen.getByText("Visible local draft")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Invited boards" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Local drafts" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Local drafts stay in this browser and are not uploaded to the server automatically.")
+    ).toBeInTheDocument();
     expect(screen.queryByText("Sign in is required to load your boards.")).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Local drafts" })).not.toBeInTheDocument();
     expect(mockGetRemoteBoardsRepository).not.toHaveBeenCalled();
 
     const maybeSignInButton = screen.queryByText("Sign in");

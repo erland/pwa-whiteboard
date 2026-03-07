@@ -193,8 +193,8 @@ export function useBoardListPageModel(
 
         if (!auth.authenticated) {
           if (cancelled) return;
-          setBoardSources({ ...EMPTY_SOURCES, invited: invitedBoards });
-          if (invitedBoards.length > 0 || !auth.configured) {
+          setBoardSources({ ...EMPTY_SOURCES, local: localBoards, invited: invitedBoards });
+          if (invitedBoards.length > 0 || localBoards.length > 0 || !auth.configured) {
             setLoadState('loaded');
           } else {
             setNeedsAuth(true);

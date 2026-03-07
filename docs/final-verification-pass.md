@@ -15,7 +15,7 @@ npm run build
 npm run verify
 ```
 
-`npm run verify` is the one-command final gate for this client package.
+`npm run verify` is the one-command final gate for this client package and now covers app + shared TypeScript validation.
 
 ## What the final verification now covers
 

@@ -9,12 +9,12 @@
     "test": "jest",
     "deploy": "gh-pages -d dist",
     "typecheck": "node node_modules/typescript/bin/tsc -p tsconfig.json",
-    "typecheck:all": "node node_modules/typescript/bin/tsc -p tsconfig.json && node node_modules/typescript/bin/tsc -p shared/tsconfig.json && node node_modules/typescript/bin/tsc -p workers/collab/tsconfig.json",
+    "typecheck:all": "node node_modules/typescript/bin/tsc -p tsconfig.json && node node_modules/typescript/bin/tsc -p shared/tsconfig.json",
     "typecheck:shared": "node node_modules/typescript/bin/tsc -p shared/tsconfig.json",
     "typecheck:worker": "node node_modules/typescript/bin/tsc -p workers/collab/tsconfig.json",
     "worker:dev": "cd workers/collab && npx wrangler dev",
     "worker:deploy": "cd workers/collab && npx wrangler deploy",
-    "verify": "npm test -- --runInBand && npm run build"
+    "verify": "npm test -- --runInBand && npm run typecheck:all && npm run build"
   },
   "dependencies": {
     "react": "^18.3.1",

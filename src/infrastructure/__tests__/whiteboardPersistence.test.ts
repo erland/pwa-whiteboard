@@ -6,8 +6,10 @@ import {
   persistedV2ToState,
   snapshotToPersistedV2,
   unpackObjectsFromStorage,
-} from '../whiteboardPersistence/codec';
-import { asMeta, migrateLoadedState, tryRebuildFromHistory } from '../whiteboardPersistence/migration';
+  asMeta,
+  migrateLoadedState,
+  tryRebuildFromHistory,
+} from '../whiteboardPersistence';
 
 function createState(): WhiteboardState {
   return {

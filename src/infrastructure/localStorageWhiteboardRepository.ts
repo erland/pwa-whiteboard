@@ -2,13 +2,15 @@
 import type { WhiteboardId, WhiteboardState } from '../domain/types';
 import type { WhiteboardRepository } from '../domain/boardsIndex';
 import {
+  BOARD_STATE_PREFIX,
+  PERSIST_SCHEMA_VERSION,
   isPersistedV2,
+  migrateLoadedState,
   persistedV2ToState,
   snapshotToPersistedV2,
+  tryRebuildFromHistory,
   unpackObjectsFromStorage,
-} from './whiteboardPersistence/codec';
-import { BOARD_STATE_PREFIX, PERSIST_SCHEMA_VERSION } from './whiteboardPersistence/types';
-import { migrateLoadedState, tryRebuildFromHistory } from './whiteboardPersistence/migration';
+} from './whiteboardPersistence';
 
 class LocalStorageWhiteboardRepository implements WhiteboardRepository {
   async loadBoard(id: WhiteboardId): Promise<WhiteboardState | null> {

@@ -7,7 +7,6 @@ import React, {
   useEffect,
   useState,
 } from 'react';
-import { createEmptyWhiteboardState } from '../domain/whiteboardState';
 import type {
   BoardEvent,
   WhiteboardClipboardV1,
@@ -18,9 +17,15 @@ import type {
   WhiteboardObject,
 } from '../domain/types';
 import { getWhiteboardRepository } from '../infrastructure/localStorageWhiteboardRepository';
-import { getClipboardRepository } from '../infrastructure/localStorageClipboardRepository';
-import { createClipboardFromSelection, pasteClipboard } from './clipboard';
-import { whiteboardReducer } from './store';
+import {
+  clearPersistedClipboard,
+  copySelectionToClipboardData,
+  loadInitialClipboard,
+  pasteClipboardAsEvents,
+  persistClipboard,
+  toBoardState,
+  whiteboardReducer,
+} from './store';
 
 interface WhiteboardContextValue {
   state: WhiteboardState | null;
@@ -48,33 +53,6 @@ interface WhiteboardContextValue {
 }
 
 const WhiteboardContext = createContext<WhiteboardContextValue | undefined>(undefined);
-
-function loadInitialClipboard(): WhiteboardClipboardV1 | null {
-  try {
-    return getClipboardRepository().loadClipboard();
-  } catch {
-    return null;
-  }
-}
-
-function persistClipboard(clipboard: WhiteboardClipboardV1 | null) {
-  try {
-    getClipboardRepository().saveClipboard(clipboard);
-  } catch {
-    // ignore
-  }
-}
-
-function generateEventId(): string {
-  return `evt_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
-}
-
-function toBoardState(metaOrState: WhiteboardMeta | WhiteboardState): WhiteboardState {
-  if ((metaOrState as WhiteboardState).meta && (metaOrState as any).objects) {
-    return metaOrState as WhiteboardState;
-  }
-  return createEmptyWhiteboardState(metaOrState as WhiteboardMeta);
-}
 
 export const WhiteboardProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(whiteboardReducer, null as WhiteboardState | null);
@@ -113,62 +91,22 @@ export const WhiteboardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const copySelectionToClipboard = () => {
     if (!state) return;
-    const next = createClipboardFromSelection({
-      boardId: state.meta.id,
-      objects: state.objects,
-      selectedIds: state.selectedObjectIds,
-    });
+    const next = copySelectionToClipboardData(state);
     if (!next) return;
-    setClipboard({ ...next, pasteCount: 0 });
+    setClipboard(next);
   };
 
   const pasteFromClipboard = (args?: { canvasWidth?: number; canvasHeight?: number }) => {
     if (!state || !clipboard) return;
 
-    const canvasWidth = args?.canvasWidth;
-    const canvasHeight = args?.canvasHeight;
-
-    const result = pasteClipboard({
-      clipboard,
-      targetBoardId: state.meta.id,
-      viewport: state.viewport,
-      canvasSize:
-        typeof canvasWidth === 'number' && typeof canvasHeight === 'number'
-          ? { width: canvasWidth, height: canvasHeight }
-          : undefined,
-      existingIds: state.objects.map((object) => object.id),
-    });
-
-    const now = new Date().toISOString();
-
-    for (const object of result.objects) {
-      dispatchEvent({
-        id: generateEventId(),
-        boardId: state.meta.id,
-        type: 'objectCreated',
-        timestamp: now,
-        payload: { object },
-      } as BoardEvent);
-    }
-
-    dispatchEvent({
-      id: generateEventId(),
-      boardId: state.meta.id,
-      type: 'selectionChanged',
-      timestamp: now,
-      payload: { selectedIds: result.selectedIds },
-    } as BoardEvent);
-
+    const result = pasteClipboardAsEvents(state, clipboard, args);
+    for (const event of result.events) dispatchEvent(event);
     setClipboard(result.nextClipboard);
   };
 
   const clearClipboard = () => {
     setClipboard(null);
-    try {
-      getClipboardRepository().clearClipboard();
-    } catch {
-      // ignore
-    }
+    clearPersistedClipboard();
   };
 
   const resetBoard = (metaOrState: WhiteboardMeta | WhiteboardState) => {

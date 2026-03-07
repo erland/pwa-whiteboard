@@ -153,3 +153,19 @@ test('rejects malformed op payload cleanly', () => {
     }
   });
 
+
+
+test('normalizes lowercase joined roles without changing present-user fallback fields', () => {
+  const res = validateServerToClientMessage({
+    type: 'joined',
+    boardId: 'board-2',
+    userId: 'alice',
+    role: 'viewer',
+    presentUserIds: ['alice', 'bob'],
+  });
+  expect(res.ok).toBe(true);
+  if (res.ok) {
+    expect(res.value.role).toBe('viewer');
+    expect(res.value.presentUserIds).toEqual(['alice', 'bob']);
+  }
+});

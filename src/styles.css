@@ -220,6 +220,29 @@ a:hover {
   background: var(--color-panel-stronger);
 }
 
+.board-list-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.board-list-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.board-list-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.board-list-section-title {
+  margin: 0;
+  font-size: 1rem;
+}
+
 .board-list {
   list-style: none;
   padding: 0;
@@ -1050,4 +1073,11 @@ html {
 
 .share-current-invite {
   margin-bottom: 12px;
+}
+
+
+.board-list-note {
+  margin: 0 0 1rem;
+  color: #475569;
+  font-size: 0.95rem;
 }

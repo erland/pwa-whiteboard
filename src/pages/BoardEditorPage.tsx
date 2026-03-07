@@ -3,7 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 import { useAuth } from '../auth/AuthContext';
 import { isWhiteboardServerConfigured, isOidcConfigured } from '../config/server';
-import { acceptInvite, validateInvite } from '../api/invitesApi';
+import { acceptInvite, validateInvite, type InvitePermission } from '../api/invitesApi';
+import { getInvitedBoardsRepository } from '../infrastructure/localStorageInvitedBoardsRepository';
 
 import { BoardEditorShell } from './boardEditor/BoardEditorShell';
 import { InviteAcceptanceGate } from './boardEditor/gates/InviteAcceptanceGate';
@@ -22,6 +23,24 @@ function getInitialInviteToken(): string | null {
   }
 }
 
+type PersistedInviteAccess = {
+  boardId: string;
+  inviteToken: string;
+  permission?: InvitePermission;
+  expiresAt?: string;
+};
+
+async function persistInvitedBoardAccess(args: PersistedInviteAccess & { title?: string }): Promise<void> {
+  await getInvitedBoardsRepository().saveInvitedBoard({
+    boardId: args.boardId,
+    title: args.title?.trim() || 'Invited board',
+    inviteToken: args.inviteToken,
+    permission: args.permission,
+    expiresAt: args.expiresAt,
+    lastOpenedAt: new Date().toISOString(),
+  });
+}
+
 export const BoardEditorPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const boardId = id ?? '';
@@ -35,15 +54,68 @@ export const BoardEditorPage: React.FC = () => {
   const initialInviteToken = useMemo(() => getInitialInviteToken(), []);
   const [inviteToken, setInviteToken] = useState<string | null>(initialInviteToken);
   const [allowGuestInvite, setAllowGuestInvite] = useState(false);
-  const [inviteInfo, setInviteInfo] = useState<{ permission?: string; expiresAt?: string } | null>(null);
+  const [inviteInfo, setInviteInfo] = useState<{ permission?: InvitePermission; expiresAt?: string } | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [acceptingInvite, setAcceptingInvite] = useState(false);
   const [inviteAccepted, setInviteAccepted] = useState(false);
+  const [guestInviteValidated, setGuestInviteValidated] = useState(false);
+  const [persistedInviteAccess, setPersistedInviteAccess] = useState<PersistedInviteAccess | null>(null);
+  const [isInviteLookupPending, setIsInviteLookupPending] = useState(
+    Boolean(boardId) && serverConfigured && oidcConfigured && !auth.authenticated && !initialInviteToken
+  );
 
   const isInviteFlow = !!inviteToken && serverConfigured && oidcConfigured;
+  const shouldProcessInvite = isInviteFlow && (auth.authenticated || allowGuestInvite);
 
   useEffect(() => {
-    if (!isInviteFlow || !inviteToken || !auth.authenticated) return;
+    if (!boardId || !serverConfigured || !oidcConfigured || auth.authenticated || initialInviteToken) {
+      setIsInviteLookupPending(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsInviteLookupPending(true);
+
+    getInvitedBoardsRepository()
+      .getInvitedBoard(boardId)
+      .then((record) => {
+        if (cancelled) return;
+        if (!record) {
+          setIsInviteLookupPending(false);
+          return;
+        }
+
+        setInviteToken(record.inviteToken);
+        setInviteInfo({ permission: record.permission, expiresAt: record.expiresAt });
+        setPersistedInviteAccess({
+          boardId: record.boardId,
+          inviteToken: record.inviteToken,
+          permission: record.permission,
+          expiresAt: record.expiresAt,
+        });
+        setAllowGuestInvite(true);
+
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.set('invite', record.inviteToken);
+          window.history.replaceState({}, '', url.toString());
+        } catch {
+          // ignore URL sync failures for stored invite access
+        }
+
+        setIsInviteLookupPending(false);
+      })
+      .catch(() => {
+        if (!cancelled) setIsInviteLookupPending(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [auth.authenticated, boardId, initialInviteToken, oidcConfigured, serverConfigured]);
+
+  useEffect(() => {
+    if (!shouldProcessInvite || !inviteToken) return;
 
     let cancelled = false;
     setAcceptingInvite(true);
@@ -51,19 +123,39 @@ export const BoardEditorPage: React.FC = () => {
 
     (async () => {
       try {
-        const v = await validateInvite(inviteToken);
+        const validated = await validateInvite(inviteToken);
         if (cancelled) return;
-        if (v?.valid) {
-          setInviteInfo({ permission: v.permission, expiresAt: v.expiresAt });
+        if (!validated?.valid) {
+          throw new Error(validated?.reason ? String(validated.reason) : 'Invite is invalid.');
         }
-        await acceptInvite(inviteToken);
-        if (cancelled) return;
-        setInviteAccepted(true);
 
-        const url = new URL(window.location.href);
-        url.searchParams.delete('invite');
-        window.history.replaceState({}, '', url.toString());
-        setInviteToken(null);
+        const access: PersistedInviteAccess = {
+          boardId: validated.boardId || boardId,
+          inviteToken,
+          permission: validated.permission,
+          expiresAt: validated.expiresAt,
+        };
+
+        setInviteInfo({ permission: validated.permission, expiresAt: validated.expiresAt });
+
+        if (auth.authenticated) {
+          await acceptInvite(inviteToken);
+          if (cancelled) return;
+          setInviteAccepted(true);
+        } else {
+          setGuestInviteValidated(true);
+        }
+
+        await persistInvitedBoardAccess(access);
+        if (cancelled) return;
+        setPersistedInviteAccess(access);
+
+        if (auth.authenticated) {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('invite');
+          window.history.replaceState({}, '', url.toString());
+          setInviteToken(null);
+        }
       } catch (e: any) {
         if (cancelled) return;
         const msg = e?.message ? String(e.message) : 'Failed to accept invite.';
@@ -76,7 +168,7 @@ export const BoardEditorPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [isInviteFlow, inviteToken, auth.authenticated]);
+  }, [shouldProcessInvite, inviteToken, auth.authenticated, boardId]);
 
   const handleInviteSignIn = () => {
     try {
@@ -90,8 +182,15 @@ export const BoardEditorPage: React.FC = () => {
   const handleRetryInviteAccept = () => {
     setInviteError(null);
     setAcceptingInvite(false);
-    setInviteToken((t) => (t ? t : t));
+    setGuestInviteValidated(false);
+    setInviteAccepted(false);
+    setPersistedInviteAccess(null);
+    setInviteToken((t) => (t ? `${t}` : t));
   };
+
+  if (isInviteLookupPending) {
+    return <p>Loading board access…</p>;
+  }
 
   if (isInviteFlow && !auth.authenticated && !allowGuestInvite) {
     return (
@@ -103,7 +202,7 @@ export const BoardEditorPage: React.FC = () => {
     );
   }
 
-  if (isInviteFlow && auth.authenticated && !allowGuestInvite && !inviteAccepted) {
+  if (shouldProcessInvite && (!guestInviteValidated || (auth.authenticated && !inviteAccepted))) {
     return (
       <InviteAcceptanceGate
         acceptingInvite={acceptingInvite}
@@ -118,6 +217,7 @@ export const BoardEditorPage: React.FC = () => {
     <BoardEditorContent
       boardId={boardId}
       inviteToken={allowGuestInvite ? inviteToken : null}
+      persistedInviteAccess={persistedInviteAccess}
       serverConfigured={serverConfigured}
       oidcConfigured={oidcConfigured}
       acceptingInvite={acceptingInvite}
@@ -130,6 +230,7 @@ export const BoardEditorPage: React.FC = () => {
 const BoardEditorContent: React.FC<{
   boardId: string;
   inviteToken: string | null;
+  persistedInviteAccess: PersistedInviteAccess | null;
   serverConfigured: boolean;
   oidcConfigured: boolean;
   acceptingInvite: boolean;
@@ -138,6 +239,7 @@ const BoardEditorContent: React.FC<{
 }> = ({
   boardId,
   inviteToken,
+  persistedInviteAccess,
   serverConfigured,
   oidcConfigured,
   acceptingInvite,
@@ -190,6 +292,17 @@ const BoardEditorContent: React.FC<{
 
   const boardName = state?.meta?.name ?? 'Untitled board';
   const [isShareOpen, setIsShareOpen] = useState(false);
+
+  useEffect(() => {
+    if (!persistedInviteAccess) return;
+
+    persistInvitedBoardAccess({
+      ...persistedInviteAccess,
+      title: boardName,
+    }).catch(() => {
+      // ignore follow-up invite persistence failures
+    });
+  }, [persistedInviteAccess, boardName]);
 
   const canCopy = (state?.selectedObjectIds?.length ?? 0) > 0;
   const canPaste = !!hasClipboard;

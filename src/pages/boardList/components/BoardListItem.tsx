@@ -1,24 +1,26 @@
 import React from 'react';
-import type { WhiteboardMeta } from '../../../domain/types';
 import { getBoardType } from '../../../whiteboard/boardTypes';
+import type { BoardListItem as BoardListItemModel } from '../types';
 
 type Props = {
-  board: WhiteboardMeta;
+  item: BoardListItemModel;
   onOpen: (boardId: string) => void;
-  onDuplicate: (board: WhiteboardMeta) => void;
-  onRename: (board: WhiteboardMeta) => void;
-  onDelete: (board: WhiteboardMeta) => void;
+  onDuplicate: (item: BoardListItemModel) => void;
+  onRename: (item: BoardListItemModel) => void;
+  onDelete: (item: BoardListItemModel) => void;
 };
 
 export const BoardListItem: React.FC<Props> = ({
-  board,
+  item,
   onOpen,
   onDuplicate,
   onRename,
   onDelete,
 }) => {
+  const { board, actions } = item;
+
   return (
-    <li className="board-list-item">
+    <li className="board-list-item" data-board-source={item.source}>
       <button type="button" className="board-list-main" onClick={() => onOpen(board.id)}>
         <div className="board-list-name">{board.name}</div>
         <div className="board-list-meta">
@@ -28,15 +30,21 @@ export const BoardListItem: React.FC<Props> = ({
         </div>
       </button>
       <div className="board-list-actions">
-        <button type="button" onClick={() => onDuplicate(board)}>
-          Duplicate
-        </button>
-        <button type="button" onClick={() => onRename(board)}>
-          Rename
-        </button>
-        <button type="button" onClick={() => onDelete(board)}>
-          Delete
-        </button>
+        {actions.canDuplicate && (
+          <button type="button" onClick={() => onDuplicate(item)}>
+            Duplicate
+          </button>
+        )}
+        {actions.canRename && (
+          <button type="button" onClick={() => onRename(item)}>
+            Rename
+          </button>
+        )}
+        {actions.canDelete && (
+          <button type="button" onClick={() => onDelete(item)}>
+            Delete
+          </button>
+        )}
       </div>
     </li>
   );

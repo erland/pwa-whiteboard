@@ -163,12 +163,23 @@ class RestBoardsRepository implements BoardsRepository {
   }
 }
 
-let instance: BoardsRepository | null = null;
+let localInstance: BoardsRepository | null = null;
+let remoteInstance: BoardsRepository | null = null;
+
+export function getLocalBoardsRepository(): BoardsRepository {
+  if (!localInstance) {
+    localInstance = new LocalStorageBoardsRepository();
+  }
+  return localInstance;
+}
+
+export function getRemoteBoardsRepository(): BoardsRepository {
+  if (!remoteInstance) {
+    remoteInstance = new RestBoardsRepository();
+  }
+  return remoteInstance;
+}
 
 export function getBoardsRepository(): BoardsRepository {
-  if (!instance) {
-    // When server API is configured, prefer REST-based boards.
-    instance = isWhiteboardServerConfigured() ? new RestBoardsRepository() : new LocalStorageBoardsRepository();
-  }
-  return instance;
+  return isWhiteboardServerConfigured() ? getRemoteBoardsRepository() : getLocalBoardsRepository();
 }

@@ -1,17 +1,17 @@
 import React from 'react';
-import type { WhiteboardMeta } from '../../../domain/types';
+import type { BoardListItem as BoardListItemModel } from '../types';
 import { BoardListItem } from './BoardListItem';
 
 type Props = {
-  boards: WhiteboardMeta[];
+  items: BoardListItemModel[];
   onOpen: (boardId: string) => void;
-  onDuplicate: (board: WhiteboardMeta) => void;
-  onRename: (board: WhiteboardMeta) => void;
-  onDelete: (board: WhiteboardMeta) => void;
+  onDuplicate: (item: BoardListItemModel) => void;
+  onRename: (item: BoardListItemModel) => void;
+  onDelete: (item: BoardListItemModel) => void;
 };
 
 export const BoardList: React.FC<Props> = ({
-  boards,
+  items,
   onOpen,
   onDuplicate,
   onRename,
@@ -19,10 +19,10 @@ export const BoardList: React.FC<Props> = ({
 }) => {
   return (
     <ul className="board-list">
-      {boards.map((board) => (
+      {items.map((item) => (
         <BoardListItem
-          key={board.id}
-          board={board}
+          key={item.id}
+          item={item}
           onOpen={onOpen}
           onDuplicate={onDuplicate}
           onRename={onRename}

@@ -91,3 +91,11 @@ The client is considered aligned enough to move on when all of these are true:
 - the WebSocket contract tests pass
 - the page workflow tests pass
 - the manual smoke test sequence succeeds against the current Java server build
+
+
+## Boundary cleanup notes
+
+- Board-list section titles and ordering now come from a single helper in `src/pages/boardList/sections.ts`.
+- Board-list repository selection now lives in `src/pages/boardList/repositories.ts`, removing the last page-model dependency on the generic `getBoardsRepository()` switch for create/import flows.
+- Board-list source rules now read more explicitly as: local-only without server, remote+invited+local-drafts when signed in, invited-only when signed out.
+

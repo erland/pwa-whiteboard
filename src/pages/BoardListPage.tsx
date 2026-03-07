@@ -1,4 +1,5 @@
 import React from 'react';
+import { isWhiteboardServerConfigured } from '../config/server';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { getBoardType } from '../whiteboard/boardTypes';
@@ -12,6 +13,9 @@ export const BoardListPage: React.FC = () => {
   const auth = useAuth();
   const navigate = useNavigate();
   const model = useBoardListPageModel(auth, navigate);
+  const serverConfigured = isWhiteboardServerConfigured();
+
+  const hasLocalDraftsInServerMode = serverConfigured && model.boardSections.some((section) => section.id === 'local');
 
   return (
     <section className="page page-board-list">
@@ -55,18 +59,43 @@ export const BoardListPage: React.FC = () => {
         </div>
       )}
 
-      {model.loadState === 'loaded' && model.boards.length === 0 && (
-        <p>You have no boards yet. Click “New board” to create your first one.</p>
+      {model.loadState === 'loaded' && model.boardSections.length === 0 && (
+        <p>
+          {serverConfigured
+            ? 'No boards are available yet. Sign in to see your boards, or open an invite link to access a shared board.'
+            : 'You have no boards yet. Click “New board” to create your first one.'}
+        </p>
       )}
 
-      {model.boards.length > 0 && (
-        <BoardList
-          boards={model.boards}
-          onOpen={model.openBoard}
-          onDuplicate={model.handleDuplicateBoard}
-          onRename={model.handleRenameBoard}
-          onDelete={model.handleDeleteBoard}
-        />
+      {hasLocalDraftsInServerMode && (
+        <p className="board-list-note">
+          Local drafts stay in this browser and are not uploaded to the server automatically.
+        </p>
+      )}
+
+      {model.boardSections.length > 0 && (
+        <div className="board-list-sections">
+          {model.boardSections.map((section) => (
+            <section
+              key={section.id}
+              className="board-list-section"
+              aria-labelledby={`board-list-section-${section.id}`}
+            >
+              <header className="board-list-section-header">
+                <h2 id={`board-list-section-${section.id}`} className="board-list-section-title">
+                  {section.title}
+                </h2>
+              </header>
+              <BoardList
+                items={section.items}
+                onOpen={model.openBoard}
+                onDuplicate={model.handleDuplicateBoard}
+                onRename={model.handleRenameBoard}
+                onDelete={model.handleDeleteBoard}
+              />
+            </section>
+          ))}
+        </div>
       )}
     </section>
   );

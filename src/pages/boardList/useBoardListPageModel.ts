@@ -4,10 +4,17 @@ import { ApiError } from '../../api/httpClient';
 import { isWhiteboardServerConfigured } from '../../config/server';
 import type { BoardTypeId, WhiteboardMeta } from '../../domain/types';
 import { createEmptyWhiteboardState } from '../../domain/whiteboardState';
-import { getBoardsRepository } from '../../infrastructure/localStorageBoardsRepository';
+import { getLocalBoardsRepository, getRemoteBoardsRepository } from '../../infrastructure/localStorageBoardsRepository';
+import {
+  getInvitedBoardsRepository,
+  type InvitedBoardRecord,
+} from '../../infrastructure/localStorageInvitedBoardsRepository';
 import { getWhiteboardRepository } from '../../infrastructure/localStorageWhiteboardRepository';
 import { BOARD_TYPE_IDS, getBoardType } from '../../whiteboard/boardTypes';
 import { parseBoardImportFile } from './importBoardJson';
+import { buildDefaultBoardListSections, flattenBoardListSections } from './sections';
+import type { BoardListItem, BoardListSection, BoardListSource } from './types';
+import { getBoardRepositoryForSource, getEditableBoardsRepository } from './repositories';
 
 export type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
@@ -25,6 +32,8 @@ export type BoardTypeOption = {
 
 export type BoardListPageModel = {
   boards: WhiteboardMeta[];
+  boardItems: BoardListItem[];
+  boardSections: BoardListSection[];
   loadState: LoadState;
   error: string | null;
   needsAuth: boolean;
@@ -47,9 +56,9 @@ export type BoardListPageModel = {
   handleImportFile: (file: File) => Promise<void>;
   handleCreateBoard: () => Promise<void>;
   handleConfirmImport: () => Promise<void>;
-  handleRenameBoard: (board: WhiteboardMeta) => Promise<void>;
-  handleDeleteBoard: (board: WhiteboardMeta) => Promise<void>;
-  handleDuplicateBoard: (board: WhiteboardMeta) => Promise<void>;
+  handleRenameBoard: (item: BoardListItem) => Promise<void>;
+  handleDeleteBoard: (item: BoardListItem) => Promise<void>;
+  handleDuplicateBoard: (item: BoardListItem) => Promise<void>;
   openBoard: (boardId: string) => void;
 };
 
@@ -59,11 +68,47 @@ type BoardListAuth = {
   login: () => Promise<void>;
 };
 
+type BoardSourceState = {
+  local: WhiteboardMeta[];
+  remote: WhiteboardMeta[];
+  invited: WhiteboardMeta[];
+};
+
+const EMPTY_SOURCES: BoardSourceState = {
+  local: [],
+  remote: [],
+  invited: [],
+};
+
+function mapInvitedBoardRecordToMeta(record: InvitedBoardRecord): WhiteboardMeta {
+  const updatedAt = record.lastOpenedAt || new Date().toISOString();
+  return {
+    id: record.boardId,
+    name: record.title,
+    boardType: 'advanced',
+    createdAt: updatedAt,
+    updatedAt,
+  };
+}
+
+
+
+function updateBoardInSource(
+  prev: BoardSourceState,
+  source: BoardListSource,
+  update: (boards: WhiteboardMeta[]) => WhiteboardMeta[]
+): BoardSourceState {
+  return {
+    ...prev,
+    [source]: update(prev[source]),
+  };
+}
+
 export function useBoardListPageModel(
   auth: BoardListAuth,
   navigate: NavigateFunction
 ): BoardListPageModel {
-  const [boards, setBoards] = useState<WhiteboardMeta[]>([]);
+  const [boardSources, setBoardSources] = useState<BoardSourceState>(EMPTY_SOURCES);
   const [loadState, setLoadState] = useState<LoadState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [needsAuth, setNeedsAuth] = useState(false);
@@ -80,6 +125,15 @@ export function useBoardListPageModel(
   const [isImporting, setIsImporting] = useState(false);
 
   const serverConfigured = isWhiteboardServerConfigured();
+  const editableSource = serverConfigured ? 'remote' : 'local';
+
+  const boardSections = useMemo(
+    () => buildDefaultBoardListSections(serverConfigured, boardSources),
+    [boardSources, serverConfigured]
+  );
+
+  const boards = useMemo(() => flattenBoardListSections(boardSections), [boardSections]);
+  const boardItems = useMemo(() => boardSections.flatMap((section) => section.items), [boardSections]);
 
   const boardTypeOptions = useMemo(
     () =>
@@ -118,44 +172,69 @@ export function useBoardListPageModel(
   }, [auth, serverConfigured]);
 
   useEffect(() => {
-    if (serverConfigured) {
-      if (!auth.configured) {
-        setBoards([]);
-        setNeedsAuth(false);
-        setError('Authentication is not configured. Please provide OIDC settings in config.json.');
-        setLoadState('error');
-        return;
-      }
-      if (!auth.authenticated) {
-        setBoards([]);
-        setNeedsAuth(true);
-        setError('Sign in is required to load your boards.');
-        setLoadState('error');
-        return;
-      }
-    }
+    let cancelled = false;
 
-    const repo = getBoardsRepository();
-    setLoadState('loading');
-    setError(null);
-    setNeedsAuth(false);
+    async function loadBoards(): Promise<void> {
+      setLoadState('loading');
+      setError(null);
+      setNeedsAuth(false);
 
-    repo
-      .listBoards()
-      .then((index) => {
-        setBoards(index);
+      try {
+        const localBoards = await getLocalBoardsRepository().listBoards();
+
+        if (!serverConfigured) {
+          if (cancelled) return;
+          setBoardSources({ ...EMPTY_SOURCES, local: localBoards });
+          setLoadState('loaded');
+          return;
+        }
+
+        const invitedBoards = (await getInvitedBoardsRepository().listInvitedBoards()).map(mapInvitedBoardRecordToMeta);
+
+        if (!auth.authenticated) {
+          if (cancelled) return;
+          setBoardSources({ ...EMPTY_SOURCES, invited: invitedBoards });
+          if (invitedBoards.length > 0 || !auth.configured) {
+            setLoadState('loaded');
+          } else {
+            setNeedsAuth(true);
+            setError('Sign in is required to load your boards.');
+            setLoadState('error');
+          }
+          return;
+        }
+
+        const remoteBoards = await getRemoteBoardsRepository().listBoards();
+        if (cancelled) return;
+        setBoardSources({ ...EMPTY_SOURCES, local: localBoards, remote: remoteBoards, invited: invitedBoards });
         setLoadState('loaded');
-      })
-      .catch((err) => {
+      } catch (err) {
+        if (cancelled) return;
         console.error('Failed to load boards index', err);
+
         if (serverConfigured && err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+          try {
+            const invitedBoards = (await getInvitedBoardsRepository().listInvitedBoards()).map(mapInvitedBoardRecordToMeta);
+            if (cancelled) return;
+            setBoardSources({ ...EMPTY_SOURCES, invited: invitedBoards });
+          } catch {
+            setBoardSources(EMPTY_SOURCES);
+          }
           setNeedsAuth(true);
           setError('Sign in is required to load your boards.');
         } else {
+          setBoardSources(EMPTY_SOURCES);
           setError('Failed to load boards.');
         }
         setLoadState('error');
-      });
+      }
+    }
+
+    void loadBoards();
+
+    return () => {
+      cancelled = true;
+    };
   }, [serverConfigured, auth.configured, auth.authenticated]);
 
   const openCreateDialog = useCallback(() => {
@@ -198,10 +277,14 @@ export function useBoardListPageModel(
     }
 
     setIsCreating(true);
-    const repo = getBoardsRepository();
+    const repo = getEditableBoardsRepository(serverConfigured);
     try {
       const meta = await repo.createBoard(name, createType);
       setIsCreateOpen(false);
+      setBoardSources((prev) => ({
+        ...prev,
+        [editableSource]: [meta, ...prev[editableSource]],
+      }));
       navigate(`/board/${meta.id}`);
     } catch (err) {
       console.error('Failed to create board', err);
@@ -209,7 +292,7 @@ export function useBoardListPageModel(
     } finally {
       setIsCreating(false);
     }
-  }, [createName, createType, ensureSignedIn, navigate]);
+  }, [createName, createType, editableSource, ensureSignedIn, navigate, serverConfigured]);
 
   const handleConfirmImport = useCallback(async () => {
     if (!(await ensureSignedIn())) return;
@@ -222,7 +305,7 @@ export function useBoardListPageModel(
     }
 
     setIsImporting(true);
-    const boardsRepo = getBoardsRepository();
+    const boardsRepo = getEditableBoardsRepository(serverConfigured);
     const wbRepo = getWhiteboardRepository();
 
     let newMeta: WhiteboardMeta | null = null;
@@ -247,7 +330,10 @@ export function useBoardListPageModel(
 
       await wbRepo.saveBoard(newMeta.id, nextState as any);
 
-      setBoards((prev) => [newMeta!, ...prev]);
+      setBoardSources((prev) => ({
+        ...prev,
+        [editableSource]: [newMeta!, ...prev[editableSource]],
+      }));
       setIsImportOpen(false);
       setImportData(null);
       navigate(`/board/${newMeta.id}`);
@@ -264,18 +350,23 @@ export function useBoardListPageModel(
     } finally {
       setIsImporting(false);
     }
-  }, [ensureSignedIn, importData, importName, importType, navigate]);
+  }, [editableSource, ensureSignedIn, importData, importName, importType, navigate, serverConfigured]);
 
-  const handleRenameBoard = useCallback(async (board: WhiteboardMeta) => {
+  const handleRenameBoard = useCallback(async (item: BoardListItem) => {
+    if (!item.actions.canRename) return;
+
+    const { board, source } = item;
     const name = window.prompt('New name for this board:', board.name);
     if (name === null || name.trim() === board.name.trim()) return;
 
-    const repo = getBoardsRepository();
+    const repo = getBoardRepositoryForSource(source);
     try {
       await repo.renameBoard(board.id, name);
-      setBoards((prev) =>
-        prev.map((b) =>
-          b.id === board.id ? { ...b, name: name.trim(), updatedAt: new Date().toISOString() } : b
+      setBoardSources((prev) =>
+        updateBoardInSource(prev, source, (boards) =>
+          boards.map((b) =>
+            b.id === board.id ? { ...b, name: name.trim(), updatedAt: new Date().toISOString() } : b
+          )
         )
       );
     } catch (err) {
@@ -284,21 +375,29 @@ export function useBoardListPageModel(
     }
   }, []);
 
-  const handleDeleteBoard = useCallback(async (board: WhiteboardMeta) => {
+  const handleDeleteBoard = useCallback(async (item: BoardListItem) => {
+    if (!item.actions.canDelete) return;
+
+    const { board, source } = item;
     const confirmed = window.confirm(`Delete board "${board.name}"? This cannot be undone.`);
     if (!confirmed) return;
 
-    const repo = getBoardsRepository();
+    const repo = getBoardRepositoryForSource(source);
     try {
       await repo.deleteBoard(board.id);
-      setBoards((prev) => prev.filter((b) => b.id !== board.id));
+      setBoardSources((prev) =>
+        updateBoardInSource(prev, source, (boards) => boards.filter((b) => b.id !== board.id))
+      );
     } catch (err) {
       console.error('Failed to delete board', err);
       window.alert('Failed to delete board. Please try again.');
     }
   }, []);
 
-  const handleDuplicateBoard = useCallback(async (board: WhiteboardMeta) => {
+  const handleDuplicateBoard = useCallback(async (item: BoardListItem) => {
+    if (!item.actions.canDuplicate) return;
+
+    const { board, source } = item;
     const suggested = `${board.name} (copy)`;
     const name = window.prompt('Name for the duplicated board:', suggested);
     if (name === null) return;
@@ -309,7 +408,7 @@ export function useBoardListPageModel(
       return;
     }
 
-    const boardsRepo = getBoardsRepository();
+    const boardsRepo = getBoardRepositoryForSource(source);
     const wbRepo = getWhiteboardRepository();
 
     let newMeta: WhiteboardMeta | null = null;
@@ -329,7 +428,9 @@ export function useBoardListPageModel(
 
       await wbRepo.saveBoard(newMeta.id, baseState);
 
-      setBoards((prev) => [newMeta!, ...prev]);
+      setBoardSources((prev) =>
+        updateBoardInSource(prev, source, (boards) => [newMeta!, ...boards])
+      );
       navigate(`/board/${newMeta.id}`);
     } catch (err) {
       console.error('Failed to duplicate board', err);
@@ -346,6 +447,8 @@ export function useBoardListPageModel(
 
   return {
     boards,
+    boardItems,
+    boardSections,
     loadState,
     error,
     needsAuth,

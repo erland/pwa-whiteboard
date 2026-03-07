@@ -8,6 +8,8 @@ const mockUseAuth = jest.fn();
 const mockValidateInvite = jest.fn();
 const mockAcceptInvite = jest.fn();
 const mockUseBoardEditor = jest.fn();
+const mockSaveInvitedBoard = jest.fn();
+const mockGetInvitedBoard = jest.fn();
 
 jest.mock('../../auth/AuthContext', () => ({
   useAuth: () => mockUseAuth(),
@@ -25,6 +27,13 @@ jest.mock('../../api/invitesApi', () => ({
 
 jest.mock('../hooks/useBoardEditor', () => ({
   useBoardEditor: (...args: unknown[]) => mockUseBoardEditor(...args),
+}));
+
+jest.mock('../../infrastructure/localStorageInvitedBoardsRepository', () => ({
+  getInvitedBoardsRepository: () => ({
+    saveInvitedBoard: (...args: unknown[]) => mockSaveInvitedBoard(...args),
+    getInvitedBoard: (...args: unknown[]) => mockGetInvitedBoard(...args),
+  }),
 }));
 
 jest.mock('../boardEditor/BoardEditorShell', () => ({
@@ -80,6 +89,9 @@ describe('BoardEditorPage real workflow verification', () => {
     mockAcceptInvite.mockReset();
     mockUseAuth.mockReset();
     mockUseBoardEditor.mockReset();
+    mockSaveInvitedBoard.mockReset();
+    mockGetInvitedBoard.mockReset();
+    mockGetInvitedBoard.mockResolvedValue(null);
 
     mockUseBoardEditor.mockReturnValue({
       state: { meta: { name: 'Board A' }, selectedObjectIds: [], viewport: { x: 0, y: 0, zoom: 1 } },
@@ -126,7 +138,7 @@ describe('BoardEditorPage real workflow verification', () => {
     });
   });
 
-  test('guest invite workflow reaches the editor shell with the invite token preserved', async () => {
+  test('guest invite workflow validates, persists invite access and reaches the editor shell with the invite token preserved', async () => {
     mockUseAuth.mockReturnValue({
       configured: true,
       authenticated: false,
@@ -138,21 +150,80 @@ describe('BoardEditorPage real workflow verification', () => {
       refreshFromStorage: jest.fn(),
     });
 
+    mockValidateInvite.mockResolvedValue({
+      valid: true,
+      boardId: 'b-1',
+      permission: 'viewer',
+      expiresAt: '2026-03-08T10:00:00Z',
+    });
+
     renderAt('http://localhost/board/b-1?invite=guest-token-1');
 
     expect(screen.getByText('Invite choice gate')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Continue as guest'));
 
+    await waitFor(() => expect(mockValidateInvite).toHaveBeenCalledWith('guest-token-1'));
     await waitFor(() => expect(screen.getByTestId('board-editor-shell')).toBeInTheDocument());
     expect(screen.getByTestId('shell-invite-token')).toHaveTextContent('guest-token-1');
-    expect(mockValidateInvite).not.toHaveBeenCalled();
     expect(mockAcceptInvite).not.toHaveBeenCalled();
+    expect(mockSaveInvitedBoard).toHaveBeenCalledWith(expect.objectContaining({
+      boardId: 'b-1',
+      inviteToken: 'guest-token-1',
+      permission: 'viewer',
+      expiresAt: '2026-03-08T10:00:00Z',
+    }));
+  });
+
+
+  test('guest re-entry without an invite query reuses stored invited-board access metadata', async () => {
+    mockUseAuth.mockReturnValue({
+      configured: true,
+      authenticated: false,
+      accessToken: null,
+      displayName: null,
+      subject: null,
+      login: jest.fn(),
+      logout: jest.fn(),
+      refreshFromStorage: jest.fn(),
+    });
+    mockGetInvitedBoard.mockResolvedValue({
+      boardId: 'b-3',
+      title: 'Saved invite board',
+      inviteToken: 'stored-token-3',
+      permission: 'viewer',
+      expiresAt: '2026-03-08T10:00:00Z',
+      lastOpenedAt: '2026-03-07T10:00:00Z',
+    });
+    mockValidateInvite.mockResolvedValue({
+      valid: true,
+      boardId: 'b-3',
+      permission: 'viewer',
+      expiresAt: '2026-03-08T10:00:00Z',
+    });
+
+    renderAt('http://localhost/board/b-3');
+
+    await waitFor(() => expect(mockGetInvitedBoard).toHaveBeenCalledWith('b-3'));
+    await waitFor(() => expect(mockValidateInvite).toHaveBeenCalledWith('stored-token-3'));
+    await waitFor(() => expect(screen.getByTestId('board-editor-shell')).toBeInTheDocument());
+
+    expect(screen.queryByText('Invite choice gate')).not.toBeInTheDocument();
+    expect(screen.getByTestId('shell-invite-token')).toHaveTextContent('stored-token-3');
+    expect(mockAcceptInvite).not.toHaveBeenCalled();
+    expect(mockSaveInvitedBoard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        boardId: 'b-3',
+        inviteToken: 'stored-token-3',
+        permission: 'viewer',
+      })
+    );
   });
 
   test('authenticated invite workflow validates, accepts, strips the query token and opens the editor shell', async () => {
     mockValidateInvite.mockResolvedValue({
       valid: true,
+      boardId: 'b-2',
       permission: 'editor',
       expiresAt: '2026-03-08T10:00:00Z',
     });
@@ -179,5 +250,11 @@ describe('BoardEditorPage real workflow verification', () => {
     expect(screen.getByTestId('shell-invite-token')).toHaveTextContent('');
     expect(screen.getByTestId('shell-invite-accepted')).toHaveTextContent('true');
     expect(window.location.search).toBe('');
+    expect(mockSaveInvitedBoard).toHaveBeenCalledWith(expect.objectContaining({
+      boardId: 'b-2',
+      inviteToken: 'auth-token-2',
+      permission: 'editor',
+      expiresAt: '2026-03-08T10:00:00Z',
+    }));
   });
 });

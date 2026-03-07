@@ -6,6 +6,7 @@ type SharePanelProps = {
   boardId: string;
   boardName?: string;
   hideTitle?: boolean;
+  isReadOnly?: boolean;
 };
 
 function getCurrentUrl(): string {
@@ -27,7 +28,7 @@ function getInviteTokenFromUrl(): string | null {
   return null;
 }
 
-export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName, hideTitle }) => {
+export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName, hideTitle, isReadOnly = false }) => {
   const { configured, authenticated, displayName, login, logout } = useAuth();
 
   const [createRole, setCreateRole] = React.useState<'viewer' | 'editor'>('viewer');
@@ -87,7 +88,7 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName, hide
   }, [inviteToken, authenticated]);
 
   const handleCreateInvite = async () => {
-    if (!authenticated) return;
+    if (!authenticated || isReadOnly) return;
     setCreating(true);
     setLastCreatedInviteCopied(false);
     try {

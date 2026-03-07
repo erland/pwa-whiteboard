@@ -1,6 +1,14 @@
 import { getApiBaseUrl } from '../config/server';
 import { getAccessToken } from '../auth/oidc';
 import { createHttpClient } from './httpClient';
+import type {
+  AcceptInviteRequest,
+  CreateInviteRequest,
+  ServerInviteCreatedResponse,
+  ServerInvitePermission,
+  ServerInviteValidationResponse,
+  ValidateInviteRequest,
+} from './javaWhiteboardServerContract';
 
 function normalizePermission(p: InvitePermissionInput): InvitePermission {
   const v = String(p).toLowerCase();
@@ -9,19 +17,13 @@ function normalizePermission(p: InvitePermissionInput): InvitePermission {
   return 'viewer';
 }
 
-export type InvitePermission = 'viewer' | 'editor';
+export type InvitePermission = ServerInvitePermission;
 export type InvitePermissionInput = 'VIEWER' | 'EDITOR' | InvitePermission;
 
-export type CreateInviteResponse = {
-  token: string;
-  expiresAt?: string;
-};
+export type CreateInviteResponse = Pick<ServerInviteCreatedResponse, 'token' | 'expiresAt'>;
 
-export type ValidateInviteResponse = {
-  valid: boolean;
-  permission?: InvitePermission;
-  expiresAt?: string;
-  boardId?: string;
+export type ValidateInviteResponse = Pick<ServerInviteValidationResponse, 'valid' | 'permission' | 'expiresAt' | 'boardId'> & {
+  reason?: ServerInviteValidationResponse['reason'];
 };
 
 function http() {
@@ -36,19 +38,22 @@ export async function createBoardInvite(args: {
   permission: InvitePermissionInput;
 }): Promise<CreateInviteResponse> {
   const boardId = encodeURIComponent(args.boardId);
+  const req: CreateInviteRequest = { permission: normalizePermission(args.permission) };
   return await http().post<CreateInviteResponse>(`/boards/${boardId}/invites`, {
-    json: { permission: normalizePermission(args.permission) },
+    json: req,
   });
 }
 
 export async function validateInvite(token: string): Promise<ValidateInviteResponse> {
+  const req: ValidateInviteRequest = { token };
   return await http().post<ValidateInviteResponse>('/invites/validate', {
-    json: { token },
+    json: req,
   });
 }
 
 export async function acceptInvite(token: string): Promise<void> {
+  const req: AcceptInviteRequest = { token };
   await http().post<void>('/invites/accept', {
-    json: { token },
+    json: req,
   });
 }

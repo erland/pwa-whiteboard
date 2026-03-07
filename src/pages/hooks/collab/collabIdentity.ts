@@ -26,8 +26,7 @@ export function getOrCreateGuestId(): string {
   return next;
 }
 
-export function deriveSelfUserId(guestId: string, accessToken: string | null | undefined): string {
-  if (!accessToken) return guestId;
+function decodeJwtSubject(accessToken: string): string | null {
   try {
     const parts = accessToken.split('.');
     if (parts.length >= 2) {
@@ -37,5 +36,16 @@ export function deriveSelfUserId(guestId: string, accessToken: string | null | u
   } catch {
     // ignore
   }
-  return guestId;
+  return null;
+}
+
+export function deriveSelfUserId(
+  guestId: string,
+  accessToken: string | null | undefined,
+  subject?: string | null
+): string {
+  const normalizedSubject = typeof subject === 'string' && subject.trim().length > 0 ? subject.trim() : null;
+  if (normalizedSubject) return normalizedSubject;
+  if (!accessToken) return guestId;
+  return decodeJwtSubject(accessToken) ?? guestId;
 }

@@ -43,6 +43,7 @@ export type HttpClient = {
   get<T = unknown>(path: string, args?: Omit<RequestArgs, 'method' | 'path' | 'json' | 'body'>): Promise<T>;
   post<T = unknown>(path: string, args?: Omit<RequestArgs, 'method' | 'path'>): Promise<T>;
   put<T = unknown>(path: string, args?: Omit<RequestArgs, 'method' | 'path'>): Promise<T>;
+  patch<T = unknown>(path: string, args?: Omit<RequestArgs, 'method' | 'path'>): Promise<T>;
   del<T = unknown>(path: string, args?: Omit<RequestArgs, 'method' | 'path' | 'json'>): Promise<T>;
 };
 
@@ -125,6 +126,7 @@ export function createHttpClient(args: CreateHttpClientArgs): HttpClient {
     get: (path, a) => request({ method: 'GET', path, ...(a ?? {}) }),
     post: (path, a) => request({ method: 'POST', path, ...(a ?? {}) }),
     put: (path, a) => request({ method: 'PUT', path, ...(a ?? {}) }),
+    patch: (path, a) => request({ method: 'PATCH', path, ...(a ?? {}) }),
     del: (path, a) => request({ method: 'DELETE', path, ...(a ?? {}) })
   };
 }

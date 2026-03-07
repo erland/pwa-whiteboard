@@ -97,6 +97,23 @@ describe('createHttpClient', () => {
     expect(res.id).toBe('1');
   });
 
+
+  test('supports PATCH requests for partially updating server resources', async () => {
+    mockFetchOnce(async (url: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(url)).toBe('https://example.org/api/boards/b1');
+      expect(init?.method).toBe('PATCH');
+      expect(init?.body).toBe(JSON.stringify({ name: 'Renamed' }));
+      return new TestResponse(JSON.stringify({ id: 'b1', name: 'Renamed' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      });
+    });
+
+    const client = createHttpClient({ baseUrl: 'https://example.org/api' });
+    const res = await client.patch<{ id: string; name: string }>('/boards/b1', { json: { name: 'Renamed' } });
+    expect(res).toEqual({ id: 'b1', name: 'Renamed' });
+  });
+
   test('throws ApiError and calls onUnauthorized on 401/403', async () => {
     const onUnauthorized = jest.fn();
 

@@ -2,6 +2,7 @@ import type { BoardsIndex, BoardsRepository } from '../domain/boardsIndex';
 import type { BoardTypeId, WhiteboardId, WhiteboardMeta } from '../domain/types';
 import { isWhiteboardServerConfigured } from '../config/server';
 import * as boardsApi from '../api/boardsApi';
+import { DEFAULT_BOARD_TYPE, coerceBoardType } from '../domain/boardType';
 
 const BOARDS_INDEX_KEY = 'pwa-whiteboard.boardsIndex';
 const BOARD_STATE_PREFIX = 'pwa-whiteboard.board.';
@@ -15,12 +16,6 @@ function generateId(): string {
   return 'b_' + Math.random().toString(16).slice(2) + '_' + Date.now().toString(16);
 }
 
-
-const DEFAULT_BOARD_TYPE: BoardTypeId = 'advanced';
-
-function isBoardType(value: unknown): value is BoardTypeId {
-  return value === 'advanced' || value === 'freehand' || value === 'mindmap';
-}
 
 function migrateIndex(rawIndex: unknown[]): BoardsIndex {
   let changed = false;
@@ -36,7 +31,7 @@ function migrateIndex(rawIndex: unknown[]): BoardsIndex {
     const name = typeof m.name === 'string' ? m.name : 'Untitled board';
     const createdAt = typeof m.createdAt === 'string' ? m.createdAt : new Date().toISOString();
     const updatedAt = typeof m.updatedAt === 'string' ? m.updatedAt : createdAt;
-    const boardType = isBoardType(m.boardType) ? m.boardType : DEFAULT_BOARD_TYPE;
+    const boardType = coerceBoardType(m.boardType);
 
     if (m.name !== name) changed = true;
     if (m.createdAt !== createdAt) changed = true;
@@ -88,7 +83,7 @@ class LocalStorageBoardsRepository implements BoardsRepository {
   async createBoard(name: string, boardType?: BoardTypeId): Promise<WhiteboardMeta> {
     const now = new Date().toISOString();
     const id = generateId();
-    const nextType = isBoardType(boardType) ? boardType : DEFAULT_BOARD_TYPE;
+    const nextType = coerceBoardType(boardType);
     const meta: WhiteboardMeta = {
       id,
       name: name.trim() || 'Untitled board',
@@ -117,7 +112,7 @@ class LocalStorageBoardsRepository implements BoardsRepository {
   }
 
   async setBoardType(id: WhiteboardId, boardType: BoardTypeId): Promise<void> {
-    const nextType = isBoardType(boardType) ? boardType : DEFAULT_BOARD_TYPE;
+    const nextType = coerceBoardType(boardType);
     const index = readIndex();
     const next = index.map((meta) =>
       meta.id === id
@@ -150,7 +145,7 @@ class RestBoardsRepository implements BoardsRepository {
   }
 
   async createBoard(name: string, boardType?: BoardTypeId): Promise<WhiteboardMeta> {
-    const nextType = isBoardType(boardType) ? boardType : DEFAULT_BOARD_TYPE;
+    const nextType = coerceBoardType(boardType);
     return boardsApi.createBoard({ name: name.trim() || 'Untitled board', boardType: nextType });
   }
 
@@ -159,7 +154,7 @@ class RestBoardsRepository implements BoardsRepository {
   }
 
   async setBoardType(id: WhiteboardId, boardType: BoardTypeId): Promise<void> {
-    const nextType = isBoardType(boardType) ? boardType : DEFAULT_BOARD_TYPE;
+    const nextType = coerceBoardType(boardType);
     boardsApi.setPersistedBoardType(id, nextType);
   }
 

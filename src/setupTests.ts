@@ -1,9 +1,10 @@
 import '@testing-library/jest-dom';
 
 const originalWarn = console.warn;
+let consoleWarnSpy: jest.SpyInstance | null = null;
 
 beforeAll(() => {
-  jest.spyOn(console, 'warn').mockImplementation((...args: any[]) => {
+  consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation((...args: any[]) => {
     const msg = args[0];
     if (
       typeof msg === 'string' &&
@@ -17,5 +18,6 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  (console.warn as jest.Mock).mockRestore();
+  consoleWarnSpy?.mockRestore();
+  consoleWarnSpy = null;
 });

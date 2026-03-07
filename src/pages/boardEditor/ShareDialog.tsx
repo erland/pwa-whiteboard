@@ -6,10 +6,11 @@ type Props = {
   boardId: string;
   boardName: string;
   inviteLink?: string;
+  isReadOnly?: boolean;
   onCancel: () => void;
 };
 
-export const ShareDialog: React.FC<Props> = ({ isOpen, boardId, boardName, inviteLink, onCancel }) => {
+export const ShareDialog: React.FC<Props> = ({ isOpen, boardId, boardName, inviteLink, isReadOnly, onCancel }) => {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -53,8 +54,8 @@ export const ShareDialog: React.FC<Props> = ({ isOpen, boardId, boardName, invit
   // Avoid re-rendering the panel while the dialog is closed.
   const panel = useMemo(() => {
     if (!isOpen) return null;
-    return <SharePanel boardId={boardId} boardName={boardName} hideTitle />;
-  }, [isOpen, boardId, boardName]);
+    return <SharePanel boardId={boardId} boardName={boardName} hideTitle isReadOnly={isReadOnly} />;
+  }, [isOpen, boardId, boardName, isReadOnly]);
 
   if (!isOpen) return null;
 

@@ -1,60 +1,17 @@
 import type { BoardTypeId, WhiteboardId, WhiteboardMeta } from '../domain/types';
+import { DEFAULT_BOARD_TYPE, SERVER_WHITEBOARD_KIND } from '../domain/boardType';
 import { getApiBaseUrl } from '../config/server';
 import { getAccessToken } from '../auth/oidc';
 import { createHttpClient } from './httpClient';
+import type { CreateBoardRequest, ServerBoard, UpdateBoardRequest } from './javaWhiteboardServerContract';
+import { deletePersistedBoardType, getPersistedBoardType, setPersistedBoardType } from '../infrastructure/boardTypePersistence';
 
-/**
- * Server board types are currently coarse-grained.
- * The PWA still supports multiple client-side board variants (advanced/freehand/mindmap).
- * Until the server exposes a dedicated field for this, we persist the client's boardType locally.
- */
-const BOARD_TYPE_MAP_KEY = 'pwa-whiteboard.boardTypeMap';
-
-type ServerBoard = {
-  id: string;
-  name: string;
-  type: string;
-  ownerUserId: string;
-  status: 'ACTIVE' | 'ARCHIVED' | string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-function readBoardTypeMap(): Record<string, BoardTypeId> {
-  if (typeof window === 'undefined') return {};
-  try {
-    const raw = window.localStorage.getItem(BOARD_TYPE_MAP_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return {};
-    return parsed as Record<string, BoardTypeId>;
-  } catch {
-    return {};
-  }
-}
-
-function writeBoardTypeMap(map: Record<string, BoardTypeId>) {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(BOARD_TYPE_MAP_KEY, JSON.stringify(map));
-}
-
-export function getPersistedBoardType(boardId: WhiteboardId): BoardTypeId | null {
-  const map = readBoardTypeMap();
-  return (map[boardId] as BoardTypeId | undefined) ?? null;
-}
-
-export function setPersistedBoardType(boardId: WhiteboardId, boardType: BoardTypeId): void {
-  const map = readBoardTypeMap();
-  map[boardId] = boardType;
-  writeBoardTypeMap(map);
-}
-
-function serverBoardToMeta(b: ServerBoard): WhiteboardMeta {
+function serverBoardToMeta(b: ServerBoard, fallbackBoardType?: BoardTypeId): WhiteboardMeta {
   const persisted = getPersistedBoardType(b.id);
   return {
     id: b.id,
     name: b.name,
-    boardType: persisted ?? 'advanced',
+    boardType: persisted ?? fallbackBoardType ?? DEFAULT_BOARD_TYPE,
     createdAt: b.createdAt,
     updatedAt: b.updatedAt,
   };
@@ -73,25 +30,31 @@ export async function listBoards(): Promise<WhiteboardMeta[]> {
   // Hide archived boards on the front page.
   // Server uses status values like "ACTIVE" / "ARCHIVED".
   const activeBoards = boards.filter((b) => String(b.status ?? '').toUpperCase() !== 'ARCHIVED');
-  return activeBoards.map(serverBoardToMeta);
+  return activeBoards.map((board) => serverBoardToMeta(board));
 }
 
 export async function createBoard(args: { name: string; boardType: BoardTypeId }): Promise<WhiteboardMeta> {
+  const req: CreateBoardRequest = { name: args.name, type: SERVER_WHITEBOARD_KIND };
   const created = await http().post<ServerBoard>('/boards', {
-    json: { name: args.name, type: 'whiteboard' },
+    json: req,
   });
   // Persist client boardType locally until server supports it.
   setPersistedBoardType(created.id as WhiteboardId, args.boardType);
-  return serverBoardToMeta(created);
+  return serverBoardToMeta(created, args.boardType);
 }
 
 export async function renameBoard(boardId: WhiteboardId, name: string): Promise<WhiteboardMeta> {
-  const updated = await http().put<ServerBoard>(`/boards/${encodeURIComponent(boardId)}`, {
-    json: { name, type: 'whiteboard' },
+  const req: UpdateBoardRequest = { name, type: SERVER_WHITEBOARD_KIND };
+  const existingBoardType = getPersistedBoardType(boardId);
+  const updated = await http().patch<ServerBoard>(`/boards/${encodeURIComponent(boardId)}`, {
+    json: req,
   });
-  return serverBoardToMeta(updated);
+  return serverBoardToMeta(updated, existingBoardType ?? undefined);
 }
 
 export async function deleteBoard(boardId: WhiteboardId): Promise<void> {
   await http().del<void>(`/boards/${encodeURIComponent(boardId)}`);
+  deletePersistedBoardType(boardId);
 }
+
+export { getPersistedBoardType, setPersistedBoardType, deletePersistedBoardType } from '../infrastructure/boardTypePersistence';

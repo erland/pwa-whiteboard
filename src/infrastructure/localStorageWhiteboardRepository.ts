@@ -1,18 +1,16 @@
 // src/infrastructure/localStorageWhiteboardRepository.ts
 import type {
   BoardEvent,
-  BoardTypeId,
   WhiteboardId,
   WhiteboardMeta,
   WhiteboardState,
 } from '../domain/types';
 import type { WhiteboardRepository } from '../domain/boardsIndex';
 import { applyEvent, createEmptyWhiteboardState } from '../domain/whiteboardState';
+import { DEFAULT_BOARD_TYPE, isBoardType } from '../domain/boardType';
 
 const BOARD_STATE_PREFIX = 'pwa-whiteboard.board.';
 
-
-const DEFAULT_BOARD_TYPE: BoardTypeId = 'advanced';
 
 /**
  * LocalStorage has a small quota (~5MB in many browsers). Persisting full undo/redo history
@@ -115,10 +113,6 @@ function isPersistedV2(v: any): v is PersistedBoardStateV2 {
 }
 
 
-function isBoardType(value: unknown): value is BoardTypeId {
-  return value === 'advanced' || value === 'freehand' || value === 'mindmap';
-}
-
 function migrateLoadedState(state: WhiteboardState): WhiteboardState {
   const metaAny = (state as any).meta ?? {};
   const boardType = isBoardType(metaAny.boardType) ? metaAny.boardType : DEFAULT_BOARD_TYPE;
@@ -147,7 +141,7 @@ function asMeta(id: WhiteboardId, rawMeta: unknown): WhiteboardMeta {
   const name = typeof m.name === 'string' ? m.name : 'Untitled board';
   const createdAt = typeof m.createdAt === 'string' ? m.createdAt : now;
   const updatedAt = typeof m.updatedAt === 'string' ? m.updatedAt : createdAt;
-  const boardType = isBoardType(m.boardType) ? (m.boardType as BoardTypeId) : DEFAULT_BOARD_TYPE;
+  const boardType = isBoardType(m.boardType) ? m.boardType : DEFAULT_BOARD_TYPE;
 
   return {
     id,

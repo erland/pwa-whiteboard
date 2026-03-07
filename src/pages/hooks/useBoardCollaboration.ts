@@ -4,18 +4,18 @@ import type { BoardRole, PresencePayload, PresenceUser } from '../../../shared/p
 import { CollabClient, type CollabStatus } from '../../collab/CollabClient';
 import { useAuth } from '../../auth/AuthContext';
 import { getApiBaseUrl, getWsBaseUrl } from '../../config/server';
-import { deriveSelfUserId, getInviteTokenFromUrl, getOrCreateGuestId } from './collab/collabIdentity';
-import { decodeSnapshotJson } from '../../domain/snapshotCodec';
-import { loadLatestSnapshotOrNull, useSnapshotAutosave } from './collab/useSnapshotSync';
+import { getInviteTokenFromUrl, getOrCreateGuestId } from './collab/collabIdentity';
+import { useSnapshotOrchestration } from './collab/useSnapshotOrchestration';
 import { usePresenceSender } from './collab/usePresenceSender';
 import { useAutoReconnect } from './collab/useAutoReconnect';
+import { normalizeQueryToken, resolveCollabJoinAuth } from './collab/collabJoinAuth';
 
 export type UseBoardCollaborationArgs = {
   boardId: string | undefined;
   /** Current local board state (used for snapshot autosave). */
   state?: WhiteboardState | null;
   boardMetaId?: string;
-  boardName?: string;// reserved for future use
+  boardName?: string; // reserved for future use
   resetBoard: (next: any) => void;
   applyRemoteEvent: (event: BoardEvent) => void;
 };
@@ -41,15 +41,6 @@ export type UseBoardCollaborationResult = {
   sendPresence: (presence: PresencePayload) => void;
 };
 
-function normalizeQueryToken(t: string | null | undefined, key: string): string | null {
-    const s = (t ?? '').trim();
-    if (!s) return null;
-    const idx = s.lastIndexOf(`${key}=`);
-    if (idx >= 0) return s.substring(idx + key.length + 1).replace(/^[?&]/, '').trim();
-    return s.replace(/^[?&]/, '').trim();
-}
-
-
 export function useBoardCollaboration({
   boardId,
   state,
@@ -61,21 +52,34 @@ export function useBoardCollaboration({
   const wsBaseUrl = getWsBaseUrl();
 
   const auth = useAuth();
-  const rawAccessToken = auth.accessToken;
-  const accessToken = normalizeQueryToken(rawAccessToken, 'access_token') ?? rawAccessToken;
-  const user = auth.user;
-  const isAuthenticated = Boolean(accessToken);
-
   const inviteParam = useMemo(() => normalizeQueryToken(getInviteTokenFromUrl(), 'invite'), []);
-  const inviteToken = useMemo(() => (isAuthenticated ? null : inviteParam), [inviteParam, isAuthenticated]);
-
   const guestId = useMemo(() => getOrCreateGuestId(), []);
-  const displayName = isAuthenticated
-    ? user?.name ?? user?.preferred_username ?? user?.email ?? 'User'
-    : 'Guest';
+  const joinAuth = useMemo(
+    () =>
+      resolveCollabJoinAuth({
+        auth,
+        guestId,
+        inviteParam,
+        boardId,
+        apiBaseUrl: apiBaseUrl ?? undefined,
+        wsBaseUrl: wsBaseUrl ?? undefined,
+      }),
+    [auth, guestId, inviteParam, boardId, apiBaseUrl, wsBaseUrl]
+  );
 
-  const [selfUserId, setSelfUserId] = useState<string>(guestId);
+  const {
+    accessToken,
+    inviteToken,
+    displayName,
+    initialSelfUserId,
+    restEnabled,
+    wsEnabled,
+    enabled,
+    boardEnsured,
+    authKey,
+  } = joinAuth;
 
+  const [selfUserId, setSelfUserId] = useState<string>(initialSelfUserId);
   const [status, setStatus] = useState<CollabStatus | 'disabled'>('disabled');
   const [errorText, setErrorText] = useState<string | undefined>(undefined);
   const [noticeText, setNoticeText] = useState<string | undefined>(undefined);
@@ -93,41 +97,27 @@ export function useBoardCollaboration({
   const clientRef = useRef<CollabClient | null>(null);
   const clientKeyRef = useRef<string | null>(null);
 
-  const resetBoardRef = useRef(resetBoard);
   const applyRemoteEventRef = useRef(applyRemoteEvent);
-  useEffect(() => {
-    resetBoardRef.current = resetBoard;
-  }, [resetBoard]);
   useEffect(() => {
     applyRemoteEventRef.current = applyRemoteEvent;
   }, [applyRemoteEvent]);
-  const [boardEnsured, setBoardEnsured] = useState<boolean>(false);
 
   // Auth is provided by OIDC when signed in.
   // For invite links, the server also allows anonymous WS join when `invite` is provided on the WS URL.
-  // In that mode we keep a stable guestId as the local identity.
+  // In that mode we keep a stable guestId as the local identity until the server confirms the joined userId.
   useEffect(() => {
-    if (inviteToken || !accessToken) {
-      setSelfUserId(guestId);
-      return;
-    }
-    setSelfUserId(deriveSelfUserId(guestId, accessToken));
-  }, [inviteToken, guestId, accessToken]);
+    setSelfUserId(initialSelfUserId);
+  }, [initialSelfUserId]);
 
-  // Collaboration requires an authenticated access token.
-  const wsEnabled = Boolean(apiBaseUrl) && Boolean(wsBaseUrl) && Boolean(boardId) && (Boolean(accessToken) || Boolean(inviteToken));
-  const restEnabled = Boolean(apiBaseUrl) && Boolean(boardId) && Boolean(accessToken);
-  const enabled = wsEnabled;
-
-  // ---- Snapshot autosave (REST) ----
-  useSnapshotAutosave({
+  const { bootstrapSnapshotOnJoin } = useSnapshotOrchestration({
     enabled: restEnabled,
     status,
     role,
     boardId,
-    baseUrl: apiBaseUrl!,
+    baseUrl: apiBaseUrl ?? undefined,
     accessToken,
     state,
+    resetBoard,
   });
 
   // Keep status in sync with enabled/disabled transitions.
@@ -139,16 +129,6 @@ export function useBoardCollaboration({
       setStatus((s) => (s === 'disabled' ? 'idle' : s));
     }
   }, [enabled]);
-
-  // Board existence is managed by the server API (Step 4). For now, treat an enabled session as ensured.
-  useEffect(() => {
-    if (!boardId) {
-      setBoardEnsured(false);
-      return;
-    }
-    // If we have an invite token, we are allowed to attempt a WS join even without an access token.
-    setBoardEnsured(Boolean(accessToken) || Boolean(inviteToken));
-  }, [boardId, accessToken, inviteToken]);
 
   // Clear cooldown when it expires.
   useEffect(() => {
@@ -186,7 +166,6 @@ export function useBoardCollaboration({
       return;
     }
 
-    const authKey = accessToken ? `token:${accessToken}` : `invite:${inviteToken}`;
     const key = `${wsBaseUrl}|${boardId}|${guestId}|${authKey}|r${reconnectNonce}`;
 
     if (clientRef.current && clientKeyRef.current === key) return;
@@ -200,8 +179,8 @@ export function useBoardCollaboration({
         // Use the derived/configured WS base here so we connect to /ws/boards/...
         baseUrl: wsBaseUrl,
         boardId,
-        accessToken,
-        inviteToken,
+        accessToken: accessToken ?? undefined,
+        inviteToken: inviteToken ?? undefined,
         guestId,
         displayName,
       },
@@ -230,6 +209,7 @@ export function useBoardCollaboration({
           if (s === 'closed') setErrorText(undefined);
         },
         onJoined: (msg) => {
+          setSelfUserId(msg.userId);
           setRole(msg.role);
           setUsers(
             msg.users ??
@@ -241,31 +221,7 @@ export function useBoardCollaboration({
           );
           setPresenceByUserId({});
 
-
-          // If the server provided a snapshot in the WS joined message (used for anonymous invite joins),
-          // apply it immediately.
-          try {
-            const snap = (msg.latestSnapshot ?? msg.snapshot) as any;
-            if (snap && !accessToken) {
-              // Server sends JSON object; our decoder expects a JSON string.
-                            const decoded = decodeSnapshotJson(boardId, JSON.stringify(snap));
-              if (decoded) resetBoardRef.current(decoded);
-            }
-          } catch {
-            // ignore
-          }
-
-          // Load the latest snapshot via REST on join (source of truth) when authenticated.
-
-          (async () => {
-            try {
-              if (!apiBaseUrl || !boardId || !accessToken) return;
-              const decoded = await loadLatestSnapshotOrNull({ baseUrl: apiBaseUrl, accessToken, boardId });
-              if (decoded) resetBoardRef.current(decoded);
-            } catch {
-              // Best-effort: if snapshots fail, keep whatever local state we have.
-            }
-          })();
+          bootstrapSnapshotOnJoin(msg);
         },
         onOp: (msg) => {
           if (msg.op) applyRemoteEventRef.current(msg.op);
@@ -320,9 +276,12 @@ export function useBoardCollaboration({
     apiBaseUrl,
     wsBaseUrl,
     accessToken,
+    inviteToken,
     boardId,
     boardMetaId,
     guestId,
+    displayName,
+    authKey,
     cooldownUntil,
     boardEnsured,
     reconnectNonce,

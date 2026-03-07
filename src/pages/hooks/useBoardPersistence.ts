@@ -1,6 +1,7 @@
 // src/pages/hooks/useBoardPersistence.ts
 import { useEffect } from 'react';
 import type { WhiteboardMeta, WhiteboardState, WhiteboardObject } from '../../domain/types';
+import { DEFAULT_BOARD_TYPE } from '../../domain/boardType';
 import { getWhiteboardRepository } from '../../infrastructure/localStorageWhiteboardRepository';
 import { getBoardsRepository } from '../../infrastructure/localStorageBoardsRepository';
 import {
@@ -36,6 +37,11 @@ export function useBoardPersistence({ id, state, resetBoard }: UseBoardPersisten
         if (existing) {
           // Load persisted state
           resetBoard(existing);
+          try {
+            await boardsRepo.setBoardType(existing.meta.id, existing.meta.boardType);
+          } catch {
+            // Best-effort read-model sync only.
+          }
           return;
         }
 
@@ -47,7 +53,7 @@ export function useBoardPersistence({ id, state, resetBoard }: UseBoardPersisten
         const meta: WhiteboardMeta = {
           id,
           name: indexMeta?.name ?? 'Untitled board',
-          boardType: indexMeta?.boardType ?? 'advanced',
+          boardType: indexMeta?.boardType ?? DEFAULT_BOARD_TYPE,
           createdAt: indexMeta?.createdAt ?? now,
           updatedAt: now,
         };
@@ -65,7 +71,7 @@ export function useBoardPersistence({ id, state, resetBoard }: UseBoardPersisten
           const meta: WhiteboardMeta = {
             id,
             name: indexMeta?.name ?? 'Untitled board',
-            boardType: indexMeta?.boardType ?? 'advanced',
+            boardType: indexMeta?.boardType ?? DEFAULT_BOARD_TYPE,
             createdAt: indexMeta?.createdAt ?? now,
             updatedAt: now,
           };
@@ -80,7 +86,7 @@ export function useBoardPersistence({ id, state, resetBoard }: UseBoardPersisten
             const meta: WhiteboardMeta = {
               id,
               name: 'Untitled board',
-              boardType: 'advanced',
+              boardType: DEFAULT_BOARD_TYPE,
               createdAt: now,
               updatedAt: now,
             };

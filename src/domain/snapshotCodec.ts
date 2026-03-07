@@ -1,7 +1,6 @@
-import type { BoardTypeId, WhiteboardId, WhiteboardMeta, WhiteboardState } from './types';
+import type { WhiteboardId, WhiteboardMeta, WhiteboardState } from './types';
+import { DEFAULT_BOARD_TYPE, isBoardType } from './boardType';
 import { createEmptyWhiteboardState } from './whiteboardState';
-
-const DEFAULT_BOARD_TYPE: BoardTypeId = 'advanced';
 const PERSIST_SCHEMA_VERSION = 2 as const;
 const FREEHAND_POINTS_SCALE = 10;
 
@@ -68,9 +67,6 @@ function unpackObjectsFromStorage(objects: any[]): any[] {
   });
 }
 
-function isBoardType(value: unknown): value is BoardTypeId {
-  return value === 'advanced' || value === 'freehand' || value === 'mindmap';
-}
 
 function migrateLoadedState(state: WhiteboardState): WhiteboardState {
   const metaAny = (state as any).meta ?? {};
@@ -89,7 +85,7 @@ function asMeta(id: WhiteboardId, rawMeta: unknown): WhiteboardMeta {
   const name = typeof m.name === 'string' ? m.name : 'Untitled board';
   const createdAt = typeof m.createdAt === 'string' ? m.createdAt : now;
   const updatedAt = typeof m.updatedAt === 'string' ? m.updatedAt : createdAt;
-  const boardType = isBoardType(m.boardType) ? (m.boardType as BoardTypeId) : DEFAULT_BOARD_TYPE;
+  const boardType = isBoardType(m.boardType) ? m.boardType : DEFAULT_BOARD_TYPE;
   return { id, name, boardType, createdAt, updatedAt };
 }
 

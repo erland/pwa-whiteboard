@@ -13,9 +13,7 @@ import { RemoteCursorsOverlay } from './RemoteCursorsOverlay';
 import { ParticipantActivityStrip } from './ParticipantActivityStrip';
 import { ReactionOverlay } from './ReactionOverlay';
 import { ShareDialog } from './ShareDialog';
-import { CommentsDialog } from './CommentsDialog';
-import { VotingDialog } from './VotingDialog';
-import { SharedTimerDialog } from './SharedTimerDialog';
+import { FacilitationDialog, type FacilitationTab } from './FacilitationDialog';
 import type { ServerFeatureFlags } from '../../domain/serverFeatures';
 import type { BoardComment } from '../../api/commentsApi';
 import type { VotingResults, VotingSession } from '../../api/votingApi';
@@ -35,15 +33,14 @@ export type BoardEditorShellProps = {
   isShareOpen: boolean;
   onOpenShare: () => void;
   onCloseShare: () => void;
-  isCommentsOpen: boolean;
+  isFacilitationOpen: boolean;
+  facilitationTab: FacilitationTab;
   onOpenComments: () => void;
-  onCloseComments: () => void;
-  isVotingOpen: boolean;
   onOpenVoting: () => void;
-  onCloseVoting: () => void;
-  isSharedTimerOpen: boolean;
   onOpenSharedTimer: () => void;
-  onCloseSharedTimer: () => void;
+  onOpenFacilitation: () => void;
+  onChangeFacilitationTab: (tab: FacilitationTab) => void;
+  onCloseFacilitation: () => void;
   state: WhiteboardState | null | undefined;
   boardTypeDef: any;
   activeTool: any;
@@ -172,15 +169,14 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
   isShareOpen,
   onOpenShare,
   onCloseShare,
-  isCommentsOpen,
+  isFacilitationOpen,
+  facilitationTab,
   onOpenComments,
-  onCloseComments,
-  isVotingOpen,
   onOpenVoting,
-  onCloseVoting,
-  isSharedTimerOpen,
   onOpenSharedTimer,
-  onCloseSharedTimer,
+  onOpenFacilitation,
+  onChangeFacilitationTab,
+  onCloseFacilitation,
   state,
   boardTypeDef,
   activeTool,
@@ -324,14 +320,12 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
         isReadOnly={isReadOnly}
         commentsEnabled={commentsEnabled}
         commentsCount={comments.length}
-        onOpenComments={onOpenComments}
         votingEnabled={votingEnabled}
         votingSessionsCount={votingSessions.length}
-        onOpenVoting={onOpenVoting}
         sharedTimerEnabled={sharedTimerEnabled}
         sharedTimerLabel={sharedTimerLabel}
         sharedTimerDisplay={sharedTimerActive ? sharedTimerDisplay : null}
-        onOpenSharedTimer={onOpenSharedTimer}
+        onOpenFacilitation={onOpenFacilitation}
         canDelete={canCopy && !isReadOnly}
         canCopy={canCopy}
         canPaste={canPaste}
@@ -476,73 +470,64 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
         </div>
       </div>
 
-      <CommentsDialog
-        isOpen={isCommentsOpen}
+      <FacilitationDialog
+        isOpen={isFacilitationOpen}
         boardName={boardName}
-        enabled={commentsEnabled}
-        authenticated={commentsAuthenticated}
-        targetLabel={commentsTargetLabel}
+        activeTab={facilitationTab}
+        onChangeTab={onChangeFacilitationTab}
+        commentsEnabled={commentsEnabled}
+        commentsAuthenticated={commentsAuthenticated}
+        commentsTargetLabel={commentsTargetLabel}
         comments={comments}
-        isLoading={commentsLoading}
-        isMutating={commentsMutating}
-        error={commentsError}
-        activeCount={commentsActiveCount}
-        resolvedCount={commentsResolvedCount}
-        onRefresh={refreshComments}
+        commentsLoading={commentsLoading}
+        commentsMutating={commentsMutating}
+        commentsError={commentsError}
+        commentsActiveCount={commentsActiveCount}
+        commentsResolvedCount={commentsResolvedCount}
+        onRefreshComments={refreshComments}
         onCreateComment={createComment}
         onReplyToComment={replyToComment}
         onResolveComment={resolveComment}
         onReopenComment={reopenComment}
         onDeleteComment={deleteComment}
-        onCancel={onCloseComments}
-      />
-
-      <VotingDialog
-        isOpen={isVotingOpen}
-        boardName={boardName}
-        enabled={votingEnabled}
-        authenticated={votingAuthenticated}
-        sessions={votingSessions}
-        selectedSessionId={votingSelectedSessionId}
-        results={votingResults}
-        availableTargets={votingAvailableTargets}
-        selectedTargets={votingSelectedTargets}
-        localVotesByTarget={votingLocalVotesByTarget}
-        remainingVotes={votingRemainingVotes}
-        isLoading={votingLoading}
-        isMutating={votingMutating}
-        error={votingError}
-        onRefresh={refreshVoting}
-        onSelectSession={selectVotingSession}
-        onCreateSession={createVotingSession}
-        onOpenSession={openVotingSession}
-        onCloseSession={closeVotingSession}
-        onRevealSession={revealVotingSession}
-        onCancelSession={cancelVotingSession}
+        votingEnabled={votingEnabled}
+        votingAuthenticated={votingAuthenticated}
+        votingSessions={votingSessions}
+        votingSelectedSessionId={votingSelectedSessionId}
+        votingResults={votingResults}
+        votingAvailableTargets={votingAvailableTargets}
+        votingSelectedTargets={votingSelectedTargets}
+        votingLocalVotesByTarget={votingLocalVotesByTarget}
+        votingRemainingVotes={votingRemainingVotes}
+        votingLoading={votingLoading}
+        votingMutating={votingMutating}
+        votingError={votingError}
+        onRefreshVoting={refreshVoting}
+        onSelectVotingSession={selectVotingSession}
+        onCreateVotingSession={createVotingSession}
+        onOpenVotingSession={openVotingSession}
+        onCloseVotingSession={closeVotingSession}
+        onRevealVotingSession={revealVotingSession}
+        onCancelVotingSession={cancelVotingSession}
         onCastVote={castVote}
         onRemoveVote={removeVote}
-        onCancel={onCloseVoting}
-      />
-
-
-      <SharedTimerDialog
-        isOpen={isSharedTimerOpen}
-        enabled={sharedTimerEnabled}
-        connected={sharedTimerConnected}
-        canControl={sharedTimerCanControl}
-        timer={sharedTimer}
-        displayRemainingMs={sharedTimerRemainingMs}
-        formattedRemaining={sharedTimerDisplay}
-        isMutating={sharedTimerMutating}
-        error={sharedTimerError}
-        onClearError={clearSharedTimerError}
-        onStart={startSharedTimer}
-        onPause={pauseSharedTimer}
-        onResume={resumeSharedTimer}
-        onReset={resetSharedTimer}
-        onCancelTimer={cancelSharedTimer}
-        onComplete={completeSharedTimer}
-        onCancel={onCloseSharedTimer}
+        sharedTimerEnabled={sharedTimerEnabled}
+        sharedTimerConnected={sharedTimerConnected}
+        sharedTimerCanControl={sharedTimerCanControl}
+        sharedTimer={sharedTimer}
+        sharedTimerDisplay={sharedTimerDisplay}
+        sharedTimerRemainingMs={sharedTimerRemainingMs}
+        sharedTimerMutating={sharedTimerMutating}
+        sharedTimerError={sharedTimerError}
+        onClearSharedTimerError={clearSharedTimerError}
+        onStartSharedTimer={startSharedTimer}
+        onPauseSharedTimer={pauseSharedTimer}
+        onResumeSharedTimer={resumeSharedTimer}
+        onResetSharedTimer={resetSharedTimer}
+        onCancelSharedTimer={cancelSharedTimer}
+        onCompleteSharedTimer={completeSharedTimer}
+        reactionsEnabled={reactionsEnabled}
+        onCancel={onCloseFacilitation}
       />
 
       <ShareDialog

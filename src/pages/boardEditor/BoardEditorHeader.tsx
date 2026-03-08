@@ -22,14 +22,12 @@ type BoardEditorHeaderProps = {
   collab?: CollabInfo;
   commentsEnabled?: boolean;
   commentsCount?: number;
-  onOpenComments?: () => void;
   votingEnabled?: boolean;
   votingSessionsCount?: number;
-  onOpenVoting?: () => void;
   sharedTimerEnabled?: boolean;
   sharedTimerLabel?: string | null;
   sharedTimerDisplay?: string | null;
-  onOpenSharedTimer?: () => void;
+  onOpenFacilitation?: () => void;
   reactionsEnabled?: boolean;
   reactionOptions?: string[];
   onSendReaction?: (reactionType: string) => void;
@@ -48,14 +46,12 @@ export const BoardEditorHeader: React.FC<BoardEditorHeaderProps> = ({
   collab,
   commentsEnabled,
   commentsCount,
-  onOpenComments,
   votingEnabled,
   votingSessionsCount,
-  onOpenVoting,
   sharedTimerEnabled,
   sharedTimerLabel,
   sharedTimerDisplay,
-  onOpenSharedTimer,
+  onOpenFacilitation,
   reactionsEnabled,
   reactionOptions,
   onSendReaction,
@@ -93,38 +89,19 @@ export const BoardEditorHeader: React.FC<BoardEditorHeaderProps> = ({
             <span>{labelWithError}</span>
           </span>
         )}
-        {commentsEnabled && (
+        {(commentsEnabled || votingEnabled || sharedTimerEnabled) && (
           <button
             type="button"
-            className="tool-button"
-            onClick={onOpenComments}
-            disabled={!onOpenComments}
-            title="Review comments"
+            className="tool-button facilitation-launch-button"
+            onClick={onOpenFacilitation}
+            disabled={!onOpenFacilitation}
+            title="Open facilitation workspace"
           >
-            💬 Comments{typeof commentsCount === 'number' ? ` (${commentsCount})` : ''}
-          </button>
-        )}
-        {votingEnabled && (
-          <button
-            type="button"
-            className="tool-button"
-            onClick={onOpenVoting}
-            disabled={!onOpenVoting}
-            title="Voting sessions"
-          >
-            🗳 Voting{typeof votingSessionsCount === 'number' ? ` (${votingSessionsCount})` : ''}
-          </button>
-        )}
-        {sharedTimerEnabled && (
-          <button
-            type="button"
-            className="tool-button"
-            onClick={onOpenSharedTimer}
-            disabled={!onOpenSharedTimer}
-            title="Shared timer"
-          >
-            ⏱ {sharedTimerDisplay ? `Timer ${sharedTimerDisplay}` : 'Timer'}
-            {sharedTimerLabel ? ` · ${sharedTimerLabel}` : ''}
+            ✨ Facilitation
+            {commentsEnabled && typeof commentsCount === 'number' ? ` · ${commentsCount} comments` : ''}
+            {votingEnabled && typeof votingSessionsCount === 'number' ? ` · ${votingSessionsCount} votes` : ''}
+            {sharedTimerEnabled && sharedTimerDisplay ? ` · ${sharedTimerDisplay}` : sharedTimerEnabled ? ' · timer' : ''}
+            {sharedTimerLabel ? ` (${sharedTimerLabel})` : ''}
           </button>
         )}
 

@@ -299,9 +299,8 @@ const BoardEditorContent: React.FC<{
 
   const boardName = state?.meta?.name ?? 'Untitled board';
   const [isShareOpen, setIsShareOpen] = useState(false);
-  const [isCommentsOpen, setIsCommentsOpen] = useState(false);
-  const [isVotingOpen, setIsVotingOpen] = useState(false);
-  const [isSharedTimerOpen, setIsSharedTimerOpen] = useState(false);
+  const [isFacilitationOpen, setIsFacilitationOpen] = useState(false);
+  const [facilitationTab, setFacilitationTab] = useState<'overview' | 'comments' | 'voting' | 'timer'>('overview');
   const capabilities = useBoardCapabilities({
     enabled: Boolean(boardId) && serverConfigured,
   });
@@ -371,15 +370,14 @@ const BoardEditorContent: React.FC<{
       isShareOpen={isShareOpen}
       onOpenShare={() => setIsShareOpen(true)}
       onCloseShare={() => setIsShareOpen(false)}
-      isCommentsOpen={isCommentsOpen}
-      onOpenComments={() => setIsCommentsOpen(true)}
-      onCloseComments={() => setIsCommentsOpen(false)}
-      isVotingOpen={isVotingOpen}
-      onOpenVoting={() => setIsVotingOpen(true)}
-      onCloseVoting={() => setIsVotingOpen(false)}
-      isSharedTimerOpen={isSharedTimerOpen}
-      onOpenSharedTimer={() => setIsSharedTimerOpen(true)}
-      onCloseSharedTimer={() => setIsSharedTimerOpen(false)}
+      isFacilitationOpen={isFacilitationOpen}
+      facilitationTab={facilitationTab}
+      onOpenComments={() => { setFacilitationTab('comments'); setIsFacilitationOpen(true); }}
+      onOpenVoting={() => { setFacilitationTab('voting'); setIsFacilitationOpen(true); }}
+      onOpenSharedTimer={() => { setFacilitationTab('timer'); setIsFacilitationOpen(true); }}
+      onOpenFacilitation={() => { setFacilitationTab('overview'); setIsFacilitationOpen(true); }}
+      onChangeFacilitationTab={setFacilitationTab}
+      onCloseFacilitation={() => setIsFacilitationOpen(false)}
       state={state}
       boardTypeDef={boardTypeDef}
       activeTool={activeTool}

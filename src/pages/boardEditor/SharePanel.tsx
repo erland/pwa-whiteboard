@@ -1,6 +1,14 @@
 import React from 'react';
 import { useAuth } from '../../auth/AuthContext';
-import { acceptInvite, createBoardInvite, validateInvite, type InvitePermission } from '../../api/invitesApi';
+import {
+  acceptInvite,
+  createBoardInvite,
+  listBoardInvites,
+  revokeBoardInvite,
+  validateInvite,
+  type BoardInvite,
+  type InvitePermission,
+} from '../../api/invitesApi';
 import { createPublicationsApi, type BoardPublication, type BoardPublicationTargetType } from '../../api/publicationsApi';
 import type { ServerFeatureFlags } from '../../domain/serverFeatures';
 import { CapabilitySummary } from './CapabilitySummary';
@@ -81,8 +89,15 @@ export const SharePanel: React.FC<SharePanelProps> = ({
 
   const [createRole, setCreateRole] = React.useState<'viewer' | 'editor'>('viewer');
   const [creating, setCreating] = React.useState(false);
+  const [inviteExpiresAt, setInviteExpiresAt] = React.useState('');
+  const [inviteMaxUses, setInviteMaxUses] = React.useState('');
   const [lastCreatedInviteUrl, setLastCreatedInviteUrl] = React.useState<string | null>(null);
   const [lastCreatedInviteCopied, setLastCreatedInviteCopied] = React.useState(false);
+  const [managedInvites, setManagedInvites] = React.useState<BoardInvite[]>([]);
+  const [isLoadingInvites, setIsLoadingInvites] = React.useState(false);
+  const [isRefreshingInviteList, setIsRefreshingInviteList] = React.useState(false);
+  const [inviteAdminError, setInviteAdminError] = React.useState<string | null>(null);
+  const [activeInviteId, setActiveInviteId] = React.useState<string | null>(null);
   const [inviteStatus, setInviteStatus] = React.useState<
     | { kind: 'idle' }
     | { kind: 'loading' }
@@ -146,6 +161,28 @@ export const SharePanel: React.FC<SharePanelProps> = ({
     return url.toString();
   }, []);
 
+  const loadInvites = React.useCallback(async (mode: 'initial' | 'refresh' = 'initial') => {
+    if (!authenticated || isReadOnly) {
+      setManagedInvites([]);
+      setInviteAdminError(null);
+      return;
+    }
+
+    if (mode === 'initial') setIsLoadingInvites(true);
+    else setIsRefreshingInviteList(true);
+
+    try {
+      const listed = await listBoardInvites(boardId);
+      setManagedInvites(listed);
+      setInviteAdminError(null);
+    } catch (e: any) {
+      setInviteAdminError(String(e?.message ?? e));
+    } finally {
+      if (mode === 'initial') setIsLoadingInvites(false);
+      else setIsRefreshingInviteList(false);
+    }
+  }, [authenticated, boardId, isReadOnly]);
+
   const loadPublications = React.useCallback(async (mode: 'initial' | 'refresh' = 'initial') => {
     if (!effectiveFeatures.supportsPublications || !authenticated || isReadOnly) {
       setPublications([]);
@@ -195,6 +232,10 @@ export const SharePanel: React.FC<SharePanelProps> = ({
     void loadPublications('initial');
   }, [loadPublications]);
 
+  React.useEffect(() => {
+    void loadInvites('initial');
+  }, [loadInvites]);
+
   // Validate invite token (informational) when the user is authenticated.
   React.useEffect(() => {
     let cancelled = false;
@@ -227,13 +268,25 @@ export const SharePanel: React.FC<SharePanelProps> = ({
     if (!authenticated || isReadOnly) return;
     setCreating(true);
     setLastCreatedInviteCopied(false);
+    setInviteAdminError(null);
     try {
       const permission: InvitePermission = createRole === 'editor' ? 'editor' : 'viewer';
-      const created = await createBoardInvite({ boardId, permission });
+      const parsedMaxUses = inviteMaxUses.trim() ? Number.parseInt(inviteMaxUses.trim(), 10) : undefined;
+      if (parsedMaxUses != null && (!Number.isFinite(parsedMaxUses) || parsedMaxUses <= 0)) {
+        throw new Error('Enter a valid maximum use count.');
+      }
+      const created = await createBoardInvite({
+        boardId,
+        permission,
+        expiresAt: fromDateTimeLocalValue(inviteExpiresAt),
+        maxUses: parsedMaxUses,
+      });
       setLastCreatedInviteUrl(buildInviteUrl(created.token));
+      setManagedInvites((current) => [created, ...current.filter((entry) => entry.id !== created.id)]);
+      setInviteExpiresAt('');
+      setInviteMaxUses('');
     } catch (e) {
-      // eslint-disable-next-line no-alert
-      alert(`Failed to create invite: ${String((e as any)?.message ?? e)}`);
+      setInviteAdminError(String((e as any)?.message ?? e));
     } finally {
       setCreating(false);
     }
@@ -247,6 +300,20 @@ export const SharePanel: React.FC<SharePanelProps> = ({
       window.setTimeout(() => setLastCreatedInviteCopied(false), 1200);
     } catch {
       // ignore
+    }
+  };
+
+  const handleRevokeInvite = async (inviteId: string) => {
+    if (!authenticated || isReadOnly) return;
+    setActiveInviteId(inviteId);
+    setInviteAdminError(null);
+    try {
+      await revokeBoardInvite(boardId, inviteId);
+      await loadInvites('refresh');
+    } catch (e: any) {
+      setInviteAdminError(String(e?.message ?? e));
+    } finally {
+      setActiveInviteId(null);
     }
   };
 
@@ -552,7 +619,24 @@ export const SharePanel: React.FC<SharePanelProps> = ({
       )}
 
       <div className="share-section">
-        <div className="share-label">Invite links</div>
+        <div className="share-publication-header">
+          <div>
+            <div className="share-label">Invite links</div>
+            <div className="share-help">
+              Create member invite links, review active invites, and revoke links that should no longer grant access.
+            </div>
+          </div>
+          {authenticated && !isReadOnly && (
+            <button
+              type="button"
+              className="tool-button"
+              onClick={() => void loadInvites('refresh')}
+              disabled={isRefreshingInviteList || isLoadingInvites}
+            >
+              {isRefreshingInviteList ? 'Refreshing…' : 'Refresh list'}
+            </button>
+          )}
+        </div>
 
         {inviteLink ? (
           <>
@@ -592,26 +676,22 @@ export const SharePanel: React.FC<SharePanelProps> = ({
               </div>
             )}
           </>
-        ) : (
-          <div style={{ display: 'grid', gap: 10 }}>
-            <div className="share-help">
-              Create an invite link for this board. (Board: <code>{boardId}</code>
-              {boardName ? ` — ${boardName}` : ''})
-            </div>
-            {effectiveFeatures.supportsPublications ? (
-              <div className="share-help">
-                Publication-link support is available, so this dialog can issue read-only review links in addition to member invite links.
-              </div>
-            ) : (
-              <div className="share-help">
-                This server has not advertised publication-link support, so public sharing UI stays hidden.
-              </div>
-            )}
+        ) : null}
 
-            {!authenticated ? (
-              <div className="share-help">Sign in to create invites.</div>
-            ) : (
-              <>
+        {!authenticated ? (
+          <div className="share-help">Sign in to create and manage invite links.</div>
+        ) : isReadOnly ? (
+          <div className="share-help">Invite management is unavailable while the board is open read-only.</div>
+        ) : (
+          <>
+            <div style={{ display: 'grid', gap: 10 }}>
+              <div className="share-help">
+                Member invite links are only shown once at creation time. Existing invites can still be reviewed and revoked below.
+                (Board: <code>{boardId}</code>
+                {boardName ? ` — ${boardName}` : ''})
+              </div>
+
+              <div className="share-publication-grid">
                 <label style={{ display: 'grid', gap: 6, maxWidth: 260 }}>
                   <span className="form-help">Permission</span>
                   <select value={createRole} onChange={(e) => setCreateRole(e.currentTarget.value as any)} disabled={creating}>
@@ -620,24 +700,101 @@ export const SharePanel: React.FC<SharePanelProps> = ({
                   </select>
                 </label>
 
+                <label style={{ display: 'grid', gap: 6 }}>
+                  <span className="form-help">Expires at (optional)</span>
+                  <input
+                    type="datetime-local"
+                    aria-label="Invite expiry"
+                    value={inviteExpiresAt}
+                    onChange={(e) => setInviteExpiresAt(e.currentTarget.value)}
+                    disabled={creating}
+                  />
+                </label>
+
+                <label style={{ display: 'grid', gap: 6, maxWidth: 220 }}>
+                  <span className="form-help">Max uses (optional)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    inputMode="numeric"
+                    aria-label="Invite max uses"
+                    value={inviteMaxUses}
+                    onChange={(e) => setInviteMaxUses(e.currentTarget.value)}
+                    placeholder="Unlimited"
+                    disabled={creating}
+                  />
+                </label>
+
                 <button type="button" className="tool-button" onClick={handleCreateInvite} disabled={creating}>
                   {creating ? 'Creating…' : 'Create invite link'}
                 </button>
+              </div>
 
-                {lastCreatedInviteUrl && (
-                  <div style={{ marginTop: 6, display: 'grid', gap: 8 }}>
-                    <div style={{ opacity: 0.8, fontSize: 12 }}>
-                      One-time link (only shown once — copy it now):
+              {inviteAdminError && <div className="share-help">Invite error: {inviteAdminError}</div>}
+
+              {lastCreatedInviteUrl && (
+                <div className="share-created-link-box">
+                  <div className="share-help">Latest invite link (copy it now):</div>
+                  <input type="text" readOnly value={lastCreatedInviteUrl} aria-label="Latest invite link" />
+                  <button type="button" className="tool-button" onClick={handleCopyLastCreatedInvite}>
+                    {lastCreatedInviteCopied ? 'Copied!' : 'Copy link'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="share-publication-list">
+              {isLoadingInvites ? (
+                <div className="share-help">Loading invites…</div>
+              ) : managedInvites.length === 0 ? (
+                <div className="share-help">No invite links created yet.</div>
+              ) : (
+                managedInvites.map((invite) => {
+                  const isBusy = activeInviteId === invite.id;
+                  const inviteState = invite.revokedAt
+                    ? 'revoked'
+                    : invite.expiresAt && Date.parse(invite.expiresAt) <= Date.now()
+                      ? 'expired'
+                      : 'active';
+                  const usageLabel = invite.maxUses == null
+                    ? `${invite.uses} use${invite.uses === 1 ? '' : 's'}`
+                    : `${invite.uses}/${invite.maxUses} uses`;
+                  return (
+                    <div key={invite.id} className="share-publication-card" data-state={inviteState}>
+                      <div className="comment-card-header">
+                        <div>
+                          <strong>{invite.permission === 'editor' ? 'Editor invite' : 'Viewer invite'}</strong>
+                          <div className="share-help">
+                            State: {inviteState} · {usageLabel}
+                          </div>
+                        </div>
+                        <span className="capability-chip" data-enabled={inviteState === 'active' ? 'true' : 'false'}>
+                          {inviteState}
+                        </span>
+                      </div>
+
+                      <div className="share-publication-meta">
+                        <span>Created {formatDateTime(invite.createdAt)}</span>
+                        <span>Expires {formatDateTime(invite.expiresAt)}</span>
+                        <span>Revoked {formatDateTime(invite.revokedAt)}</span>
+                      </div>
+
+                      <div className="comment-card-actions">
+                        <button
+                          type="button"
+                          className="tool-button"
+                          onClick={() => void handleRevokeInvite(invite.id)}
+                          disabled={isBusy || inviteState !== 'active'}
+                        >
+                          {isBusy ? 'Working…' : 'Revoke'}
+                        </button>
+                      </div>
                     </div>
-                    <input type="text" readOnly value={lastCreatedInviteUrl} />
-                    <button type="button" className="tool-button" onClick={handleCopyLastCreatedInvite}>
-                      {lastCreatedInviteCopied ? 'Copied!' : 'Copy link'}
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+                  );
+                })
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>

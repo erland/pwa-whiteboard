@@ -10,6 +10,8 @@ import { ExportImportPanel } from './ExportImportPanel';
 import { BoardInfoPanel } from './BoardInfoPanel';
 import { HistoryAndViewPanel } from './HistoryAndViewPanel';
 import { RemoteCursorsOverlay } from './RemoteCursorsOverlay';
+import { ParticipantActivityStrip } from './ParticipantActivityStrip';
+import { ReactionOverlay } from './ReactionOverlay';
 import { ShareDialog } from './ShareDialog';
 import { CommentsDialog } from './CommentsDialog';
 import { VotingDialog } from './VotingDialog';
@@ -136,6 +138,10 @@ export type BoardEditorShellProps = {
   removeVote: (targetRef: string) => Promise<void>;
   sharedTimerEnabled: boolean;
   sharedTimerConnected: boolean;
+  reactionsEnabled: boolean;
+  reactionOptions: string[];
+  onSendReaction: (reactionType: string) => void;
+  reactionBursts: import('../hooks/useBoardReactions').ReactionBurst[];
   sharedTimerCanControl: boolean;
   sharedTimer: import('../../api/timerApi').SharedTimerState | null;
   sharedTimerLabel: string | null;
@@ -257,6 +263,10 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
   removeVote,
   sharedTimerEnabled,
   sharedTimerConnected,
+  reactionsEnabled,
+  reactionOptions,
+  onSendReaction,
+  reactionBursts,
   sharedTimerCanControl,
   sharedTimer,
   sharedTimerLabel,
@@ -389,6 +399,14 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
             </div>
           )}
 
+          {collab.enabled && collab.status === 'connected' && (
+            <ParticipantActivityStrip
+              users={collab.users}
+              presenceByUserId={collab.presenceByUserId}
+              selfUserId={collab.selfUserId}
+            />
+          )}
+
           {sharedTimerEnabled && sharedTimerActive && (
             <div className="shared-timer-banner" role="status" aria-live="polite">
               <div>
@@ -421,13 +439,19 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
                   onCursorWorldMove={handleCursorWorldMove}
                 />
                 {collab.enabled && collab.status === 'connected' && (
-                  <RemoteCursorsOverlay
-                    width={CANVAS_WIDTH}
-                    height={CANVAS_HEIGHT}
-                    viewport={state.viewport}
-                    users={collab.users.filter((u) => u.userId !== collab.selfUserId)}
-                    presenceByUserId={collab.presenceByUserId}
-                  />
+                  <>
+                    <RemoteCursorsOverlay
+                      width={CANVAS_WIDTH}
+                      height={CANVAS_HEIGHT}
+                      viewport={state.viewport}
+                      users={collab.users.filter((u) => u.userId !== collab.selfUserId)}
+                      presenceByUserId={collab.presenceByUserId}
+                    />
+                    <ReactionOverlay
+                      bursts={reactionBursts}
+                      users={collab.users}
+                    />
+                  </>
                 )}
 
                 {collab.enabled && collab.status !== 'connected' && collab.status !== 'disabled' && (

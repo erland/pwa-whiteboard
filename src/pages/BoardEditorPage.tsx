@@ -15,6 +15,7 @@ import { useBoardCapabilities } from './hooks/useBoardCapabilities';
 import { useBoardComments } from './hooks/useBoardComments';
 import { useBoardVoting } from './hooks/useBoardVoting';
 import { useSharedTimer } from './hooks/useSharedTimer';
+import { useBoardReactions } from './hooks/useBoardReactions';
 
 function getInitialInviteToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -317,6 +318,15 @@ const BoardEditorContent: React.FC<{
     lastEphemeralMessage: collab.lastEphemeralMessage,
     sendEphemeral: collab.sendEphemeral,
   });
+
+  const reactions = useBoardReactions({
+    enabled: Boolean(boardId) && serverConfigured && capabilities.features.supportsReactions,
+    canReact: collab.enabled && collab.status === 'connected',
+    selfUserId: collab.selfUserId,
+    lastEphemeralMessage: collab.lastEphemeralMessage,
+    sendEphemeral: collab.sendEphemeral,
+  });
+
   const voting = useBoardVoting({
     boardId,
     enabled: Boolean(boardId) && serverConfigured && capabilities.features.supportsVoting,
@@ -452,6 +462,10 @@ const BoardEditorContent: React.FC<{
       castVote={voting.castVote}
       removeVote={voting.removeVote}
       sharedTimerEnabled={capabilities.features.supportsSharedTimer}
+      reactionsEnabled={capabilities.features.supportsReactions}
+      reactionOptions={reactions.quickReactions}
+      onSendReaction={reactions.sendReaction}
+      reactionBursts={reactions.bursts}
       sharedTimerConnected={sharedTimer.isConnected}
       sharedTimerCanControl={sharedTimer.canControl}
       sharedTimer={sharedTimer.timer}

@@ -8,6 +8,56 @@ import {
 } from './collabPresence';
 import { CollabClient, type CollabStatus } from '../../../collab/CollabClient';
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function toNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function toStringArray(value: unknown): string[] | undefined {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string') ? value : undefined;
+}
+
+function mergeEphemeralPresence(
+  current: Record<string, PresencePayload>,
+  msg: WsEphemeralMessage
+): Record<string, PresencePayload> {
+  const payload = asRecord(msg.payload);
+  if (!payload || !msg.from) return current;
+
+  const existing = current[msg.from] ?? {};
+  switch (msg.eventType) {
+    case 'cursor': {
+      const x = toNumber(payload.x);
+      const y = toNumber(payload.y);
+      if (x === null || y === null) return current;
+      return { ...current, [msg.from]: { ...existing, cursor: { x, y } } };
+    }
+    case 'viewport': {
+      const panX = toNumber(payload.panX);
+      const panY = toNumber(payload.panY);
+      const zoom = toNumber(payload.zoom);
+      if (panX === null || panY === null || zoom === null) return current;
+      return { ...current, [msg.from]: { ...existing, viewport: { panX, panY, zoom } } };
+    }
+    case 'presence-meta': {
+      return {
+        ...current,
+        [msg.from]: {
+          ...existing,
+          ...(toStringArray(payload.selectionIds) ? { selectionIds: toStringArray(payload.selectionIds) } : {}),
+          ...(typeof payload.isTyping === 'boolean' ? { isTyping: payload.isTyping } : {}),
+        },
+      };
+    }
+    default:
+      return current;
+  }
+}
+
+
 export type CollabConnectionLifecycleArgs = {
   enabled: boolean;
   boardId?: string;
@@ -143,6 +193,7 @@ export function useCollabConnectionLifecycle({
         },
         onEphemeral: (msg) => {
           handleEphemeralMessage(msg);
+          setPresenceByUserId((current) => mergeEphemeralPresence(current, msg));
         },
         onErrorMsg: (msg) => {
           const err = `${msg.code}: ${msg.message}`;

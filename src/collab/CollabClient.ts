@@ -237,7 +237,45 @@ export class CollabClient {
 
   sendPresence(boardId: string, presence: PresencePayload) {
     void boardId;
-    void presence;
+    if (!this.ws || this.status !== 'connected' || !presence) return false;
+
+    let sent = false;
+
+    if (presence.cursor) {
+      this.ws.send(JSON.stringify({
+        type: 'ephemeral',
+        eventType: 'cursor',
+        payload: { x: presence.cursor.x, y: presence.cursor.y },
+      }));
+      sent = true;
+    }
+
+    if (presence.viewport) {
+      this.ws.send(JSON.stringify({
+        type: 'ephemeral',
+        eventType: 'viewport',
+        payload: {
+          panX: presence.viewport.panX,
+          panY: presence.viewport.panY,
+          zoom: presence.viewport.zoom,
+        },
+      }));
+      sent = true;
+    }
+
+    if (presence.selectionIds || presence.isTyping !== undefined) {
+      this.ws.send(JSON.stringify({
+        type: 'ephemeral',
+        eventType: 'presence-meta',
+        payload: {
+          ...(presence.selectionIds ? { selectionIds: presence.selectionIds } : {}),
+          ...(presence.isTyping !== undefined ? { isTyping: presence.isTyping } : {}),
+        },
+      }));
+      sent = true;
+    }
+
+    return sent;
   }
 
   sendEphemeral(eventType: WsEphemeralMessage['eventType'], payload: Record<string, unknown>) {

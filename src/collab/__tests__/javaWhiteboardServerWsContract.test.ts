@@ -173,4 +173,39 @@ describe('java whiteboard server WebSocket contract integration', () => {
     expect(onStatus).toHaveBeenCalledWith('connecting', undefined);
     expect(ws.readyState).toBe(FakeWebSocket.OPEN);
   });
+
+  test('sends presence as java server ephemeral cursor, viewport and presence-meta events', () => {
+    const client = new CollabClient(
+      {
+        baseUrl: 'http://localhost:8080',
+        boardId: 'b-4',
+        accessToken: 'token-abc',
+      },
+      {}
+    );
+
+    client.connect();
+    const ws = FakeWebSocket.instances[0];
+    ws.open();
+    ws.emitJson({
+      type: 'joined',
+      boardId: 'b-4',
+      yourUserId: 'user-1',
+      permission: 'EDITOR',
+      users: [],
+    });
+
+    client.sendPresence('b-4', {
+      cursor: { x: 10, y: 20 },
+      viewport: { panX: 5, panY: 6, zoom: 2 },
+      selectionIds: ['obj-1'],
+      isTyping: true,
+    });
+
+    expect(ws.sent.map((raw) => JSON.parse(raw))).toEqual([
+      { type: 'ephemeral', eventType: 'cursor', payload: { x: 10, y: 20 } },
+      { type: 'ephemeral', eventType: 'viewport', payload: { panX: 5, panY: 6, zoom: 2 } },
+      { type: 'ephemeral', eventType: 'presence-meta', payload: { selectionIds: ['obj-1'], isTyping: true } },
+    ]);
+  });
 });

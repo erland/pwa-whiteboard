@@ -223,7 +223,7 @@ const redoSafe = () => {
     handleDeleteSelection,
     handleStrokeWidthChange,
     updateStrokeWidth,
-    handleViewportChange: _handleViewportChange,
+    handleViewportChange,
     zoomPercent,
     handleZoomChange,
     handleFitView,

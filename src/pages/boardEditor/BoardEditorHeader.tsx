@@ -30,6 +30,9 @@ type BoardEditorHeaderProps = {
   sharedTimerLabel?: string | null;
   sharedTimerDisplay?: string | null;
   onOpenSharedTimer?: () => void;
+  reactionsEnabled?: boolean;
+  reactionOptions?: string[];
+  onSendReaction?: (reactionType: string) => void;
   onOpenShare?: () => void;
 };
 
@@ -53,6 +56,9 @@ export const BoardEditorHeader: React.FC<BoardEditorHeaderProps> = ({
   sharedTimerLabel,
   sharedTimerDisplay,
   onOpenSharedTimer,
+  reactionsEnabled,
+  reactionOptions,
+  onSendReaction,
   onOpenShare,
 }) => {
   const status = collab?.status ?? 'disabled';
@@ -121,6 +127,23 @@ export const BoardEditorHeader: React.FC<BoardEditorHeaderProps> = ({
             {sharedTimerLabel ? ` · ${sharedTimerLabel}` : ''}
           </button>
         )}
+
+        {reactionsEnabled && reactionOptions?.length ? (
+          <div className="reaction-toolbar" aria-label="Quick reactions">
+            {reactionOptions.map((reaction) => (
+              <button
+                key={reaction}
+                type="button"
+                className="tool-button reaction-button"
+                onClick={() => onSendReaction?.(reaction)}
+                disabled={!onSendReaction}
+                title={`Send ${reaction} reaction`}
+              >
+                {reaction}
+              </button>
+            ))}
+          </div>
+        ) : null}
         {canShare && (
 
         <button

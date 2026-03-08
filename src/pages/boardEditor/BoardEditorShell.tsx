@@ -11,7 +11,9 @@ import { BoardInfoPanel } from './BoardInfoPanel';
 import { HistoryAndViewPanel } from './HistoryAndViewPanel';
 import { RemoteCursorsOverlay } from './RemoteCursorsOverlay';
 import { ShareDialog } from './ShareDialog';
+import { CommentsDialog } from './CommentsDialog';
 import type { ServerFeatureFlags } from '../../domain/serverFeatures';
+import type { BoardComment } from '../../api/commentsApi';
 
 const CANVAS_WIDTH = 960;
 const CANVAS_HEIGHT = 540;
@@ -28,6 +30,9 @@ export type BoardEditorShellProps = {
   isShareOpen: boolean;
   onOpenShare: () => void;
   onCloseShare: () => void;
+  isCommentsOpen: boolean;
+  onOpenComments: () => void;
+  onCloseComments: () => void;
   state: WhiteboardState | null | undefined;
   boardTypeDef: any;
   activeTool: any;
@@ -84,6 +89,21 @@ export type BoardEditorShellProps = {
   features: ServerFeatureFlags;
   isCapabilitiesLoading: boolean;
   capabilitiesError: string | null;
+  commentsEnabled: boolean;
+  commentsAuthenticated: boolean;
+  commentsTargetLabel: string;
+  comments: BoardComment[];
+  commentsLoading: boolean;
+  commentsMutating: boolean;
+  commentsError: string | null;
+  commentsActiveCount: number;
+  commentsResolvedCount: number;
+  refreshComments: () => Promise<void>;
+  createComment: (content: string) => Promise<void>;
+  replyToComment: (parentCommentId: string, content: string) => Promise<void>;
+  resolveComment: (commentId: string) => Promise<void>;
+  reopenComment: (commentId: string) => Promise<void>;
+  deleteComment: (commentId: string) => Promise<void>;
 };
 
 export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
@@ -98,6 +118,9 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
   isShareOpen,
   onOpenShare,
   onCloseShare,
+  isCommentsOpen,
+  onOpenComments,
+  onCloseComments,
   state,
   boardTypeDef,
   activeTool,
@@ -142,6 +165,21 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
   features,
   isCapabilitiesLoading,
   capabilitiesError,
+  commentsEnabled,
+  commentsAuthenticated,
+  commentsTargetLabel,
+  comments,
+  commentsLoading,
+  commentsMutating,
+  commentsError,
+  commentsActiveCount,
+  commentsResolvedCount,
+  refreshComments,
+  createComment,
+  replyToComment,
+  resolveComment,
+  reopenComment,
+  deleteComment,
 }) => {
   return (
     <section className="page page-board-editor">
@@ -181,6 +219,9 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
         }}
         boardName={boardName}
         isReadOnly={isReadOnly}
+        commentsEnabled={commentsEnabled}
+        commentsCount={comments.length}
+        onOpenComments={onOpenComments}
         canDelete={canCopy && !isReadOnly}
         canCopy={canCopy}
         canPaste={canPaste}
@@ -300,6 +341,27 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
           </div>
         </div>
       </div>
+
+      <CommentsDialog
+        isOpen={isCommentsOpen}
+        boardName={boardName}
+        enabled={commentsEnabled}
+        authenticated={commentsAuthenticated}
+        targetLabel={commentsTargetLabel}
+        comments={comments}
+        isLoading={commentsLoading}
+        isMutating={commentsMutating}
+        error={commentsError}
+        activeCount={commentsActiveCount}
+        resolvedCount={commentsResolvedCount}
+        onRefresh={refreshComments}
+        onCreateComment={createComment}
+        onReplyToComment={replyToComment}
+        onResolveComment={resolveComment}
+        onReopenComment={reopenComment}
+        onDeleteComment={deleteComment}
+        onCancel={onCloseComments}
+      />
 
       <ShareDialog
         isOpen={isShareOpen}

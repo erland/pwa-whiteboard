@@ -12,6 +12,7 @@ import { InviteChoiceGate } from './boardEditor/gates/InviteChoiceGate';
 import { useBoardEditorShortcuts } from './boardEditor/hooks/useBoardEditorShortcuts';
 import { useBoardEditor } from './hooks/useBoardEditor';
 import { useBoardCapabilities } from './hooks/useBoardCapabilities';
+import { useBoardComments } from './hooks/useBoardComments';
 
 function getInitialInviteToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -247,6 +248,8 @@ const BoardEditorContent: React.FC<{
   inviteError,
   inviteAccepted,
 }) => {
+  const auth = useAuth();
+
   const {
     state,
     boardTypeDef,
@@ -293,8 +296,15 @@ const BoardEditorContent: React.FC<{
 
   const boardName = state?.meta?.name ?? 'Untitled board';
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isCommentsOpen, setIsCommentsOpen] = useState(false);
   const capabilities = useBoardCapabilities({
     enabled: Boolean(boardId) && serverConfigured,
+  });
+  const comments = useBoardComments({
+    boardId,
+    enabled: Boolean(boardId) && serverConfigured && capabilities.features.supportsComments,
+    authenticated: auth.authenticated,
+    selectedObjectIds: state?.selectedObjectIds ?? [],
   });
 
   useEffect(() => {
@@ -333,6 +343,9 @@ const BoardEditorContent: React.FC<{
       isShareOpen={isShareOpen}
       onOpenShare={() => setIsShareOpen(true)}
       onCloseShare={() => setIsShareOpen(false)}
+      isCommentsOpen={isCommentsOpen}
+      onOpenComments={() => setIsCommentsOpen(true)}
+      onCloseComments={() => setIsCommentsOpen(false)}
       state={state}
       boardTypeDef={boardTypeDef}
       activeTool={activeTool}
@@ -378,6 +391,21 @@ const BoardEditorContent: React.FC<{
       features={capabilities.features}
       isCapabilitiesLoading={capabilities.isLoading}
       capabilitiesError={capabilities.error}
+      commentsEnabled={capabilities.features.supportsComments}
+      commentsAuthenticated={auth.authenticated}
+      commentsTargetLabel={comments.target.label}
+      comments={comments.comments}
+      commentsLoading={comments.isLoading}
+      commentsMutating={comments.isMutating}
+      commentsError={comments.error}
+      commentsActiveCount={comments.activeCount}
+      commentsResolvedCount={comments.resolvedCount}
+      refreshComments={comments.refresh}
+      createComment={comments.createComment}
+      replyToComment={comments.replyToComment}
+      resolveComment={comments.resolveComment}
+      reopenComment={comments.reopenComment}
+      deleteComment={comments.deleteComment}
     />
   );
 };

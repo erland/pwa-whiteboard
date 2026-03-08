@@ -20,6 +20,9 @@ type BoardEditorHeaderProps = {
   onCopy?: () => void;
   onPaste?: () => void;
   collab?: CollabInfo;
+  commentsEnabled?: boolean;
+  commentsCount?: number;
+  onOpenComments?: () => void;
   onOpenShare?: () => void;
 };
 
@@ -33,6 +36,9 @@ export const BoardEditorHeader: React.FC<BoardEditorHeaderProps> = ({
   onCopy,
   onPaste,
   collab,
+  commentsEnabled,
+  commentsCount,
+  onOpenComments,
   onOpenShare,
 }) => {
   const status = collab?.status ?? 'disabled';
@@ -66,6 +72,17 @@ export const BoardEditorHeader: React.FC<BoardEditorHeaderProps> = ({
             <span className="collab-dot" />
             <span>{labelWithError}</span>
           </span>
+        )}
+        {commentsEnabled && (
+          <button
+            type="button"
+            className="tool-button"
+            onClick={onOpenComments}
+            disabled={!onOpenComments}
+            title="Review comments"
+          >
+            💬 Comments{typeof commentsCount === 'number' ? ` (${commentsCount})` : ''}
+          </button>
         )}
         {canShare && (
 

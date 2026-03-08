@@ -1261,3 +1261,44 @@ html {
   border-radius: 8px;
   background: var(--color-panel-soft);
 }
+
+.voting-form-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.voting-session-list,
+.voting-target-list,
+.voting-results-list {
+  display: grid;
+  gap: 12px;
+}
+
+.voting-session-card {
+  text-align: left;
+  border: 1px solid var(--panel-border, #d0d7de);
+  border-radius: 12px;
+  background: var(--panel-bg, #fff);
+  padding: 12px;
+}
+
+.voting-session-card[data-selected='true'] {
+  outline: 2px solid var(--accent, #4f46e5);
+}
+
+.voting-target-card,
+.voting-result-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--panel-border, #d0d7de);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

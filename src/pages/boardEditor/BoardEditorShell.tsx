@@ -12,8 +12,10 @@ import { HistoryAndViewPanel } from './HistoryAndViewPanel';
 import { RemoteCursorsOverlay } from './RemoteCursorsOverlay';
 import { ShareDialog } from './ShareDialog';
 import { CommentsDialog } from './CommentsDialog';
+import { VotingDialog } from './VotingDialog';
 import type { ServerFeatureFlags } from '../../domain/serverFeatures';
 import type { BoardComment } from '../../api/commentsApi';
+import type { VotingResults, VotingSession } from '../../api/votingApi';
 
 const CANVAS_WIDTH = 960;
 const CANVAS_HEIGHT = 540;
@@ -33,6 +35,9 @@ export type BoardEditorShellProps = {
   isCommentsOpen: boolean;
   onOpenComments: () => void;
   onCloseComments: () => void;
+  isVotingOpen: boolean;
+  onOpenVoting: () => void;
+  onCloseVoting: () => void;
   state: WhiteboardState | null | undefined;
   boardTypeDef: any;
   activeTool: any;
@@ -104,6 +109,27 @@ export type BoardEditorShellProps = {
   resolveComment: (commentId: string) => Promise<void>;
   reopenComment: (commentId: string) => Promise<void>;
   deleteComment: (commentId: string) => Promise<void>;
+  votingEnabled: boolean;
+  votingAuthenticated: boolean;
+  votingSessions: VotingSession[];
+  votingSelectedSessionId: string | null;
+  votingResults: VotingResults | null;
+  votingAvailableTargets: Array<{ id: string; label: string; objectType: string }>;
+  votingSelectedTargets: Array<{ id: string; label: string; objectType: string }>;
+  votingLocalVotesByTarget: Record<string, number>;
+  votingRemainingVotes: number | null;
+  votingLoading: boolean;
+  votingMutating: boolean;
+  votingError: string | null;
+  refreshVoting: () => Promise<void>;
+  selectVotingSession: (sessionId: string | null) => void;
+  createVotingSession: (input: any) => Promise<void>;
+  openVotingSession: (sessionId: string) => Promise<void>;
+  closeVotingSession: (sessionId: string) => Promise<void>;
+  revealVotingSession: (sessionId: string) => Promise<void>;
+  cancelVotingSession: (sessionId: string) => Promise<void>;
+  castVote: (targetRef: string) => Promise<void>;
+  removeVote: (targetRef: string) => Promise<void>;
 };
 
 export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
@@ -121,6 +147,9 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
   isCommentsOpen,
   onOpenComments,
   onCloseComments,
+  isVotingOpen,
+  onOpenVoting,
+  onCloseVoting,
   state,
   boardTypeDef,
   activeTool,
@@ -180,6 +209,27 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
   resolveComment,
   reopenComment,
   deleteComment,
+  votingEnabled,
+  votingAuthenticated,
+  votingSessions,
+  votingSelectedSessionId,
+  votingResults,
+  votingAvailableTargets,
+  votingSelectedTargets,
+  votingLocalVotesByTarget,
+  votingRemainingVotes,
+  votingLoading,
+  votingMutating,
+  votingError,
+  refreshVoting,
+  selectVotingSession,
+  createVotingSession,
+  openVotingSession,
+  closeVotingSession,
+  revealVotingSession,
+  cancelVotingSession,
+  castVote,
+  removeVote,
 }) => {
   return (
     <section className="page page-board-editor">
@@ -222,6 +272,9 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
         commentsEnabled={commentsEnabled}
         commentsCount={comments.length}
         onOpenComments={onOpenComments}
+        votingEnabled={votingEnabled}
+        votingSessionsCount={votingSessions.length}
+        onOpenVoting={onOpenVoting}
         canDelete={canCopy && !isReadOnly}
         canCopy={canCopy}
         canPaste={canPaste}
@@ -361,6 +414,33 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
         onReopenComment={reopenComment}
         onDeleteComment={deleteComment}
         onCancel={onCloseComments}
+      />
+
+      <VotingDialog
+        isOpen={isVotingOpen}
+        boardName={boardName}
+        enabled={votingEnabled}
+        authenticated={votingAuthenticated}
+        sessions={votingSessions}
+        selectedSessionId={votingSelectedSessionId}
+        results={votingResults}
+        availableTargets={votingAvailableTargets}
+        selectedTargets={votingSelectedTargets}
+        localVotesByTarget={votingLocalVotesByTarget}
+        remainingVotes={votingRemainingVotes}
+        isLoading={votingLoading}
+        isMutating={votingMutating}
+        error={votingError}
+        onRefresh={refreshVoting}
+        onSelectSession={selectVotingSession}
+        onCreateSession={createVotingSession}
+        onOpenSession={openVotingSession}
+        onCloseSession={closeVotingSession}
+        onRevealSession={revealVotingSession}
+        onCancelSession={cancelVotingSession}
+        onCastVote={castVote}
+        onRemoveVote={removeVote}
+        onCancel={onCloseVoting}
       />
 
       <ShareDialog

@@ -13,6 +13,7 @@ import { useBoardEditorShortcuts } from './boardEditor/hooks/useBoardEditorShort
 import { useBoardEditor } from './hooks/useBoardEditor';
 import { useBoardCapabilities } from './hooks/useBoardCapabilities';
 import { useBoardComments } from './hooks/useBoardComments';
+import { useBoardVoting } from './hooks/useBoardVoting';
 
 function getInitialInviteToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -297,6 +298,7 @@ const BoardEditorContent: React.FC<{
   const boardName = state?.meta?.name ?? 'Untitled board';
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isCommentsOpen, setIsCommentsOpen] = useState(false);
+  const [isVotingOpen, setIsVotingOpen] = useState(false);
   const capabilities = useBoardCapabilities({
     enabled: Boolean(boardId) && serverConfigured,
   });
@@ -305,6 +307,13 @@ const BoardEditorContent: React.FC<{
     enabled: Boolean(boardId) && serverConfigured && capabilities.features.supportsComments,
     authenticated: auth.authenticated,
     selectedObjectIds: state?.selectedObjectIds ?? [],
+  });
+  const voting = useBoardVoting({
+    boardId,
+    enabled: Boolean(boardId) && serverConfigured && capabilities.features.supportsVoting,
+    authenticated: auth.authenticated,
+    selectedObjectIds: state?.selectedObjectIds ?? [],
+    objects: state?.objects ?? [],
   });
 
   useEffect(() => {
@@ -346,6 +355,9 @@ const BoardEditorContent: React.FC<{
       isCommentsOpen={isCommentsOpen}
       onOpenComments={() => setIsCommentsOpen(true)}
       onCloseComments={() => setIsCommentsOpen(false)}
+      isVotingOpen={isVotingOpen}
+      onOpenVoting={() => setIsVotingOpen(true)}
+      onCloseVoting={() => setIsVotingOpen(false)}
       state={state}
       boardTypeDef={boardTypeDef}
       activeTool={activeTool}
@@ -406,6 +418,27 @@ const BoardEditorContent: React.FC<{
       resolveComment={comments.resolveComment}
       reopenComment={comments.reopenComment}
       deleteComment={comments.deleteComment}
+      votingEnabled={capabilities.features.supportsVoting}
+      votingAuthenticated={auth.authenticated}
+      votingSessions={voting.sessions}
+      votingSelectedSessionId={voting.selectedSessionId}
+      votingResults={voting.results}
+      votingAvailableTargets={voting.availableTargets}
+      votingSelectedTargets={voting.selectedTargets}
+      votingLocalVotesByTarget={voting.localVotesByTarget}
+      votingRemainingVotes={voting.remainingVotes}
+      votingLoading={voting.isLoading}
+      votingMutating={voting.isMutating}
+      votingError={voting.error}
+      refreshVoting={voting.refresh}
+      selectVotingSession={voting.selectSession}
+      createVotingSession={voting.createSession}
+      openVotingSession={voting.openSession}
+      closeVotingSession={voting.closeSession}
+      revealVotingSession={voting.revealSession}
+      cancelVotingSession={voting.cancelSession}
+      castVote={voting.castVote}
+      removeVote={voting.removeVote}
     />
   );
 };

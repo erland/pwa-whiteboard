@@ -23,6 +23,9 @@ type BoardEditorHeaderProps = {
   commentsEnabled?: boolean;
   commentsCount?: number;
   onOpenComments?: () => void;
+  votingEnabled?: boolean;
+  votingSessionsCount?: number;
+  onOpenVoting?: () => void;
   onOpenShare?: () => void;
 };
 
@@ -39,6 +42,9 @@ export const BoardEditorHeader: React.FC<BoardEditorHeaderProps> = ({
   commentsEnabled,
   commentsCount,
   onOpenComments,
+  votingEnabled,
+  votingSessionsCount,
+  onOpenVoting,
   onOpenShare,
 }) => {
   const status = collab?.status ?? 'disabled';
@@ -82,6 +88,17 @@ export const BoardEditorHeader: React.FC<BoardEditorHeaderProps> = ({
             title="Review comments"
           >
             💬 Comments{typeof commentsCount === 'number' ? ` (${commentsCount})` : ''}
+          </button>
+        )}
+        {votingEnabled && (
+          <button
+            type="button"
+            className="tool-button"
+            onClick={onOpenVoting}
+            disabled={!onOpenVoting}
+            title="Voting sessions"
+          >
+            🗳 Voting{typeof votingSessionsCount === 'number' ? ` (${votingSessionsCount})` : ''}
           </button>
         )}
         {canShare && (

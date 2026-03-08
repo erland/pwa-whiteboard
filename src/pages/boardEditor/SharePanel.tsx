@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { acceptInvite, createBoardInvite, validateInvite, type InvitePermission } from '../../api/invitesApi';
+import { createPublicationsApi, type BoardPublication, type BoardPublicationTargetType } from '../../api/publicationsApi';
 import type { ServerFeatureFlags } from '../../domain/serverFeatures';
 import { CapabilitySummary } from './CapabilitySummary';
 
@@ -33,6 +34,40 @@ function getInviteTokenFromUrl(): string | null {
   return null;
 }
 
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return '—';
+  const time = Date.parse(value);
+  if (Number.isNaN(time)) return value;
+  return new Date(time).toLocaleString();
+}
+
+function toDateTimeLocalValue(value: string | null | undefined): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (input: number) => String(input).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function fromDateTimeLocalValue(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const date = new Date(trimmed);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date.toISOString();
+}
+
+function getPublicationTokenFromUrl(): string | null {
+  if (typeof window === 'undefined') return null;
+  const url = new URL(window.location.href);
+  const q = url.searchParams.get('publication');
+  if (q) return q.trim();
+  const hash = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash;
+  const m = /(?:^|&)publication=([^&]+)/.exec(hash);
+  if (m?.[1]) return decodeURIComponent(m[1]).trim();
+  return null;
+}
+
 export const SharePanel: React.FC<SharePanelProps> = ({
   boardId,
   boardName,
@@ -57,15 +92,29 @@ export const SharePanel: React.FC<SharePanelProps> = ({
   const [accepting, setAccepting] = React.useState(false);
   const [accepted, setAccepted] = React.useState(false);
 
+  const [publications, setPublications] = React.useState<BoardPublication[]>([]);
+  const [isLoadingPublications, setIsLoadingPublications] = React.useState(false);
+  const [publicationError, setPublicationError] = React.useState<string | null>(null);
+  const [publicationTargetType, setPublicationTargetType] = React.useState<BoardPublicationTargetType>('board');
+  const [publicationSnapshotVersion, setPublicationSnapshotVersion] = React.useState('');
+  const [publicationAllowComments, setPublicationAllowComments] = React.useState(false);
+  const [publicationExpiresAt, setPublicationExpiresAt] = React.useState('');
+  const [isCreatingPublication, setIsCreatingPublication] = React.useState(false);
+  const [isRefreshingPublicationList, setIsRefreshingPublicationList] = React.useState(false);
+  const [activePublicationId, setActivePublicationId] = React.useState<string | null>(null);
+  const [lastCreatedPublicationUrl, setLastCreatedPublicationUrl] = React.useState<string | null>(null);
+  const [publicationUrlsById, setPublicationUrlsById] = React.useState<Record<string, string>>({});
+  const [lastCreatedPublicationCopied, setLastCreatedPublicationCopied] = React.useState(false);
+  const [lastResolvedPublicationId, setLastResolvedPublicationId] = React.useState<string | null>(null);
+
   const inviteToken = getInviteTokenFromUrl();
+  const publicationToken = getPublicationTokenFromUrl();
   const inviteLink = React.useMemo(() => {
     if (!inviteToken) return null;
     const url = new URL(getCurrentUrl());
     url.searchParams.set('invite', inviteToken);
     return url.toString();
   }, [inviteToken]);
-
-
 
   const effectiveFeatures = React.useMemo<ServerFeatureFlags>(
     () =>
@@ -88,6 +137,63 @@ export const SharePanel: React.FC<SharePanelProps> = ({
     url.hash = '';
     return url.toString();
   }, []);
+
+  const buildPublicationUrl = React.useCallback((token: string) => {
+    const url = new URL(getCurrentUrl());
+    url.searchParams.set('publication', token);
+    url.searchParams.delete('invite');
+    url.hash = '';
+    return url.toString();
+  }, []);
+
+  const loadPublications = React.useCallback(async (mode: 'initial' | 'refresh' = 'initial') => {
+    if (!effectiveFeatures.supportsPublications || !authenticated || isReadOnly) {
+      setPublications([]);
+      setPublicationError(null);
+      return;
+    }
+
+    if (mode === 'initial') setIsLoadingPublications(true);
+    else setIsRefreshingPublicationList(true);
+
+    try {
+      const listed = await createPublicationsApi().list(boardId);
+      setPublications(listed);
+      setPublicationError(null);
+    } catch (e: any) {
+      setPublicationError(String(e?.message ?? e));
+    } finally {
+      if (mode === 'initial') setIsLoadingPublications(false);
+      else setIsRefreshingPublicationList(false);
+    }
+  }, [authenticated, boardId, effectiveFeatures.supportsPublications, isReadOnly]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!publicationToken || !effectiveFeatures.supportsPublications) {
+      setLastResolvedPublicationId(null);
+      return;
+    }
+
+    createPublicationsApi()
+      .resolve(publicationToken)
+      .then((publication) => {
+        if (cancelled) return;
+        setLastResolvedPublicationId(publication.id);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLastResolvedPublicationId(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveFeatures.supportsPublications, publicationToken]);
+
+  React.useEffect(() => {
+    void loadPublications('initial');
+  }, [loadPublications]);
 
   // Validate invite token (informational) when the user is authenticated.
   React.useEffect(() => {
@@ -126,7 +232,6 @@ export const SharePanel: React.FC<SharePanelProps> = ({
       const created = await createBoardInvite({ boardId, permission });
       setLastCreatedInviteUrl(buildInviteUrl(created.token));
     } catch (e) {
-      // Surface as a simple alert for now; we can improve UX later.
       // eslint-disable-next-line no-alert
       alert(`Failed to create invite: ${String((e as any)?.message ?? e)}`);
     } finally {
@@ -152,7 +257,6 @@ export const SharePanel: React.FC<SharePanelProps> = ({
       await acceptInvite(inviteToken);
       setAccepted(true);
 
-      // Remove token from the URL to avoid leaking it.
       try {
         const url = new URL(getCurrentUrl());
         url.searchParams.delete('invite');
@@ -165,6 +269,85 @@ export const SharePanel: React.FC<SharePanelProps> = ({
       alert(`Failed to accept invite: ${String((e as any)?.message ?? e)}`);
     } finally {
       setAccepting(false);
+    }
+  };
+
+  const handleCreatePublication = async () => {
+    if (!authenticated || isReadOnly || !effectiveFeatures.supportsPublications) return;
+    setIsCreatingPublication(true);
+    setLastCreatedPublicationCopied(false);
+    setPublicationError(null);
+    try {
+      const parsedSnapshotVersion = publicationTargetType === 'snapshot'
+        ? Number.parseInt(publicationSnapshotVersion.trim(), 10)
+        : undefined;
+      if (
+        publicationTargetType === 'snapshot'
+        && (parsedSnapshotVersion == null || !Number.isFinite(parsedSnapshotVersion) || parsedSnapshotVersion <= 0)
+      ) {
+        throw new Error('Enter a valid snapshot version for snapshot publications.');
+      }
+      const created = await createPublicationsApi().create(boardId, {
+        targetType: publicationTargetType,
+        snapshotVersion: publicationTargetType === 'snapshot' ? parsedSnapshotVersion : undefined,
+        allowComments: publicationAllowComments,
+        expiresAt: fromDateTimeLocalValue(publicationExpiresAt),
+      });
+      const createdUrl = buildPublicationUrl(created.token);
+      setLastCreatedPublicationUrl(createdUrl);
+      setPublicationUrlsById((current) => ({ ...current, [created.publication.id]: createdUrl }));
+      setPublications((current) => [created.publication, ...current.filter((entry) => entry.id !== created.publication.id)]);
+      setPublicationTargetType('board');
+      setPublicationSnapshotVersion('');
+      setPublicationAllowComments(false);
+      setPublicationExpiresAt('');
+    } catch (e: any) {
+      setPublicationError(String(e?.message ?? e));
+    } finally {
+      setIsCreatingPublication(false);
+    }
+  };
+
+  const handleCopyPublicationLink = async (value: string | null) => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setLastCreatedPublicationCopied(true);
+      window.setTimeout(() => setLastCreatedPublicationCopied(false), 1200);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleRotatePublicationToken = async (publicationId: string) => {
+    if (!authenticated || isReadOnly) return;
+    setActivePublicationId(publicationId);
+    setPublicationError(null);
+    try {
+      const rotated = await createPublicationsApi().rotateToken(boardId, publicationId);
+      const rotatedUrl = buildPublicationUrl(rotated.token);
+      setLastCreatedPublicationUrl(rotatedUrl);
+      setPublicationUrlsById((current) => ({ ...current, [publicationId]: rotatedUrl }));
+      setPublications((current) => current.map((entry) => (entry.id === publicationId ? rotated.publication : entry)));
+    } catch (e: any) {
+      setPublicationError(String(e?.message ?? e));
+    } finally {
+      setActivePublicationId(null);
+    }
+  };
+
+  const handleRevokePublication = async (publicationId: string) => {
+    if (!authenticated || isReadOnly) return;
+    setActivePublicationId(publicationId);
+    setPublicationError(null);
+    try {
+      await createPublicationsApi().revoke(boardId, publicationId);
+      setPublicationUrlsById((current) => { const next = { ...current }; delete next[publicationId]; return next; });
+      await loadPublications('refresh');
+    } catch (e: any) {
+      setPublicationError(String(e?.message ?? e));
+    } finally {
+      setActivePublicationId(null);
     }
   };
 
@@ -209,6 +392,164 @@ export const SharePanel: React.FC<SharePanelProps> = ({
         isLoading={isCapabilitiesLoading}
         error={capabilitiesError}
       />
+
+      {effectiveFeatures.supportsPublications && (
+        <div className="share-section">
+          <div className="share-publication-header">
+            <div>
+              <div className="share-label">Publication links</div>
+              <div className="share-help">
+                Create read-only links for board-wide review or pin sharing to a specific snapshot version.
+              </div>
+            </div>
+            {authenticated && !isReadOnly && (
+              <button
+                type="button"
+                className="tool-button"
+                onClick={() => void loadPublications('refresh')}
+                disabled={isRefreshingPublicationList || isLoadingPublications}
+              >
+                {isRefreshingPublicationList ? 'Refreshing…' : 'Refresh list'}
+              </button>
+            )}
+          </div>
+
+          {publicationToken && (
+            <div className="share-help">
+              You opened this board using a publication link{lastResolvedPublicationId ? ` (${lastResolvedPublicationId})` : ''}.
+            </div>
+          )}
+
+          {!authenticated ? (
+            <div className="share-help">Sign in to create, rotate, and revoke publication links.</div>
+          ) : isReadOnly ? (
+            <div className="share-help">Publication management is unavailable while the board is open read-only.</div>
+          ) : (
+            <div className="share-publication-grid">
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span className="form-help">Target</span>
+                <select
+                  aria-label="Publication target"
+                  value={publicationTargetType}
+                  onChange={(e) => setPublicationTargetType(e.currentTarget.value as BoardPublicationTargetType)}
+                  disabled={isCreatingPublication}
+                >
+                  <option value="board">Live board</option>
+                  <option value="snapshot">Specific snapshot</option>
+                </select>
+              </label>
+
+              {publicationTargetType === 'snapshot' && (
+                <label style={{ display: 'grid', gap: 6 }}>
+                  <span className="form-help">Snapshot version</span>
+                  <input
+                    type="number"
+                    min={1}
+                    inputMode="numeric"
+                    aria-label="Snapshot version"
+                    value={publicationSnapshotVersion}
+                    onChange={(e) => setPublicationSnapshotVersion(e.currentTarget.value)}
+                    placeholder="e.g. 12"
+                    disabled={isCreatingPublication}
+                  />
+                </label>
+              )}
+
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span className="form-help">Expires at (optional)</span>
+                <input
+                  type="datetime-local"
+                  aria-label="Publication expiry"
+                  value={publicationExpiresAt}
+                  onChange={(e) => setPublicationExpiresAt(e.currentTarget.value)}
+                  disabled={isCreatingPublication}
+                />
+              </label>
+
+              <label className="share-checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={publicationAllowComments}
+                  onChange={(e) => setPublicationAllowComments(e.currentTarget.checked)}
+                  disabled={isCreatingPublication}
+                />
+                <span>Allow comments for published readers</span>
+              </label>
+
+              <button type="button" className="tool-button" onClick={handleCreatePublication} disabled={isCreatingPublication}>
+                {isCreatingPublication ? 'Creating…' : 'Create publication link'}
+              </button>
+            </div>
+          )}
+
+          {publicationError && <div className="share-help">Publication error: {publicationError}</div>}
+
+          {lastCreatedPublicationUrl && (
+            <div className="share-created-link-box">
+              <div className="share-help">Latest publication link (copy it now):</div>
+              <input type="text" readOnly value={lastCreatedPublicationUrl} aria-label="Latest publication link" />
+              <button type="button" className="tool-button" onClick={() => void handleCopyPublicationLink(lastCreatedPublicationUrl)}>
+                {lastCreatedPublicationCopied ? 'Copied!' : 'Copy publication link'}
+              </button>
+            </div>
+          )}
+
+          {authenticated && !isReadOnly && (
+            <div className="share-publication-list">
+              {isLoadingPublications ? (
+                <div className="share-help">Loading publication links…</div>
+              ) : publications.length === 0 ? (
+                <div className="share-help">No publication links created yet.</div>
+              ) : (
+                publications.map((publication) => {
+                  const isBusy = activePublicationId === publication.id;
+                  const shareUrl = publicationUrlsById[publication.id]
+                    ?? (lastResolvedPublicationId === publication.id && publicationToken ? buildPublicationUrl(publicationToken) : null);
+                  return (
+                    <div key={publication.id} className="share-publication-card" data-state={publication.state}>
+                      <div className="comment-card-header">
+                        <div>
+                          <strong>{publication.targetType === 'snapshot' ? `Snapshot v${publication.snapshotVersion ?? '—'}` : 'Live board'}</strong>
+                          <div className="share-help">
+                            State: {publication.state} · Comments: {publication.allowComments ? 'allowed' : 'read-only'}
+                          </div>
+                        </div>
+                        <span className="capability-chip" data-enabled={publication.state === 'active' ? 'true' : 'false'}>
+                          {publication.state}
+                        </span>
+                      </div>
+
+                      <div className="share-publication-meta">
+                        <span>Created {formatDateTime(publication.createdAt)}</span>
+                        <span>Updated {formatDateTime(publication.updatedAt)}</span>
+                        <span>Expires {formatDateTime(publication.expiresAt)}</span>
+                      </div>
+
+                      {shareUrl && (
+                        <input type="text" readOnly value={shareUrl} aria-label={`Publication link ${publication.id}`} />
+                      )}
+
+                      <div className="comment-card-actions">
+                        <button type="button" className="tool-button" onClick={() => void handleRotatePublicationToken(publication.id)} disabled={isBusy}>
+                          {isBusy ? 'Working…' : 'Rotate token'}
+                        </button>
+                        <button
+                          type="button"
+                          className="tool-button"
+                          onClick={() => void handleRevokePublication(publication.id)}
+                          disabled={isBusy || publication.state !== 'active'}
+                        >
+                          Revoke
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="share-section">
         <div className="share-label">Invite links</div>
@@ -259,11 +600,11 @@ export const SharePanel: React.FC<SharePanelProps> = ({
             </div>
             {effectiveFeatures.supportsPublications ? (
               <div className="share-help">
-                This server also advertises publication-link support, so the Share dialog can expand with public review links in a later step.
+                Publication-link support is available, so this dialog can issue read-only review links in addition to member invite links.
               </div>
             ) : (
               <div className="share-help">
-                This server has not advertised publication-link support, so future public sharing UI stays hidden/disabled.
+                This server has not advertised publication-link support, so public sharing UI stays hidden.
               </div>
             )}
 

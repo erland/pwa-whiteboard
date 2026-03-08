@@ -1140,6 +1140,45 @@ html {
   opacity: 0.85;
 }
 
+
+.share-publication-header,
+.share-publication-meta {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.share-publication-grid,
+.share-publication-list {
+  display: grid;
+  gap: 10px;
+}
+
+.share-publication-card,
+.share-created-link-box {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-panel-stronger);
+}
+
+.share-publication-card[data-state='revoked'],
+.share-publication-card[data-state='expired'] {
+  opacity: 0.85;
+}
+
+.share-checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+}
+
+
 .comment-thread-list {
   display: flex;
   flex-direction: column;

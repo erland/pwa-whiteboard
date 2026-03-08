@@ -26,6 +26,10 @@ type BoardEditorHeaderProps = {
   votingEnabled?: boolean;
   votingSessionsCount?: number;
   onOpenVoting?: () => void;
+  sharedTimerEnabled?: boolean;
+  sharedTimerLabel?: string | null;
+  sharedTimerDisplay?: string | null;
+  onOpenSharedTimer?: () => void;
   onOpenShare?: () => void;
 };
 
@@ -45,6 +49,10 @@ export const BoardEditorHeader: React.FC<BoardEditorHeaderProps> = ({
   votingEnabled,
   votingSessionsCount,
   onOpenVoting,
+  sharedTimerEnabled,
+  sharedTimerLabel,
+  sharedTimerDisplay,
+  onOpenSharedTimer,
   onOpenShare,
 }) => {
   const status = collab?.status ?? 'disabled';
@@ -99,6 +107,18 @@ export const BoardEditorHeader: React.FC<BoardEditorHeaderProps> = ({
             title="Voting sessions"
           >
             🗳 Voting{typeof votingSessionsCount === 'number' ? ` (${votingSessionsCount})` : ''}
+          </button>
+        )}
+        {sharedTimerEnabled && (
+          <button
+            type="button"
+            className="tool-button"
+            onClick={onOpenSharedTimer}
+            disabled={!onOpenSharedTimer}
+            title="Shared timer"
+          >
+            ⏱ {sharedTimerDisplay ? `Timer ${sharedTimerDisplay}` : 'Timer'}
+            {sharedTimerLabel ? ` · ${sharedTimerLabel}` : ''}
           </button>
         )}
         {canShare && (

@@ -14,6 +14,7 @@ import { useBoardEditor } from './hooks/useBoardEditor';
 import { useBoardCapabilities } from './hooks/useBoardCapabilities';
 import { useBoardComments } from './hooks/useBoardComments';
 import { useBoardVoting } from './hooks/useBoardVoting';
+import { useSharedTimer } from './hooks/useSharedTimer';
 
 function getInitialInviteToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -299,6 +300,7 @@ const BoardEditorContent: React.FC<{
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isCommentsOpen, setIsCommentsOpen] = useState(false);
   const [isVotingOpen, setIsVotingOpen] = useState(false);
+  const [isSharedTimerOpen, setIsSharedTimerOpen] = useState(false);
   const capabilities = useBoardCapabilities({
     enabled: Boolean(boardId) && serverConfigured,
   });
@@ -307,6 +309,13 @@ const BoardEditorContent: React.FC<{
     enabled: Boolean(boardId) && serverConfigured && capabilities.features.supportsComments,
     authenticated: auth.authenticated,
     selectedObjectIds: state?.selectedObjectIds ?? [],
+  });
+  const sharedTimer = useSharedTimer({
+    enabled: Boolean(boardId) && serverConfigured && capabilities.features.supportsSharedTimer,
+    connected: collab.enabled && collab.status === 'connected',
+    canControl: collab.enabled && collab.status === 'connected' && (collab.role === 'owner' || collab.role === 'editor'),
+    lastEphemeralMessage: collab.lastEphemeralMessage,
+    sendEphemeral: collab.sendEphemeral,
   });
   const voting = useBoardVoting({
     boardId,
@@ -358,6 +367,9 @@ const BoardEditorContent: React.FC<{
       isVotingOpen={isVotingOpen}
       onOpenVoting={() => setIsVotingOpen(true)}
       onCloseVoting={() => setIsVotingOpen(false)}
+      isSharedTimerOpen={isSharedTimerOpen}
+      onOpenSharedTimer={() => setIsSharedTimerOpen(true)}
+      onCloseSharedTimer={() => setIsSharedTimerOpen(false)}
       state={state}
       boardTypeDef={boardTypeDef}
       activeTool={activeTool}
@@ -439,6 +451,24 @@ const BoardEditorContent: React.FC<{
       cancelVotingSession={voting.cancelSession}
       castVote={voting.castVote}
       removeVote={voting.removeVote}
+      sharedTimerEnabled={capabilities.features.supportsSharedTimer}
+      sharedTimerConnected={sharedTimer.isConnected}
+      sharedTimerCanControl={sharedTimer.canControl}
+      sharedTimer={sharedTimer.timer}
+      sharedTimerLabel={sharedTimer.timer?.label ?? null}
+      sharedTimerDisplay={sharedTimer.formattedRemaining}
+      sharedTimerState={sharedTimer.timer?.state ?? null}
+      sharedTimerActive={Boolean(sharedTimer.timer)}
+      sharedTimerRemainingMs={sharedTimer.displayRemainingMs}
+      sharedTimerMutating={sharedTimer.isMutating}
+      sharedTimerError={sharedTimer.error}
+      clearSharedTimerError={sharedTimer.clearError}
+      startSharedTimer={sharedTimer.startTimer}
+      pauseSharedTimer={sharedTimer.pauseTimer}
+      resumeSharedTimer={sharedTimer.resumeTimer}
+      resetSharedTimer={sharedTimer.resetTimer}
+      cancelSharedTimer={sharedTimer.cancelTimer}
+      completeSharedTimer={sharedTimer.completeTimer}
     />
   );
 };

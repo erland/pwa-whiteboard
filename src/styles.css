@@ -1302,3 +1302,55 @@ html {
   align-items: center;
   gap: 8px;
 }
+
+
+.shared-timer-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-panel-strong);
+}
+
+.shared-timer-banner-readout,
+.timer-inline-readout,
+.timer-big-readout {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.shared-timer-banner-readout,
+.timer-inline-readout {
+  font-weight: 700;
+}
+
+.timer-big-readout {
+  font-size: 2rem;
+  font-weight: 800;
+}
+
+.timer-summary-grid {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.timer-summary-meta,
+.timer-form-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.timer-participant-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-panel-stronger);
+}

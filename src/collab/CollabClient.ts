@@ -8,6 +8,7 @@ import type {
   PresenceUser,
 } from '../../shared/protocol';
 import { parseAndValidateServerMessage } from '../../shared/protocol/validation';
+import type { JavaWhiteboardServerWsMessage, WsEphemeralMessage } from '../api/javaWhiteboardServerContract';
 
 export type CollabStatus = 'idle' | 'connecting' | 'connected' | 'error' | 'closed';
 
@@ -17,6 +18,7 @@ export type CollabClientHandlers = {
   onOp?: (msg: Extract<ServerToClientMessage, { type: 'op' }>) => void;
   onPresence?: (msg: Extract<ServerToClientMessage, { type: 'presence' }>) => void;
   onErrorMsg?: (msg: Extract<ServerToClientMessage, { type: 'error' }>) => void;
+  onEphemeral?: (msg: WsEphemeralMessage) => void;
 };
 
 export type CollabClientOptions = {
@@ -32,6 +34,52 @@ export type CollabClientOptions = {
 function generateClientOpId(): string {
   return 'cop_' + Math.random().toString(16).slice(2) + '_' + Date.now().toString(16);
 }
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeErrorCode(code: string): Extract<ServerToClientMessage, { type: 'error' }>['code'] {
+  const normalized = code.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
+  switch (normalized) {
+    case 'bad_request':
+    case 'unauthorized':
+    case 'forbidden':
+    case 'not_found':
+    case 'rate_limited':
+    case 'payload_too_large':
+    case 'server_error':
+    case 'board_too_large':
+    case 'stroke_too_long':
+    case 'text_too_long':
+      return normalized;
+    case 'feature_disabled':
+    case 'validation_error':
+      return 'bad_request';
+    default:
+      return 'server_error';
+  }
+}
+
+function parseJavaServerFallback(raw: string): JavaWhiteboardServerWsMessage | null {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed) || typeof parsed.type !== 'string') return null;
+    if (parsed.type === 'ephemeral'
+      && typeof parsed.boardId === 'string'
+      && typeof parsed.from === 'string'
+      && typeof parsed.eventType === 'string') {
+      return parsed as unknown as WsEphemeralMessage;
+    }
+    if (parsed.type === 'error' && typeof parsed.code === 'string' && typeof parsed.message === 'string') {
+      return parsed as unknown as JavaWhiteboardServerWsMessage;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 
 export class CollabClient {
   private ws: WebSocket | null = null;
@@ -85,41 +133,61 @@ export class CollabClient {
       if (!raw) return;
 
       const res = parseAndValidateServerMessage(raw);
-      if (!res.ok) return;
+      if (res.ok) {
+        const msg = res.value;
+        switch (msg.type) {
+          case 'joined':
+            this.setStatus('connected');
+            this.handlers.onJoined?.(msg);
+            break;
+          case 'op':
+            this.handlers.onOp?.(msg);
+            break;
+          case 'presence':
+            this.handlers.onPresence?.(msg);
+            break;
+          case 'error': {
+            const errText = `${msg.code}: ${msg.message}`;
+            this.handlers.onErrorMsg?.(msg);
 
-      const msg = res.value;
-      switch (msg.type) {
-        case 'joined':
-          this.setStatus('connected');
-          this.handlers.onJoined?.(msg);
-          break;
-        case 'op':
-          this.handlers.onOp?.(msg);
-          break;
-        case 'presence':
-          this.handlers.onPresence?.(msg);
-          break;
-        case 'error': {
-          const errText = `${msg.code}: ${msg.message}`;
-
-          // Non-fatal errors are "soft" (e.g. rate-limits, payload too large). Keep the
-          // connection alive and let the UI show a notice. Only fatal errors flip
-          // the connection status to error and close the socket.
-          this.handlers.onErrorMsg?.(msg);
-
-          if (msg.fatal) {
-            this.setStatus('error', errText);
-            try {
-              this.ws?.close();
-            } catch {
-              // ignore
+            if (msg.fatal) {
+              this.setStatus('error', errText);
+              try {
+                this.ws?.close();
+              } catch {
+                // ignore
+              }
             }
+            break;
           }
-          break;
+          case 'pong':
+            break;
         }
-        case 'pong':
-          // ignore
-          break;
+        return;
+      }
+
+      const fallback = parseJavaServerFallback(raw);
+      if (!fallback) return;
+
+      if (fallback.type === 'ephemeral') {
+        this.handlers.onEphemeral?.(fallback);
+        return;
+      }
+
+      if (fallback.type === 'error') {
+        const code = normalizeErrorCode(String(fallback.code));
+        const message = String(fallback.message);
+        const fatal = Boolean((fallback as any).fatal);
+        const errText = `${code}: ${message}`;
+        this.handlers.onErrorMsg?.({ type: 'error', code, message, fatal });
+        if (fatal) {
+          this.setStatus('error', errText);
+          try {
+            this.ws?.close();
+          } catch {
+            // ignore
+          }
+        }
       }
     };
 
@@ -168,10 +236,14 @@ export class CollabClient {
   }
 
   sendPresence(boardId: string, presence: PresencePayload) {
-    // Current server protocol does not accept client-side presence payloads.
-    // Keep the method for UI compatibility; it is intentionally a no-op.
     void boardId;
     void presence;
+  }
+
+  sendEphemeral(eventType: WsEphemeralMessage['eventType'], payload: Record<string, unknown>) {
+    if (!this.ws || this.status !== 'connected') return false;
+    this.ws.send(JSON.stringify({ type: 'ephemeral', eventType, payload }));
+    return true;
   }
 
   private setStatus(next: CollabStatus, error?: string) {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, type MutableRefObject, type Dispatch, type SetStateAction } from 'react';
 import type { BoardEvent } from '../../../domain/types';
 import type { BoardRole, PresencePayload, PresenceUser } from '../../../../shared/protocol';
+import type { WsEphemeralMessage } from '../../../api/javaWhiteboardServerContract';
 import {
   createJoinedPresenceState,
   createPresenceMessageState,
@@ -27,6 +28,7 @@ export type CollabConnectionLifecycleArgs = {
   setRole: Dispatch<SetStateAction<BoardRole | undefined>>;
   setUsers: Dispatch<SetStateAction<PresenceUser[]>>;
   setPresenceByUserId: Dispatch<SetStateAction<Record<string, PresencePayload>>>;
+  handleEphemeralMessage: (msg: WsEphemeralMessage) => void;
   clearFatalError: () => void;
   setFatalError: (error?: string) => void;
   clearAllNotices: () => void;
@@ -54,6 +56,7 @@ export function useCollabConnectionLifecycle({
   setRole,
   setUsers,
   setPresenceByUserId,
+  handleEphemeralMessage,
   clearFatalError,
   setFatalError,
   clearAllNotices,
@@ -138,6 +141,9 @@ export function useCollabConnectionLifecycle({
           setUsers(presenceState.users);
           setPresenceByUserId(presenceState.presenceByUserId);
         },
+        onEphemeral: (msg) => {
+          handleEphemeralMessage(msg);
+        },
         onErrorMsg: (msg) => {
           const err = `${msg.code}: ${msg.message}`;
           if (msg.fatal) {
@@ -185,9 +191,11 @@ export function useCollabConnectionLifecycle({
     setRole,
     setUsers,
     setPresenceByUserId,
+  handleEphemeralMessage,
     clearFatalError,
     setFatalError,
     clearAllNotices,
+    handleEphemeralMessage,
     showSoftError,
     clientRef,
   ]);

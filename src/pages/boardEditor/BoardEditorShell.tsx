@@ -13,6 +13,7 @@ import { RemoteCursorsOverlay } from './RemoteCursorsOverlay';
 import { ShareDialog } from './ShareDialog';
 import { CommentsDialog } from './CommentsDialog';
 import { VotingDialog } from './VotingDialog';
+import { SharedTimerDialog } from './SharedTimerDialog';
 import type { ServerFeatureFlags } from '../../domain/serverFeatures';
 import type { BoardComment } from '../../api/commentsApi';
 import type { VotingResults, VotingSession } from '../../api/votingApi';
@@ -38,6 +39,9 @@ export type BoardEditorShellProps = {
   isVotingOpen: boolean;
   onOpenVoting: () => void;
   onCloseVoting: () => void;
+  isSharedTimerOpen: boolean;
+  onOpenSharedTimer: () => void;
+  onCloseSharedTimer: () => void;
   state: WhiteboardState | null | undefined;
   boardTypeDef: any;
   activeTool: any;
@@ -130,6 +134,24 @@ export type BoardEditorShellProps = {
   cancelVotingSession: (sessionId: string) => Promise<void>;
   castVote: (targetRef: string) => Promise<void>;
   removeVote: (targetRef: string) => Promise<void>;
+  sharedTimerEnabled: boolean;
+  sharedTimerConnected: boolean;
+  sharedTimerCanControl: boolean;
+  sharedTimer: import('../../api/timerApi').SharedTimerState | null;
+  sharedTimerLabel: string | null;
+  sharedTimerDisplay: string;
+  sharedTimerState: string | null;
+  sharedTimerActive: boolean;
+  sharedTimerRemainingMs: number;
+  sharedTimerMutating: boolean;
+  sharedTimerError: string | null;
+  clearSharedTimerError: () => void;
+  startSharedTimer: (input: { durationMinutes: number; label?: string | null }) => void;
+  pauseSharedTimer: () => void;
+  resumeSharedTimer: () => void;
+  resetSharedTimer: (durationMinutes?: number) => void;
+  cancelSharedTimer: () => void;
+  completeSharedTimer: () => void;
 };
 
 export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
@@ -150,6 +172,9 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
   isVotingOpen,
   onOpenVoting,
   onCloseVoting,
+  isSharedTimerOpen,
+  onOpenSharedTimer,
+  onCloseSharedTimer,
   state,
   boardTypeDef,
   activeTool,
@@ -230,6 +255,24 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
   cancelVotingSession,
   castVote,
   removeVote,
+  sharedTimerEnabled,
+  sharedTimerConnected,
+  sharedTimerCanControl,
+  sharedTimer,
+  sharedTimerLabel,
+  sharedTimerDisplay,
+  sharedTimerState,
+  sharedTimerActive,
+  sharedTimerRemainingMs,
+  sharedTimerMutating,
+  sharedTimerError,
+  clearSharedTimerError,
+  startSharedTimer,
+  pauseSharedTimer,
+  resumeSharedTimer,
+  resetSharedTimer,
+  cancelSharedTimer,
+  completeSharedTimer,
 }) => {
   return (
     <section className="page page-board-editor">
@@ -275,6 +318,10 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
         votingEnabled={votingEnabled}
         votingSessionsCount={votingSessions.length}
         onOpenVoting={onOpenVoting}
+        sharedTimerEnabled={sharedTimerEnabled}
+        sharedTimerLabel={sharedTimerLabel}
+        sharedTimerDisplay={sharedTimerActive ? sharedTimerDisplay : null}
+        onOpenSharedTimer={onOpenSharedTimer}
         canDelete={canCopy && !isReadOnly}
         canCopy={canCopy}
         canPaste={canPaste}
@@ -339,6 +386,16 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
           {collab.enabled && collab.noticeText && (
             <div className="collab-notice" role="status" aria-live="polite">
               {collab.noticeText}
+            </div>
+          )}
+
+          {sharedTimerEnabled && sharedTimerActive && (
+            <div className="shared-timer-banner" role="status" aria-live="polite">
+              <div>
+                <strong>{sharedTimerLabel || 'Shared timer'}</strong>
+                <span> · {sharedTimerState || 'running'}</span>
+              </div>
+              <div className="shared-timer-banner-readout">{sharedTimerDisplay}</div>
             </div>
           )}
 
@@ -441,6 +498,27 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
         onCastVote={castVote}
         onRemoveVote={removeVote}
         onCancel={onCloseVoting}
+      />
+
+
+      <SharedTimerDialog
+        isOpen={isSharedTimerOpen}
+        enabled={sharedTimerEnabled}
+        connected={sharedTimerConnected}
+        canControl={sharedTimerCanControl}
+        timer={sharedTimer}
+        displayRemainingMs={sharedTimerRemainingMs}
+        formattedRemaining={sharedTimerDisplay}
+        isMutating={sharedTimerMutating}
+        error={sharedTimerError}
+        onClearError={clearSharedTimerError}
+        onStart={startSharedTimer}
+        onPause={pauseSharedTimer}
+        onResume={resumeSharedTimer}
+        onReset={resetSharedTimer}
+        onCancelTimer={cancelSharedTimer}
+        onComplete={completeSharedTimer}
+        onCancel={onCloseSharedTimer}
       />
 
       <ShareDialog

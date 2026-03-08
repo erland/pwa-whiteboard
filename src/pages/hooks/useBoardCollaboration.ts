@@ -12,6 +12,7 @@ import { normalizeQueryToken, resolveCollabJoinAuth } from './collab/collabJoinA
 import { useCollabConnectionLifecycle } from './collab/useCollabConnectionLifecycle';
 import { useCollabNotices } from './collab/useCollabNotices';
 import { CollabClient } from '../../collab/CollabClient';
+import type { WsEphemeralMessage } from '../../api/javaWhiteboardServerContract';
 
 export type UseBoardCollaborationArgs = {
   boardId: string | undefined;
@@ -42,6 +43,8 @@ export type UseBoardCollaborationResult = {
   selfUserId: string;
   sendOp: (event: BoardEvent) => void;
   sendPresence: (presence: PresencePayload) => void;
+  sendEphemeral: (eventType: WsEphemeralMessage['eventType'], payload: Record<string, unknown>) => boolean;
+  lastEphemeralMessage: WsEphemeralMessage | null;
 };
 
 export function useBoardCollaboration({
@@ -91,6 +94,7 @@ export function useBoardCollaboration({
   const [users, setUsers] = useState<PresenceUser[]>([]);
   const [presenceByUserId, setPresenceByUserId] = useState<Record<string, PresencePayload>>({});
   const [cooldownUntil, setCooldownUntil] = useState<number>(0);
+  const [lastEphemeralMessage, setLastEphemeralMessage] = useState<WsEphemeralMessage | null>(null);
 
   const clientRef = useRef<CollabClient | null>(null);
 
@@ -128,6 +132,10 @@ export function useBoardCollaboration({
   }, [status]);
 
   useEffect(() => {
+    setLastEphemeralMessage(null);
+  }, [boardId, enabled]);
+
+  useEffect(() => {
     if (!cooldownUntil) return;
     const now = Date.now();
     if (cooldownUntil <= now) return;
@@ -159,6 +167,7 @@ export function useBoardCollaboration({
     setFatalError,
     clearAllNotices,
     showSoftError,
+    handleEphemeralMessage: setLastEphemeralMessage,
     clientRef,
   });
 
@@ -178,6 +187,10 @@ export function useBoardCollaboration({
     clientRef,
   });
 
+  const sendEphemeral = (eventType: WsEphemeralMessage['eventType'], payload: Record<string, unknown>) => {
+    return clientRef.current?.sendEphemeral(eventType, payload) ?? false;
+  };
+
   return {
     enabled,
     status,
@@ -193,5 +206,7 @@ export function useBoardCollaboration({
     selfUserId,
     sendOp,
     sendPresence,
+    sendEphemeral,
+    lastEphemeralMessage,
   };
 }

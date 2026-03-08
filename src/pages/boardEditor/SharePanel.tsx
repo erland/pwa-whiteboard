@@ -1,12 +1,17 @@
 import React from 'react';
 import { useAuth } from '../../auth/AuthContext';
-import { acceptInvite, createBoardInvite, validateInvite, type InvitePermission, type InvitePermissionInput } from '../../api/invitesApi';
+import { acceptInvite, createBoardInvite, validateInvite, type InvitePermission } from '../../api/invitesApi';
+import type { ServerFeatureFlags } from '../../domain/serverFeatures';
+import { CapabilitySummary } from './CapabilitySummary';
 
 type SharePanelProps = {
   boardId: string;
   boardName?: string;
   hideTitle?: boolean;
   isReadOnly?: boolean;
+  features?: ServerFeatureFlags;
+  isCapabilitiesLoading?: boolean;
+  capabilitiesError?: string | null;
 };
 
 function getCurrentUrl(): string {
@@ -28,7 +33,15 @@ function getInviteTokenFromUrl(): string | null {
   return null;
 }
 
-export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName, hideTitle, isReadOnly = false }) => {
+export const SharePanel: React.FC<SharePanelProps> = ({
+  boardId,
+  boardName,
+  hideTitle,
+  isReadOnly = false,
+  features,
+  isCapabilitiesLoading = false,
+  capabilitiesError = null,
+}) => {
   const { configured, authenticated, displayName, login, logout } = useAuth();
 
   const [createRole, setCreateRole] = React.useState<'viewer' | 'editor'>('viewer');
@@ -51,6 +64,23 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName, hide
     url.searchParams.set('invite', inviteToken);
     return url.toString();
   }, [inviteToken]);
+
+
+
+  const effectiveFeatures = React.useMemo<ServerFeatureFlags>(
+    () =>
+      features ?? {
+        apiVersion: '',
+        wsProtocolVersion: '',
+        capabilities: [],
+        supportsComments: false,
+        supportsVoting: false,
+        supportsPublications: false,
+        supportsSharedTimer: false,
+        supportsReactions: false,
+      },
+    [features]
+  );
 
   const buildInviteUrl = React.useCallback((token: string) => {
     const url = new URL(getCurrentUrl());
@@ -173,6 +203,13 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName, hide
         </div>
       </div>
 
+      <CapabilitySummary
+        hideTitle={hideTitle}
+        features={effectiveFeatures}
+        isLoading={isCapabilitiesLoading}
+        error={capabilitiesError}
+      />
+
       <div className="share-section">
         <div className="share-label">Invite links</div>
 
@@ -220,6 +257,15 @@ export const SharePanel: React.FC<SharePanelProps> = ({ boardId, boardName, hide
               Create an invite link for this board. (Board: <code>{boardId}</code>
               {boardName ? ` — ${boardName}` : ''})
             </div>
+            {effectiveFeatures.supportsPublications ? (
+              <div className="share-help">
+                This server also advertises publication-link support, so the Share dialog can expand with public review links in a later step.
+              </div>
+            ) : (
+              <div className="share-help">
+                This server has not advertised publication-link support, so future public sharing UI stays hidden/disabled.
+              </div>
+            )}
 
             {!authenticated ? (
               <div className="share-help">Sign in to create invites.</div>

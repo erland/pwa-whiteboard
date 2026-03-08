@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { SharePanel } from './SharePanel';
+import type { ServerFeatureFlags } from '../../domain/serverFeatures';
 
 type Props = {
   isOpen: boolean;
@@ -7,10 +8,23 @@ type Props = {
   boardName: string;
   inviteLink?: string;
   isReadOnly?: boolean;
+  features?: ServerFeatureFlags;
+  isCapabilitiesLoading?: boolean;
+  capabilitiesError?: string | null;
   onCancel: () => void;
 };
 
-export const ShareDialog: React.FC<Props> = ({ isOpen, boardId, boardName, inviteLink, isReadOnly, onCancel }) => {
+export const ShareDialog: React.FC<Props> = ({
+  isOpen,
+  boardId,
+  boardName,
+  inviteLink,
+  isReadOnly,
+  features,
+  isCapabilitiesLoading,
+  capabilitiesError,
+  onCancel,
+}) => {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -54,8 +68,18 @@ export const ShareDialog: React.FC<Props> = ({ isOpen, boardId, boardName, invit
   // Avoid re-rendering the panel while the dialog is closed.
   const panel = useMemo(() => {
     if (!isOpen) return null;
-    return <SharePanel boardId={boardId} boardName={boardName} hideTitle isReadOnly={isReadOnly} />;
-  }, [isOpen, boardId, boardName, isReadOnly]);
+    return (
+      <SharePanel
+        boardId={boardId}
+        boardName={boardName}
+        hideTitle
+        isReadOnly={isReadOnly}
+        features={features}
+        isCapabilitiesLoading={isCapabilitiesLoading}
+        capabilitiesError={capabilitiesError}
+      />
+    );
+  }, [isOpen, boardId, boardName, isReadOnly, features, isCapabilitiesLoading, capabilitiesError]);
 
   if (!isOpen) return null;
 

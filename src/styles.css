@@ -1081,3 +1081,36 @@ html {
   color: #475569;
   font-size: 0.95rem;
 }
+
+
+.feature-gate-banner {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-border, rgba(255,255,255,0.12));
+  border-radius: 10px;
+  background: var(--panel-bg-elevated, rgba(255,255,255,0.04));
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.capability-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.capability-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border, rgba(255,255,255,0.12));
+  background: var(--panel-bg-elevated, rgba(255,255,255,0.04));
+  font-size: 12px;
+}
+
+.capability-chip[data-enabled='true'] {
+  font-weight: 600;
+}

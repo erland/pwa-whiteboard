@@ -11,6 +11,7 @@ import { BoardInfoPanel } from './BoardInfoPanel';
 import { HistoryAndViewPanel } from './HistoryAndViewPanel';
 import { RemoteCursorsOverlay } from './RemoteCursorsOverlay';
 import { ShareDialog } from './ShareDialog';
+import type { ServerFeatureFlags } from '../../domain/serverFeatures';
 
 const CANVAS_WIDTH = 960;
 const CANVAS_HEIGHT = 540;
@@ -80,6 +81,9 @@ export type BoardEditorShellProps = {
   };
   isReadOnly: boolean;
   handleCursorWorldMove: (pos: { x: number; y: number }) => void;
+  features: ServerFeatureFlags;
+  isCapabilitiesLoading: boolean;
+  capabilitiesError: string | null;
 };
 
 export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
@@ -135,6 +139,9 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
   collab,
   isReadOnly,
   handleCursorWorldMove,
+  features,
+  isCapabilitiesLoading,
+  capabilitiesError,
 }) => {
   return (
     <section className="page page-board-editor">
@@ -143,6 +150,24 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
           {acceptingInvite && 'Accepting invite…'}
           {inviteError && `Invite error: ${inviteError}`}
           {inviteAccepted && !acceptingInvite && !inviteError && 'Invite accepted.'}
+        </div>
+      )}
+
+      {serverConfigured && (
+        <div className="feature-gate-banner" role="status" aria-live="polite">
+          {isCapabilitiesLoading
+            ? 'Checking which server collaboration features are enabled…'
+            : capabilitiesError
+              ? `Server feature discovery unavailable: ${capabilitiesError}`
+              : `Server features: ${[
+                  features.supportsComments ? 'comments' : null,
+                  features.supportsVoting ? 'voting' : null,
+                  features.supportsPublications ? 'publications' : null,
+                  features.supportsSharedTimer ? 'shared timer' : null,
+                  features.supportsReactions ? 'reactions' : null,
+                ]
+                  .filter(Boolean)
+                  .join(', ') || 'none advertised'}`}
         </div>
       )}
 
@@ -280,7 +305,11 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
         isOpen={isShareOpen}
         boardId={boardId}
         boardName={boardName}
+        inviteLink={inviteToken ? `${window.location.origin}/board/${boardId}?invite=${encodeURIComponent(inviteToken)}` : undefined}
         isReadOnly={isReadOnly}
+        features={features}
+        isCapabilitiesLoading={isCapabilitiesLoading}
+        capabilitiesError={capabilitiesError}
         onCancel={onCloseShare}
       />
     </section>

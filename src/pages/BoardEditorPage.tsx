@@ -11,6 +11,7 @@ import { InviteAcceptanceGate } from './boardEditor/gates/InviteAcceptanceGate';
 import { InviteChoiceGate } from './boardEditor/gates/InviteChoiceGate';
 import { useBoardEditorShortcuts } from './boardEditor/hooks/useBoardEditorShortcuts';
 import { useBoardEditor } from './hooks/useBoardEditor';
+import { useBoardCapabilities } from './hooks/useBoardCapabilities';
 
 function getInitialInviteToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -292,6 +293,9 @@ const BoardEditorContent: React.FC<{
 
   const boardName = state?.meta?.name ?? 'Untitled board';
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const capabilities = useBoardCapabilities({
+    enabled: Boolean(boardId) && serverConfigured,
+  });
 
   useEffect(() => {
     if (!persistedInviteAccess) return;
@@ -371,6 +375,9 @@ const BoardEditorContent: React.FC<{
       collab={collab}
       isReadOnly={isReadOnly}
       handleCursorWorldMove={handleCursorWorldMove}
+      features={capabilities.features}
+      isCapabilitiesLoading={capabilities.isLoading}
+      capabilitiesError={capabilities.error}
     />
   );
 };

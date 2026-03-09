@@ -8,6 +8,7 @@ const mockUseAuth = jest.fn();
 const mockValidateInvite = jest.fn();
 const mockAcceptInvite = jest.fn();
 const mockUseBoardEditor = jest.fn();
+const mockResolvePublication = jest.fn();
 const mockSaveInvitedBoard = jest.fn();
 const mockGetInvitedBoard = jest.fn();
 
@@ -23,6 +24,12 @@ jest.mock('../../config/server', () => ({
 jest.mock('../../api/invitesApi', () => ({
   validateInvite: (...args: unknown[]) => mockValidateInvite(...args),
   acceptInvite: (...args: unknown[]) => mockAcceptInvite(...args),
+}));
+
+jest.mock('../../api/publicationsApi', () => ({
+  createPublicationsApi: () => ({
+    resolve: (...args: unknown[]) => mockResolvePublication(...args),
+  }),
 }));
 
 jest.mock('../hooks/useBoardEditor', () => ({
@@ -43,6 +50,8 @@ jest.mock('../boardEditor/BoardEditorShell', () => ({
       <div data-testid="shell-invite-token">{props.inviteToken ?? ''}</div>
       <div data-testid="shell-invite-accepted">{String(Boolean(props.inviteAccepted))}</div>
       <div data-testid="shell-invite-error">{props.inviteError ?? ''}</div>
+      <div data-testid="shell-access-mode">{props.accessMode ?? ''}</div>
+      <div data-testid="shell-publication-id">{props.publicationSession?.id ?? ''}</div>
     </div>
   ),
 }));
@@ -89,9 +98,21 @@ describe('BoardEditorPage real workflow verification', () => {
     mockAcceptInvite.mockReset();
     mockUseAuth.mockReset();
     mockUseBoardEditor.mockReset();
+    mockResolvePublication.mockReset();
     mockSaveInvitedBoard.mockReset();
     mockGetInvitedBoard.mockReset();
     mockGetInvitedBoard.mockResolvedValue(null);
+    mockResolvePublication.mockResolvedValue({
+      id: 'pub-1',
+      boardId: 'b-1',
+      snapshotVersion: 7,
+      targetType: 'snapshot',
+      state: 'active',
+      allowComments: true,
+      createdAt: '2026-03-08T10:00:00Z',
+      updatedAt: '2026-03-08T10:00:00Z',
+      expiresAt: null,
+    });
 
     mockUseBoardEditor.mockReturnValue({
       state: { meta: { name: 'Board A' }, selectedObjectIds: [], viewport: { x: 0, y: 0, zoom: 1 } },
@@ -175,7 +196,6 @@ describe('BoardEditorPage real workflow verification', () => {
     }));
   });
 
-
   test('guest re-entry without an invite query reuses stored invited-board access metadata', async () => {
     mockUseAuth.mockReturnValue({
       configured: true,
@@ -256,5 +276,26 @@ describe('BoardEditorPage real workflow verification', () => {
       permission: 'editor',
       expiresAt: '2026-03-08T10:00:00Z',
     }));
+  });
+
+  test('publication workflow resolves the token and opens the editor in publication read-only mode', async () => {
+    mockUseAuth.mockReturnValue({
+      configured: true,
+      authenticated: false,
+      accessToken: null,
+      displayName: null,
+      subject: null,
+      login: jest.fn(),
+      logout: jest.fn(),
+      refreshFromStorage: jest.fn(),
+    });
+
+    renderAt('http://localhost/board/b-1?publication=pub-token-1');
+
+    await waitFor(() => expect(mockResolvePublication).toHaveBeenCalledWith('pub-token-1'));
+    await waitFor(() => expect(screen.getByTestId('board-editor-shell')).toBeInTheDocument());
+
+    expect(screen.getByTestId('shell-access-mode')).toHaveTextContent('publication');
+    expect(screen.getByTestId('shell-publication-id')).toHaveTextContent('pub-1');
   });
 });

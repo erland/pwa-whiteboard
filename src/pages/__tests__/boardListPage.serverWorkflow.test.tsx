@@ -9,6 +9,7 @@ const mockGetLocalBoardsRepository = jest.fn();
 const mockGetRemoteBoardsRepository = jest.fn();
 const mockGetInvitedBoardsRepository = jest.fn();
 const mockNavigate = jest.fn();
+const mockResolvePublication = jest.fn();
 
 jest.mock("../../auth/AuthContext", () => ({
   useAuth: () => mockUseAuth(),
@@ -26,6 +27,13 @@ jest.mock("../../infrastructure/localStorageBoardsRepository", () => ({
 
 jest.mock("../../infrastructure/localStorageInvitedBoardsRepository", () => ({
   getInvitedBoardsRepository: () => mockGetInvitedBoardsRepository(),
+}));
+
+
+jest.mock("../../api/publicationsApi", () => ({
+  createPublicationsApi: () => ({
+    resolve: (...args: unknown[]) => mockResolvePublication(...args),
+  }),
 }));
 
 jest.mock("../../infrastructure/localStorageWhiteboardRepository", () => ({
@@ -50,6 +58,7 @@ describe("BoardListPage server workflow verification", () => {
     mockGetRemoteBoardsRepository.mockReset();
     mockGetInvitedBoardsRepository.mockReset();
     mockNavigate.mockReset();
+    mockResolvePublication.mockReset();
   });
 
   test("server-backed authenticated workflow keeps local drafts visible without uploading them", async () => {
@@ -200,4 +209,34 @@ describe("BoardListPage server workflow verification", () => {
     expect(login).toHaveBeenCalledTimes(1);
     expect(mockGetRemoteBoardsRepository).not.toHaveBeenCalled();
   });
+
+  test("root publication links resolve and redirect to the board route", async () => {
+    mockUseAuth.mockReturnValue({
+      configured: true,
+      authenticated: false,
+      login: jest.fn(),
+    });
+    mockResolvePublication.mockResolvedValue({ boardId: 'pub-board-1' });
+    mockGetLocalBoardsRepository.mockReturnValue({
+      listBoards: jest.fn().mockResolvedValue([]),
+      createBoard: jest.fn(),
+      renameBoard: jest.fn(),
+      deleteBoard: jest.fn(),
+    });
+    mockGetInvitedBoardsRepository.mockReturnValue({
+      listInvitedBoards: jest.fn().mockResolvedValue([]),
+    });
+
+    window.history.replaceState({}, '', 'http://localhost/?publication=pub-token-1');
+
+    render(
+      <MemoryRouter initialEntries={['/?publication=pub-token-1']}>
+        <BoardListPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(mockResolvePublication).toHaveBeenCalledWith('pub-token-1'));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/board/pub-board-1?publication=pub-token-1', { replace: true }));
+  });
+
 });

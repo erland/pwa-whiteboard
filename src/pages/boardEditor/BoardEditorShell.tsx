@@ -17,6 +17,7 @@ import { FacilitationDialog, type FacilitationTab } from './FacilitationDialog';
 import type { ServerFeatureFlags } from '../../domain/serverFeatures';
 import type { BoardComment } from '../../api/commentsApi';
 import type { VotingResults, VotingSession } from '../../api/votingApi';
+import type { BoardAccessMode, PublicationSession } from '../hooks/publicationSession';
 
 const CANVAS_WIDTH = 960;
 const CANVAS_HEIGHT = 540;
@@ -25,6 +26,8 @@ export type BoardEditorShellProps = {
   boardId: string;
   boardName: string;
   inviteToken: string | null;
+  accessMode: BoardAccessMode;
+  publicationSession: PublicationSession | null;
   serverConfigured: boolean;
   oidcConfigured: boolean;
   acceptingInvite: boolean;
@@ -161,6 +164,8 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
   boardId,
   boardName,
   inviteToken,
+  accessMode,
+  publicationSession,
   serverConfigured,
   oidcConfigured,
   acceptingInvite,
@@ -290,6 +295,14 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
         </div>
       )}
 
+      {accessMode === 'publication' && publicationSession && (
+        <div className="feature-gate-banner" role="status" aria-live="polite">
+          Publication mode: read-only {publicationSession.targetType === 'snapshot'
+            ? `snapshot v${publicationSession.snapshotVersion ?? '—'}`
+            : 'live board'} · Comments {publicationSession.allowComments ? 'allowed by link' : 'read-only'}
+        </div>
+      )}
+
       {serverConfigured && (
         <div className="feature-gate-banner" role="status" aria-live="polite">
           {isCapabilitiesLoading
@@ -309,7 +322,7 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
       )}
 
       <BoardEditorHeader
-        onOpenShare={onOpenShare}
+        onOpenShare={accessMode === 'publication' ? undefined : onOpenShare}
         collab={{
           status: collab.enabled ? collab.status : 'disabled',
           role: collab.role,
@@ -359,6 +372,7 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
 
           <ExportImportPanel
             canExport={!!state}
+            isReadOnly={isReadOnly}
             onExportJson={handleExportJson}
             onExportPng={handleExportPng}
             onImportClick={handleImportClick}

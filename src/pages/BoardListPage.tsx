@@ -1,6 +1,7 @@
 import React from 'react';
 import { isWhiteboardServerConfigured } from '../config/server';
 import { useNavigate } from 'react-router-dom';
+import { createPublicationsApi } from '../api/publicationsApi';
 import { useAuth } from '../auth/AuthContext';
 import { getBoardType } from '../whiteboard/boardTypes';
 import { BoardListHeader } from './boardList/components/BoardListHeader';
@@ -16,6 +17,45 @@ export const BoardListPage: React.FC = () => {
   const serverConfigured = isWhiteboardServerConfigured();
 
   const hasLocalDraftsInServerMode = serverConfigured && model.boardSections.some((section) => section.id === 'local');
+
+  const [publicationRedirectState, setPublicationRedirectState] = React.useState<{ loading: boolean; error: string | null }>({ loading: false, error: null });
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined' || !serverConfigured) return;
+    let cancelled = false;
+    let token: string | null = null;
+    try {
+      const url = new URL(window.location.href);
+      token = url.searchParams.get('publication')?.trim() || null;
+    } catch {
+      token = null;
+    }
+    if (!token) return;
+
+    setPublicationRedirectState({ loading: true, error: null });
+    createPublicationsApi()
+      .resolve(token)
+      .then((publication) => {
+        if (cancelled) return;
+        navigate(`/board/${encodeURIComponent(publication.boardId)}?publication=${encodeURIComponent(token!)}`, { replace: true });
+      })
+      .catch((e: any) => {
+        if (cancelled) return;
+        setPublicationRedirectState({ loading: false, error: e?.message ? String(e.message) : 'Failed to open publication link.' });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate, serverConfigured]);
+
+  if (publicationRedirectState.loading) {
+    return <section className="page page-board-list"><p>Opening publication…</p></section>;
+  }
+
+  if (publicationRedirectState.error) {
+    return <section className="page page-board-list"><p className="error-text">Publication error: {publicationRedirectState.error}</p></section>;
+  }
 
   return (
     <section className="page page-board-list">

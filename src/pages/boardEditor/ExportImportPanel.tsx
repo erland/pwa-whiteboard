@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 
 type ExportImportPanelProps = {
   canExport: boolean;
+  isReadOnly?: boolean;
   onExportJson: () => void;
   onExportPng: () => void;
   onImportClick: () => void;
@@ -16,6 +17,7 @@ type ExportImportPanelProps = {
  */
 export const ExportImportPanel: React.FC<ExportImportPanelProps> = ({
   canExport,
+  isReadOnly,
   onExportJson,
   onExportPng,
   onImportClick,
@@ -80,6 +82,7 @@ export const ExportImportPanel: React.FC<ExportImportPanelProps> = ({
             type="button"
             className="tool-button"
             onClick={handleImport}
+            disabled={!!isReadOnly}
           >
             Import board (JSON)
           </button>

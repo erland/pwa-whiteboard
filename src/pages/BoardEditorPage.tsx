@@ -16,6 +16,8 @@ import { useBoardComments } from './hooks/useBoardComments';
 import { useBoardVoting } from './hooks/useBoardVoting';
 import { useSharedTimer } from './hooks/useSharedTimer';
 import { useBoardReactions } from './hooks/useBoardReactions';
+import type { PublicationSession } from './hooks/publicationSession';
+import { createPublicationsApi, type BoardPublication } from '../api/publicationsApi';
 
 function getInitialInviteToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -26,6 +28,33 @@ function getInitialInviteToken(): string | null {
   } catch {
     return null;
   }
+}
+
+
+function getInitialPublicationToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const url = new URL(window.location.href);
+    const q = url.searchParams.get('publication');
+    return q ? q.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function mapPublicationSession(token: string, publication: BoardPublication): PublicationSession {
+  return {
+    token,
+    id: publication.id,
+    boardId: publication.boardId,
+    targetType: publication.targetType,
+    snapshotVersion: publication.snapshotVersion ?? null,
+    allowComments: publication.allowComments,
+    state: publication.state,
+    createdAt: publication.createdAt,
+    updatedAt: publication.updatedAt,
+    expiresAt: publication.expiresAt ?? null,
+  };
 }
 
 type PersistedInviteAccess = {
@@ -57,6 +86,7 @@ export const BoardEditorPage: React.FC = () => {
   const oidcConfigured = isOidcConfigured();
 
   const initialInviteToken = useMemo(() => getInitialInviteToken(), []);
+  const initialPublicationToken = useMemo(() => getInitialPublicationToken(), []);
   const [inviteToken, setInviteToken] = useState<string | null>(initialInviteToken);
   const [allowGuestInvite, setAllowGuestInvite] = useState(false);
   const [inviteInfo, setInviteInfo] = useState<{ permission?: InvitePermission; expiresAt?: string } | null>(null);
@@ -66,14 +96,17 @@ export const BoardEditorPage: React.FC = () => {
   const [guestInviteValidated, setGuestInviteValidated] = useState(false);
   const [persistedInviteAccess, setPersistedInviteAccess] = useState<PersistedInviteAccess | null>(null);
   const [isInviteLookupPending, setIsInviteLookupPending] = useState(
-    Boolean(boardId) && serverConfigured && oidcConfigured && !auth.authenticated && !initialInviteToken
+    Boolean(boardId) && serverConfigured && oidcConfigured && !auth.authenticated && !initialInviteToken && !initialPublicationToken
   );
+  const [publicationSession, setPublicationSession] = useState<PublicationSession | null>(null);
+  const [publicationError, setPublicationError] = useState<string | null>(null);
+  const [isPublicationLookupPending, setIsPublicationLookupPending] = useState(Boolean(initialPublicationToken) && serverConfigured);
 
-  const isInviteFlow = !!inviteToken && serverConfigured && oidcConfigured;
+  const isInviteFlow = !!inviteToken && serverConfigured && oidcConfigured && !initialPublicationToken;
   const shouldProcessInvite = isInviteFlow && (auth.authenticated || allowGuestInvite);
 
   useEffect(() => {
-    if (!boardId || !serverConfigured || !oidcConfigured || auth.authenticated || initialInviteToken) {
+    if (!boardId || !serverConfigured || !oidcConfigured || auth.authenticated || initialInviteToken || initialPublicationToken) {
       setIsInviteLookupPending(false);
       return;
     }
@@ -117,7 +150,7 @@ export const BoardEditorPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [auth.authenticated, boardId, initialInviteToken, oidcConfigured, serverConfigured]);
+  }, [auth.authenticated, boardId, initialInviteToken, initialPublicationToken, oidcConfigured, serverConfigured]);
 
   useEffect(() => {
     if (!shouldProcessInvite || !inviteToken) return;
@@ -175,6 +208,39 @@ export const BoardEditorPage: React.FC = () => {
     };
   }, [shouldProcessInvite, inviteToken, auth.authenticated, boardId]);
 
+  useEffect(() => {
+    if (!initialPublicationToken || !serverConfigured) {
+      setIsPublicationLookupPending(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsPublicationLookupPending(true);
+    setPublicationError(null);
+
+    createPublicationsApi()
+      .resolve(initialPublicationToken)
+      .then((publication) => {
+        if (cancelled) return;
+        const session = mapPublicationSession(initialPublicationToken, publication);
+        setPublicationSession(session);
+        if (boardId && boardId !== session.boardId) {
+          navigate(`/board/${encodeURIComponent(session.boardId)}?publication=${encodeURIComponent(initialPublicationToken)}`, { replace: true });
+        }
+      })
+      .catch((e: any) => {
+        if (cancelled) return;
+        setPublicationError(e?.message ? String(e.message) : 'Failed to resolve publication link.');
+      })
+      .finally(() => {
+        if (!cancelled) setIsPublicationLookupPending(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [boardId, initialPublicationToken, navigate, serverConfigured]);
+
   const handleInviteSignIn = () => {
     try {
       sessionStorage.setItem('pwa-whiteboard.postLoginRedirect', window.location.href);
@@ -193,8 +259,12 @@ export const BoardEditorPage: React.FC = () => {
     setInviteToken((t) => (t ? `${t}` : t));
   };
 
-  if (isInviteLookupPending) {
+  if (isPublicationLookupPending || isInviteLookupPending) {
     return <p>Loading board access…</p>;
+  }
+
+  if (publicationError) {
+    return <p>Publication error: {publicationError}</p>;
   }
 
   if (isInviteFlow && !auth.authenticated && !allowGuestInvite) {
@@ -220,8 +290,9 @@ export const BoardEditorPage: React.FC = () => {
 
   return (
     <BoardEditorContent
-      boardId={boardId}
+      boardId={publicationSession?.boardId ?? boardId}
       inviteToken={allowGuestInvite ? inviteToken : null}
+      publicationSession={publicationSession}
       persistedInviteAccess={persistedInviteAccess}
       serverConfigured={serverConfigured}
       oidcConfigured={oidcConfigured}
@@ -235,6 +306,7 @@ export const BoardEditorPage: React.FC = () => {
 const BoardEditorContent: React.FC<{
   boardId: string;
   inviteToken: string | null;
+  publicationSession: PublicationSession | null;
   persistedInviteAccess: PersistedInviteAccess | null;
   serverConfigured: boolean;
   oidcConfigured: boolean;
@@ -244,6 +316,7 @@ const BoardEditorContent: React.FC<{
 }> = ({
   boardId,
   inviteToken,
+  publicationSession,
   persistedInviteAccess,
   serverConfigured,
   oidcConfigured,
@@ -295,9 +368,9 @@ const BoardEditorContent: React.FC<{
     collab,
     isReadOnly,
     handleCursorWorldMove,
-  } = useBoardEditor(boardId);
+  } = useBoardEditor(boardId, { accessMode: publicationSession ? 'publication' : inviteToken ? 'invite' : 'member' });
 
-  const boardName = state?.meta?.name ?? 'Untitled board';
+  const boardName = state?.meta?.name ?? (publicationSession ? 'Published board' : 'Untitled board');
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isFacilitationOpen, setIsFacilitationOpen] = useState(false);
   const [facilitationTab, setFacilitationTab] = useState<'overview' | 'comments' | 'voting' | 'timer'>('overview');
@@ -362,6 +435,8 @@ const BoardEditorContent: React.FC<{
       boardId={boardId}
       boardName={boardName}
       inviteToken={inviteToken}
+      accessMode={publicationSession ? 'publication' : inviteToken ? 'invite' : 'member'}
+      publicationSession={publicationSession}
       serverConfigured={serverConfigured}
       oidcConfigured={oidcConfigured}
       acceptingInvite={acceptingInvite}

@@ -10,8 +10,9 @@ import { useBoardClipboard } from './useBoardClipboard';
 import { useBoardMutations } from './useBoardMutations';
 import { useBoardCollaboration } from './useBoardCollaboration';
 import type { PresencePayload } from '../../../shared/protocol';
+import type { BoardAccessMode } from './publicationSession';
 
-export function useBoardEditor(id: string | undefined) {
+export function useBoardEditor(id: string | undefined, options: { accessMode?: BoardAccessMode } = {}) {
   const {
     state,
     clipboard,
@@ -40,7 +41,8 @@ const collab = useBoardCollaboration({
 
 const canSendOps = collab.enabled && collab.status === 'connected' && (collab.role === 'owner' || collab.role === 'editor');
 
-const isReadOnly = collab.enabled && collab.status === 'connected' && collab.role === 'viewer';
+const isPublicationSession = options.accessMode === 'publication';
+const isReadOnly = isPublicationSession || (collab.enabled && collab.status === 'connected' && collab.role === 'viewer');
 
 const dispatchOpEvent = (event: any) => {
   if (isReadOnly) return;
@@ -158,6 +160,17 @@ const sendPresence = (presence: PresencePayload) => {
     setViewport
   });
 
+
+  const handleImportClickSafe = () => {
+    if (isReadOnly) return;
+    handleImportClick();
+  };
+
+  const handleImportFileChangeSafe: typeof handleImportFileChange = (event) => {
+    if (isReadOnly) return;
+    handleImportFileChange(event);
+  };
+
   const canUndo = !isReadOnly && !!state && state.history.pastEvents.length > 0;
   const canRedo = !isReadOnly && !!state && state.history.futureEvents.length > 0;
 const handleSelectionChange = (selectedIds: string[]) => {
@@ -229,8 +242,8 @@ const redoSafe = () => {
     handleFitView,
     handleExportJson,
     handleExportPng,
-    handleImportClick,
-    handleImportFileChange,
+    handleImportClick: handleImportClickSafe,
+    handleImportFileChange: handleImportFileChangeSafe,
     selectedObjects,
     updateSelectionProp,
     collab,

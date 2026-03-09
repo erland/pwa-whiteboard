@@ -14,6 +14,7 @@ import { ParticipantActivityStrip } from './ParticipantActivityStrip';
 import { ReactionOverlay } from './ReactionOverlay';
 import { ShareDialog } from './ShareDialog';
 import { FacilitationDialog, type FacilitationTab } from './FacilitationDialog';
+import { ObjectCommentAnchorsOverlay, type ObjectCommentAnchor } from './commentAnchors/ObjectCommentAnchorsOverlay';
 import type { ServerFeatureFlags } from '../../domain/serverFeatures';
 import type { BoardComment } from '../../api/commentsApi';
 import type { VotingResults, VotingSession } from '../../api/votingApi';
@@ -107,6 +108,9 @@ export type BoardEditorShellProps = {
   commentsViewOnlyMessage: string | null;
   commentsTargetLabel: string;
   comments: BoardComment[];
+  commentObjectAnchors: ObjectCommentAnchor[];
+  commentsFocusedObjectId?: string | null;
+  clearCommentsObjectFocus: () => void;
   commentsLoading: boolean;
   commentsMutating: boolean;
   commentsError: string | null;
@@ -118,6 +122,7 @@ export type BoardEditorShellProps = {
   resolveComment: (commentId: string) => Promise<void>;
   reopenComment: (commentId: string) => Promise<void>;
   deleteComment: (commentId: string) => Promise<void>;
+  openObjectComments: (objectId: string) => void;
   votingEnabled: boolean;
   votingAuthenticated: boolean;
   votingSessions: VotingSession[];
@@ -236,6 +241,9 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
   commentsViewOnlyMessage,
   commentsTargetLabel,
   comments,
+  commentObjectAnchors,
+  commentsFocusedObjectId,
+  clearCommentsObjectFocus,
   commentsLoading,
   commentsMutating,
   commentsError,
@@ -247,6 +255,7 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
   resolveComment,
   reopenComment,
   deleteComment,
+  openObjectComments,
   votingEnabled,
   votingAuthenticated,
   votingSessions,
@@ -452,6 +461,14 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
                   onCanvasReady={setCanvasEl}
                   onCursorWorldMove={handleCursorWorldMove}
                 />
+                <ObjectCommentAnchorsOverlay
+                  width={CANVAS_WIDTH}
+                  height={CANVAS_HEIGHT}
+                  objects={state.objects}
+                  viewport={state.viewport}
+                  anchors={commentObjectAnchors}
+                  onOpenObjectComments={openObjectComments}
+                />
                 {collab.enabled && collab.status === 'connected' && (
                   <>
                     <RemoteCursorsOverlay
@@ -502,6 +519,8 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
         commentsViewOnlyMessage={commentsViewOnlyMessage}
         commentsTargetLabel={commentsTargetLabel}
         comments={comments}
+        commentsFocusedObjectId={commentsFocusedObjectId}
+        onClearCommentsObjectFocus={clearCommentsObjectFocus}
         commentsLoading={commentsLoading}
         commentsMutating={commentsMutating}
         commentsError={commentsError}

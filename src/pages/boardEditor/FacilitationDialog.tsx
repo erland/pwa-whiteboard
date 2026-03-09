@@ -26,6 +26,8 @@ type Props = {
   commentsViewOnlyMessage: string | null;
   commentsTargetLabel: string;
   comments: BoardComment[];
+  commentsFocusedObjectId?: string | null;
+  onClearCommentsObjectFocus?: () => void;
   commentsLoading: boolean;
   commentsMutating: boolean;
   commentsError: string | null;
@@ -91,6 +93,8 @@ export const FacilitationDialog: React.FC<Props> = ({
   commentsViewOnlyMessage,
   commentsTargetLabel,
   comments,
+  commentsFocusedObjectId,
+  onClearCommentsObjectFocus,
   commentsLoading,
   commentsMutating,
   commentsError,
@@ -275,6 +279,8 @@ export const FacilitationDialog: React.FC<Props> = ({
               viewOnlyMessage={commentsViewOnlyMessage}
               targetLabel={commentsTargetLabel}
               comments={comments}
+              focusedObjectId={commentsFocusedObjectId}
+              onClearObjectFocus={onClearCommentsObjectFocus}
               isLoading={commentsLoading}
               isMutating={commentsMutating}
               error={commentsError}

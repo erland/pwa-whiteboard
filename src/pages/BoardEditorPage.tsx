@@ -379,6 +379,7 @@ const BoardEditorContent: React.FC<{
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isFacilitationOpen, setIsFacilitationOpen] = useState(false);
   const [facilitationTab, setFacilitationTab] = useState<'overview' | 'comments' | 'voting' | 'timer'>('overview');
+  const [commentsFocusedObjectId, setCommentsFocusedObjectId] = useState<string | null>(null);
   const capabilities = useBoardCapabilities({
     enabled: Boolean(boardId) && serverConfigured,
   });
@@ -425,6 +426,34 @@ const BoardEditorContent: React.FC<{
     });
   }, [persistedInviteAccess, boardName]);
 
+
+  const filteredComments = useMemo(() => {
+    if (!commentsFocusedObjectId) return comments.comments;
+    const byId = new Map(comments.comments.map((comment) => [comment.id, comment]));
+    const belongsToFocusedObject = (comment: (typeof comments.comments)[number]) => {
+      let current = comment;
+      const seen = new Set<string>();
+      while (current.parentCommentId && !seen.has(current.parentCommentId)) {
+        seen.add(current.parentCommentId);
+        const parent = byId.get(current.parentCommentId);
+        if (!parent) break;
+        current = parent;
+      }
+      return current.targetType === 'object' && current.targetRef === commentsFocusedObjectId;
+    };
+    return comments.comments.filter(belongsToFocusedObject);
+  }, [comments.comments, commentsFocusedObjectId]);
+
+
+  const filteredCommentsActiveCount = useMemo(
+    () => filteredComments.filter((comment) => comment.state === 'active').length,
+    [filteredComments]
+  );
+  const filteredCommentsResolvedCount = useMemo(
+    () => filteredComments.filter((comment) => comment.state === 'resolved').length,
+    [filteredComments]
+  );
+
   const canCopy = (state?.selectedObjectIds?.length ?? 0) > 0;
   const canPaste = !!hasClipboard;
 
@@ -454,10 +483,10 @@ const BoardEditorContent: React.FC<{
       onCloseShare={() => setIsShareOpen(false)}
       isFacilitationOpen={isFacilitationOpen}
       facilitationTab={facilitationTab}
-      onOpenComments={() => { setFacilitationTab('comments'); setIsFacilitationOpen(true); }}
+      onOpenComments={() => { setCommentsFocusedObjectId(null); setFacilitationTab('comments'); setIsFacilitationOpen(true); }}
       onOpenVoting={() => { setFacilitationTab('voting'); setIsFacilitationOpen(true); }}
       onOpenSharedTimer={() => { setFacilitationTab('timer'); setIsFacilitationOpen(true); }}
-      onOpenFacilitation={() => { setFacilitationTab('overview'); setIsFacilitationOpen(true); }}
+      onOpenFacilitation={() => { setCommentsFocusedObjectId(null); setFacilitationTab('overview'); setIsFacilitationOpen(true); }}
       onChangeFacilitationTab={setFacilitationTab}
       onCloseFacilitation={() => setIsFacilitationOpen(false)}
       state={state}
@@ -511,18 +540,22 @@ const BoardEditorContent: React.FC<{
       commentsCanManage={comments.canManage}
       commentsViewOnlyMessage={comments.viewOnlyMessage}
       commentsTargetLabel={comments.target.label}
-      comments={comments.comments}
+      comments={filteredComments}
+      commentObjectAnchors={comments.objectAnchors}
+      commentsFocusedObjectId={commentsFocusedObjectId}
+      clearCommentsObjectFocus={() => setCommentsFocusedObjectId(null)}
       commentsLoading={comments.isLoading}
       commentsMutating={comments.isMutating}
       commentsError={comments.error}
-      commentsActiveCount={comments.activeCount}
-      commentsResolvedCount={comments.resolvedCount}
+      commentsActiveCount={filteredCommentsActiveCount}
+      commentsResolvedCount={filteredCommentsResolvedCount}
       refreshComments={comments.refresh}
       createComment={comments.createComment}
       replyToComment={comments.replyToComment}
       resolveComment={comments.resolveComment}
       reopenComment={comments.reopenComment}
       deleteComment={comments.deleteComment}
+      openObjectComments={(objectId) => { setCommentsFocusedObjectId(objectId); setFacilitationTab('comments'); setIsFacilitationOpen(true); }}
       votingEnabled={capabilities.features.supportsVoting}
       votingAuthenticated={auth.authenticated}
       votingSessions={voting.sessions}

@@ -47,6 +47,7 @@ function HookProbe(props: { selectedObjectIds: string[]; authenticated?: boolean
     <div>
       <div data-testid="target-label">{state.target.label}</div>
       <div data-testid="comments-count">{state.comments.length}</div>
+      <div data-testid="anchor-count">{state.objectAnchors.length}</div>
       <button onClick={() => void state.createComment('Review this')}>create</button>
       <button onClick={() => void state.replyToComment('comment-1', 'Reply here')}>reply</button>
     </div>
@@ -149,4 +150,42 @@ test('allows authenticated comment creation in publication sessions when publica
     targetRef: null,
     content: 'Review this',
   });
+});
+
+
+test('builds object-level comment anchors for object review markers', async () => {
+  mockList.mockResolvedValueOnce([
+    {
+      id: 'comment-1',
+      boardId: 'board-1',
+      parentCommentId: null,
+      targetType: 'object',
+      targetRef: 'shape-1',
+      authorUserId: 'alice',
+      content: 'Needs review',
+      state: 'active',
+      createdAt: '2026-03-08T10:00:00Z',
+      updatedAt: '2026-03-08T10:00:00Z',
+      resolvedAt: null,
+      deletedAt: null,
+    },
+    {
+      id: 'comment-2',
+      boardId: 'board-1',
+      parentCommentId: 'comment-1',
+      targetType: 'comment',
+      targetRef: 'comment-1',
+      authorUserId: 'bob',
+      content: 'Following up',
+      state: 'active',
+      createdAt: '2026-03-08T10:05:00Z',
+      updatedAt: '2026-03-08T10:05:00Z',
+      resolvedAt: null,
+      deletedAt: null,
+    },
+  ]);
+
+  render(<HookProbe selectedObjectIds={['shape-1']} />);
+
+  await waitFor(() => expect(screen.getByTestId('anchor-count')).toHaveTextContent('1'));
 });

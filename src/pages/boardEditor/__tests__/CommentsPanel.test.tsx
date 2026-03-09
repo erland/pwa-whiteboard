@@ -130,3 +130,38 @@ describe('CommentsPanel', () => {
     expect(screen.queryByRole('button', { name: /Post comment/i })).not.toBeInTheDocument();
   });
 });
+
+
+test('shows focused object review state and allows clearing focus', () => {
+  const onClearObjectFocus = jest.fn();
+
+  render(
+    <CommentsPanel
+      enabled
+      authenticated
+      canCreate
+      canManage
+      viewOnlyMessage={null}
+      boardName="Board A"
+      targetLabel="Selected object (shape-1)"
+      comments={BASE_COMMENTS}
+      focusedObjectId="shape-1"
+      onClearObjectFocus={onClearObjectFocus}
+      isLoading={false}
+      isMutating={false}
+      error={null}
+      activeCount={2}
+      resolvedCount={0}
+      onRefresh={jest.fn()}
+      onCreateComment={jest.fn()}
+      onReplyToComment={jest.fn()}
+      onResolveComment={jest.fn()}
+      onReopenComment={jest.fn()}
+      onDeleteComment={jest.fn()}
+    />
+  );
+
+  expect(screen.getByText(/Showing comments for object/i)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /Show all comments/i }));
+  expect(onClearObjectFocus).toHaveBeenCalled();
+});

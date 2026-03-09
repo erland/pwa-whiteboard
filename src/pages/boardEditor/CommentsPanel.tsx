@@ -10,6 +10,8 @@ type CommentsPanelProps = {
   boardName?: string;
   targetLabel: string;
   comments: BoardComment[];
+  focusedObjectId?: string | null;
+  onClearObjectFocus?: () => void;
   isLoading: boolean;
   isMutating: boolean;
   error: string | null;
@@ -156,6 +158,8 @@ export const CommentsPanel: React.FC<CommentsPanelProps> = ({
   boardName,
   targetLabel,
   comments,
+  focusedObjectId,
+  onClearObjectFocus,
   isLoading,
   isMutating,
   error,
@@ -197,6 +201,16 @@ export const CommentsPanel: React.FC<CommentsPanelProps> = ({
           Board: <code>{boardName || 'Untitled board'}</code>
         </div>
         <div className="share-help">New comments will target: {targetLabel}.</div>
+        {focusedObjectId && (
+          <div className="comment-focus-banner">
+            <span>Showing comments for object <code>{focusedObjectId}</code>.</span>
+            {onClearObjectFocus && (
+              <button type="button" className="tool-button" onClick={onClearObjectFocus}>
+                Show all comments
+              </button>
+            )}
+          </div>
+        )}
         <div className="capability-chip-list">
           <span className="capability-chip" data-enabled="true">Active {activeCount}</span>
           <span className="capability-chip" data-enabled={resolvedCount > 0 ? 'true' : 'false'}>Resolved {resolvedCount}</span>
@@ -235,7 +249,11 @@ export const CommentsPanel: React.FC<CommentsPanelProps> = ({
         {isLoading ? (
           <div className="share-help">Loading comments…</div>
         ) : threads.length === 0 ? (
-          <div className="share-help">No comments yet. Start a review thread for the board or the selected object.</div>
+          <div className="share-help">
+            {focusedObjectId
+              ? 'No comments yet for this object. Start a focused review thread here.'
+              : 'No comments yet. Start a review thread for the board or the selected object.'}
+          </div>
         ) : (
           <div className="comment-thread-list">
             {threads.map((thread) => (

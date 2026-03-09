@@ -4,6 +4,7 @@ import {
   type BoardComment,
   type BoardCommentTargetType,
 } from '../../api/commentsApi';
+import type { ObjectCommentAnchor } from '../boardEditor/commentAnchors/ObjectCommentAnchorsOverlay';
 import type { BoardAccessContext } from './publicationSession';
 
 type CommentTarget = {
@@ -21,6 +22,10 @@ type UseBoardCommentsArgs = {
 };
 
 export type BoardCommentsState = {
+  boardLevelComments: BoardComment[];
+  objectAnchors: ObjectCommentAnchor[];
+  focusedObjectCommentId: string | null;
+  focusedObjectComments: BoardComment[];
   comments: BoardComment[];
   isLoading: boolean;
   isMutating: boolean;
@@ -39,6 +44,18 @@ export type BoardCommentsState = {
   reopenComment: (commentId: string) => Promise<void>;
   deleteComment: (commentId: string) => Promise<void>;
 };
+
+function getRootComment(commentsById: Map<string, BoardComment>, comment: BoardComment): BoardComment {
+  let current = comment;
+  const seen = new Set<string>();
+  while (current.parentCommentId && !seen.has(current.parentCommentId)) {
+    seen.add(current.parentCommentId);
+    const parent = commentsById.get(current.parentCommentId);
+    if (!parent) break;
+    current = parent;
+  }
+  return current;
+}
 
 function buildTarget(selectedObjectIds: string[]): CommentTarget {
   if (selectedObjectIds.length === 1) {
@@ -181,10 +198,51 @@ export function useBoardComments({ boardId, enabled, authenticated, selectedObje
     await runMutation(async () => createCommentsApi().remove(boardId, commentId));
   }, [boardId, canMutate, runMutation]);
 
+  const commentsById = React.useMemo(() => {
+    const map = new Map<string, BoardComment>();
+    for (const comment of comments) map.set(comment.id, comment);
+    return map;
+  }, [comments]);
+
+  const boardLevelComments = React.useMemo(() => comments.filter((comment) => {
+    const root = getRootComment(commentsById, comment);
+    return root.targetType === 'board';
+  }), [comments, commentsById]);
+
+  const objectCommentGroups = React.useMemo(() => {
+    const groups = new Map<string, BoardComment[]>();
+    for (const comment of comments) {
+      const root = getRootComment(commentsById, comment);
+      if (root.targetType !== 'object' || !root.targetRef) continue;
+      const list = groups.get(root.targetRef) ?? [];
+      list.push(comment);
+      groups.set(root.targetRef, list);
+    }
+    return groups;
+  }, [comments, commentsById]);
+
+  const objectAnchors = React.useMemo(() => Array.from(objectCommentGroups.entries()).map(([objectId, list]) => ({
+    objectId,
+    totalCount: list.filter((comment) => comment.state !== 'deleted').length,
+    activeCount: list.filter((comment) => comment.state === 'active').length,
+    latestCommentId: list.slice().sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())[0]?.id ?? null,
+  })).filter((anchor) => anchor.totalCount > 0), [objectCommentGroups]);
+
+  const focusedObjectCommentId = React.useMemo(() => (selectedObjectIds.length === 1 ? selectedObjectIds[0] ?? null : null), [selectedObjectIds]);
+
+  const focusedObjectComments = React.useMemo(() => {
+    if (!focusedObjectCommentId) return [];
+    return objectCommentGroups.get(focusedObjectCommentId) ?? [];
+  }, [focusedObjectCommentId, objectCommentGroups]);
+
   const activeCount = React.useMemo(() => comments.filter((comment) => comment.state === 'active').length, [comments]);
   const resolvedCount = React.useMemo(() => comments.filter((comment) => comment.state === 'resolved').length, [comments]);
 
   return {
+    boardLevelComments,
+    objectAnchors,
+    focusedObjectCommentId,
+    focusedObjectComments,
     comments,
     isLoading,
     isMutating,

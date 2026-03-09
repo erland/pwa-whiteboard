@@ -62,6 +62,7 @@ function HookProbe(props: { publicationToken?: string | null; authenticated?: bo
       <div data-testid="remaining-votes">{String(state.remainingVotes ?? '')}</div>
       <div data-testid="participant-mode">{state.participantMode}</div>
       <div data-testid="participant-token">{state.participantToken ?? ''}</div>
+      <div data-testid="can-remove-votes">{String(state.canRemoveVotes)}</div>
       <button onClick={() => void state.createSession({ scopeType: 'object', scopeRef: 'shape-1', maxVotesPerParticipant: 3 })}>create</button>
       <button onClick={() => void state.castVote('shape-1')}>vote</button>
       <button onClick={() => void state.removeVote('shape-1')}>remove</button>

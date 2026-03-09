@@ -20,6 +20,7 @@ type VotingPanelProps = {
   remainingVotes: number | null;
   canManage: boolean;
   canVote: boolean;
+  canRemoveVotes: boolean;
   participantMode: 'member' | 'publication-member' | 'publication-reader' | 'guest';
   participantToken: string | null;
   canUsePublicationParticipation: boolean;
@@ -63,6 +64,7 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
   remainingVotes,
   canManage,
   canVote,
+  canRemoveVotes,
   participantMode,
   participantToken,
   canUsePublicationParticipation,
@@ -112,6 +114,30 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
     () => Object.entries(results?.totalsByTarget ?? {}).sort((a, b) => b[1] - a[1]),
     [results]
   );
+
+  const visibleVoteEntries = React.useMemo(
+    () => results?.visibleVotes ?? [],
+    [results]
+  );
+  const progressIsHidden = Boolean(results?.progressHidden);
+  const identitiesAreHidden = Boolean(results?.identitiesHidden);
+  const showResultTotals = Boolean(results && !progressIsHidden);
+  const showVisibleVotes = Boolean(results && !progressIsHidden && !identitiesAreHidden && visibleVoteEntries.length > 0);
+  const votingPhaseMessage = selectedSession
+    ? selectedSession.state === 'revealed'
+      ? 'Results have been revealed. This is the final server-published outcome for the session.'
+      : selectedSession.state === 'closed'
+        ? 'Voting is closed. Results are now available from the server.'
+        : selectedSession.state === 'open' && progressIsHidden
+          ? 'Progress is hidden during voting for this session.'
+          : selectedSession.state === 'open'
+            ? 'Live progress is visible during voting for this session.'
+            : selectedSession.state === 'draft'
+              ? 'This voting session is still a draft and has not opened yet.'
+              : selectedSession.state === 'cancelled'
+                ? 'This voting session was cancelled.'
+                : null
+    : null;
 
   if (!enabled) {
     return (
@@ -221,6 +247,9 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
             <div className="share-help">Scope: {scopeLabel(selectedSession)}</div>
             <div className="share-help">Created: {formatTimestamp(selectedSession.createdAt)}</div>
             <div className="share-help">Updated: {formatTimestamp(selectedSession.updatedAt)}</div>
+            <div className="share-help">Progress during voting: {selectedSession.rules.showProgressDuringVoting ? 'Visible' : 'Hidden until close/reveal for non-facilitators'}</div>
+            <div className="share-help">Vote identities: {selectedSession.rules.anonymousVotes ? 'Hidden during voting and only revealed to facilitators after close' : 'Visible when progress is visible'}</div>
+            <div className="share-help">Vote updates: {selectedSession.rules.allowVoteUpdates ? 'Allowed' : 'Locked after a vote is cast'}</div>
             <div className="capability-chip-list">
               {canManage && selectedSession.state === 'draft' && (
                 <button type="button" className="tool-button" onClick={() => void onOpenSession(selectedSession.id)} disabled={isMutating}>Open</button>
@@ -268,6 +297,9 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
                   <div className="share-help">
                     Remaining votes: <strong>{remainingVotes ?? '—'}</strong>
                   </div>
+                  {!selectedSession.rules.allowVoteUpdates && (
+                    <div className="share-help">Vote updates are disabled for this session. Once a vote is cast, it cannot be removed or changed.</div>
+                  )}
                   {selectedTargets.length > 0 && (
                     <div className="share-help">Selected objects on canvas: {selectedTargets.map((target) => target.label).join(', ')}</div>
                   )}
@@ -296,7 +328,7 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
                                 type="button"
                                 className="tool-button"
                                 onClick={() => void onRemoveVote(target.id)}
-                                disabled={isMutating || voteCount <= 0 || !canUsePublicationParticipation && participantMode === 'publication-reader'}
+                                disabled={isMutating || voteCount <= 0 || !canRemoveVotes || !canUsePublicationParticipation && participantMode === 'publication-reader'}
                               >
                                 Remove
                               </button>
@@ -317,7 +349,10 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
       {selectedSession && results && (
         <div className="share-section">
           <div className="share-label">Results</div>
-          {resultEntries.length === 0 ? (
+          {votingPhaseMessage && <div className="share-help">{votingPhaseMessage}</div>}
+          {progressIsHidden ? (
+            <div className="share-help">Result totals are currently hidden by the server for this audience.</div>
+          ) : resultEntries.length === 0 ? (
             <div className="share-help">No visible results yet.</div>
           ) : (
             <div className="voting-results-list">
@@ -328,6 +363,26 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
                 </div>
               ))}
             </div>
+          )}
+          {showResultTotals && identitiesAreHidden && (
+            <div className="share-help">Individual voter identities are hidden for this session.</div>
+          )}
+          {showVisibleVotes && (
+            <>
+              <div className="share-help">Visible vote records</div>
+              <div className="voting-results-list">
+                {visibleVoteEntries.map((vote) => (
+                  <div key={vote.id} className="voting-result-row">
+                    <span>
+                      {(availableTargets.find((target) => target.id === vote.targetRef)?.label ?? vote.targetRef)}
+                      {' · '}
+                      {vote.participantId ?? 'Unknown participant'}
+                    </span>
+                    <strong>{vote.voteValue}</strong>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
       )}

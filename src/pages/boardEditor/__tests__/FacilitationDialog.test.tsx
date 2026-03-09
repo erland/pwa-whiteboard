@@ -37,6 +37,7 @@ function buildProps(overrides: Record<string, unknown> = {}) {
     votingRemainingVotes: null,
     votingCanManage: true,
     votingCanVote: true,
+    votingCanRemoveVotes: true,
     votingParticipantMode: 'member' as const,
     votingParticipantToken: null,
     votingCanUsePublicationParticipation: false,

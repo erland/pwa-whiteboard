@@ -570,6 +570,7 @@ const BoardEditorContent: React.FC<{
       votingRemainingVotes={voting.remainingVotes}
       votingCanManage={voting.canManage}
       votingCanVote={voting.canVote}
+      votingCanRemoveVotes={voting.canRemoveVotes}
       votingParticipantMode={voting.participantMode}
       votingParticipantToken={voting.participantToken}
       votingCanUsePublicationParticipation={voting.canUsePublicationParticipation}

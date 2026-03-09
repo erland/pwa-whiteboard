@@ -41,6 +41,7 @@ export type BoardVotingState = {
   remainingVotes: number | null;
   canManage: boolean;
   canVote: boolean;
+  canRemoveVotes: boolean;
   participantMode: VotingParticipantMode;
   participantToken: string | null;
   canUsePublicationParticipation: boolean;
@@ -353,6 +354,7 @@ export function useBoardVoting({ boardId, enabled, authenticated, selectedObject
         || canUsePublicationParticipation
       )
   );
+  const canRemoveVotes = Boolean(canVote && selectedSession?.rules.allowVoteUpdates);
 
   const handleResetParticipantToken = React.useCallback(() => {
     if (!publicationId) return;
@@ -377,6 +379,7 @@ export function useBoardVoting({ boardId, enabled, authenticated, selectedObject
     remainingVotes,
     canManage: enabled && authenticated && !access.isPublicationAccess,
     canVote,
+    canRemoveVotes,
     participantMode,
     participantToken,
     canUsePublicationParticipation,

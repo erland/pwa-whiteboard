@@ -136,6 +136,7 @@ export type BoardEditorShellProps = {
   votingRemainingVotes: number | null;
   votingCanManage: boolean;
   votingCanVote: boolean;
+  votingCanRemoveVotes: boolean;
   votingParticipantMode: 'member' | 'publication-member' | 'publication-reader' | 'guest';
   votingParticipantToken: string | null;
   votingCanUsePublicationParticipation: boolean;
@@ -276,6 +277,7 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
   votingRemainingVotes,
   votingCanManage,
   votingCanVote,
+  votingCanRemoveVotes,
   votingParticipantMode,
   votingParticipantToken,
   votingCanUsePublicationParticipation,
@@ -560,6 +562,7 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
         votingRemainingVotes={votingRemainingVotes}
         votingCanManage={votingCanManage}
         votingCanVote={votingCanVote}
+        votingCanRemoveVotes={votingCanRemoveVotes}
         votingParticipantMode={votingParticipantMode}
         votingParticipantToken={votingParticipantToken}
         votingCanUsePublicationParticipation={votingCanUsePublicationParticipation}

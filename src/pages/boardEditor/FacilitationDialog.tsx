@@ -50,6 +50,7 @@ type Props = {
   votingRemainingVotes: number | null;
   votingCanManage: boolean;
   votingCanVote: boolean;
+  votingCanRemoveVotes: boolean;
   votingParticipantMode: 'member' | 'publication-member' | 'publication-reader' | 'guest';
   votingParticipantToken: string | null;
   votingCanUsePublicationParticipation: boolean;
@@ -123,6 +124,7 @@ export const FacilitationDialog: React.FC<Props> = ({
   votingRemainingVotes,
   votingCanManage,
   votingCanVote,
+  votingCanRemoveVotes,
   votingParticipantMode,
   votingParticipantToken,
   votingCanUsePublicationParticipation,
@@ -321,6 +323,7 @@ export const FacilitationDialog: React.FC<Props> = ({
               remainingVotes={votingRemainingVotes}
               canManage={votingCanManage}
               canVote={votingCanVote}
+              canRemoveVotes={votingCanRemoveVotes}
               participantMode={votingParticipantMode}
               participantToken={votingParticipantToken}
               canUsePublicationParticipation={votingCanUsePublicationParticipation}

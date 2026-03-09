@@ -22,6 +22,7 @@ type Props = {
   remainingVotes: number | null;
   canManage: boolean;
   canVote: boolean;
+  canRemoveVotes: boolean;
   participantMode: 'member' | 'publication-member' | 'publication-reader' | 'guest';
   participantToken: string | null;
   canUsePublicationParticipation: boolean;

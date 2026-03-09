@@ -25,7 +25,10 @@ export type BoardCommentsState = {
   isLoading: boolean;
   isMutating: boolean;
   error: string | null;
+  allowComments: boolean;
   canCreate: boolean;
+  canManage: boolean;
+  viewOnlyMessage: string | null;
   target: CommentTarget;
   activeCount: number;
   resolvedCount: number;
@@ -73,9 +76,30 @@ export function useBoardComments({ boardId, enabled, authenticated, selectedObje
   const [error, setError] = React.useState<string | null>(null);
 
   const target = React.useMemo(() => buildTarget(selectedObjectIds), [selectedObjectIds]);
+  const allowComments = !access.isPublicationAccess || Boolean(access.publicationSession?.allowComments);
+  const canMutate = enabled && authenticated && allowComments;
+  const viewOnlyMessage = React.useMemo(() => {
+    if (access.isPublicationAccess && !allowComments) {
+      return 'This publication does not allow comments.';
+    }
+    if (access.isPublicationAccess && allowComments && !authenticated) {
+      return 'This publication allows comments, but you need board access to post or manage them.';
+    }
+    if (!authenticated) {
+      return 'Sign in to post, resolve, and manage comments.';
+    }
+    return null;
+  }, [access.isPublicationAccess, allowComments, authenticated]);
 
   const refresh = React.useCallback(async () => {
     if (!enabled || !boardId) {
+      setComments([]);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+
+    if (access.isPublicationAccess && !allowComments) {
       setComments([]);
       setError(null);
       setIsLoading(false);
@@ -96,7 +120,7 @@ export function useBoardComments({ boardId, enabled, authenticated, selectedObje
     } finally {
       setIsLoading(false);
     }
-  }, [access.publicationToken, boardId, enabled]);
+  }, [access.isPublicationAccess, access.publicationToken, allowComments, boardId, enabled]);
 
   React.useEffect(() => {
     void refresh();
@@ -117,7 +141,7 @@ export function useBoardComments({ boardId, enabled, authenticated, selectedObje
 
   const createComment = React.useCallback(async (content: string) => {
     const trimmed = content.trim();
-    if (!trimmed || !enabled || !authenticated || !boardId || access.isPublicationAccess) return;
+    if (!trimmed || !canMutate || !boardId) return;
     await runMutation(async () => {
       const api = createCommentsApi();
       return api.create(boardId, {
@@ -126,11 +150,11 @@ export function useBoardComments({ boardId, enabled, authenticated, selectedObje
         content: trimmed,
       });
     });
-  }, [access.isPublicationAccess, authenticated, boardId, enabled, runMutation, target.targetRef, target.targetType]);
+  }, [boardId, canMutate, runMutation, target.targetRef, target.targetType]);
 
   const replyToComment = React.useCallback(async (parentCommentId: string, content: string) => {
     const trimmed = content.trim();
-    if (!trimmed || !enabled || !authenticated || !boardId || access.isPublicationAccess) return;
+    if (!trimmed || !canMutate || !boardId) return;
     await runMutation(async () => {
       const api = createCommentsApi();
       return api.create(boardId, {
@@ -140,22 +164,22 @@ export function useBoardComments({ boardId, enabled, authenticated, selectedObje
         content: trimmed,
       });
     });
-  }, [access.isPublicationAccess, authenticated, boardId, enabled, runMutation]);
+  }, [boardId, canMutate, runMutation]);
 
   const resolveComment = React.useCallback(async (commentId: string) => {
-    if (!enabled || !authenticated || !boardId || access.isPublicationAccess) return;
+    if (!canMutate || !boardId) return;
     await runMutation(async () => createCommentsApi().resolve(boardId, commentId));
-  }, [access.isPublicationAccess, authenticated, boardId, enabled, runMutation]);
+  }, [boardId, canMutate, runMutation]);
 
   const reopenComment = React.useCallback(async (commentId: string) => {
-    if (!enabled || !authenticated || !boardId || access.isPublicationAccess) return;
+    if (!canMutate || !boardId) return;
     await runMutation(async () => createCommentsApi().reopen(boardId, commentId));
-  }, [access.isPublicationAccess, authenticated, boardId, enabled, runMutation]);
+  }, [boardId, canMutate, runMutation]);
 
   const deleteComment = React.useCallback(async (commentId: string) => {
-    if (!enabled || !authenticated || !boardId || access.isPublicationAccess) return;
+    if (!canMutate || !boardId) return;
     await runMutation(async () => createCommentsApi().remove(boardId, commentId));
-  }, [access.isPublicationAccess, authenticated, boardId, enabled, runMutation]);
+  }, [boardId, canMutate, runMutation]);
 
   const activeCount = React.useMemo(() => comments.filter((comment) => comment.state === 'active').length, [comments]);
   const resolvedCount = React.useMemo(() => comments.filter((comment) => comment.state === 'resolved').length, [comments]);
@@ -165,7 +189,10 @@ export function useBoardComments({ boardId, enabled, authenticated, selectedObje
     isLoading,
     isMutating,
     error,
-    canCreate: enabled && authenticated && !access.isPublicationAccess,
+    allowComments,
+    canCreate: canMutate,
+    canManage: canMutate,
+    viewOnlyMessage,
     target,
     activeCount,
     resolvedCount,

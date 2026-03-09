@@ -19,7 +19,7 @@ jest.mock('../../../api/commentsApi', () => ({
   }),
 }));
 
-function HookProbe(props: { selectedObjectIds: string[]; authenticated?: boolean; enabled?: boolean; publicationToken?: string | null }) {
+function HookProbe(props: { selectedObjectIds: string[]; authenticated?: boolean; enabled?: boolean; publicationToken?: string | null; publicationAllowComments?: boolean }) {
   const state = useBoardComments({
     boardId: 'board-1',
     enabled: props.enabled ?? true,
@@ -33,7 +33,7 @@ function HookProbe(props: { selectedObjectIds: string[]; authenticated?: boolean
             boardId: 'board-1',
             targetType: 'board',
             snapshotVersion: null,
-            allowComments: false,
+            allowComments: props.publicationAllowComments ?? false,
             state: 'active',
             createdAt: '2026-03-08T10:00:00Z',
             updatedAt: '2026-03-08T10:00:00Z',
@@ -115,8 +115,8 @@ describe('useBoardComments', () => {
 });
 
 
-test('threads publication token into comment listing without enabling mutations', async () => {
-  render(<HookProbe selectedObjectIds={[]} authenticated={true} publicationToken="pub-token-1" />);
+test('threads publication token into comment listing for publication sessions', async () => {
+  render(<HookProbe selectedObjectIds={[]} authenticated={false} publicationToken="pub-token-1" publicationAllowComments={true} />);
 
   await waitFor(() => expect(mockList).toHaveBeenCalledWith('board-1', { publicationToken: 'pub-token-1' }));
 
@@ -125,4 +125,28 @@ test('threads publication token into comment listing without enabling mutations'
   });
 
   expect(mockCreate).not.toHaveBeenCalled();
+});
+
+
+test('does not fetch comments for publications that disallow comment access', async () => {
+  render(<HookProbe selectedObjectIds={[]} authenticated={false} publicationToken="pub-token-2" publicationAllowComments={false} />);
+
+  await waitFor(() => expect(screen.getByTestId('comments-count')).toHaveTextContent('0'));
+  expect(mockList).not.toHaveBeenCalled();
+});
+
+test('allows authenticated comment creation in publication sessions when publication comments are enabled', async () => {
+  render(<HookProbe selectedObjectIds={[]} authenticated={true} publicationToken="pub-token-3" publicationAllowComments={true} />);
+
+  await waitFor(() => expect(mockList).toHaveBeenCalledWith('board-1', { publicationToken: 'pub-token-3' }));
+
+  await act(async () => {
+    screen.getByText('create').click();
+  });
+
+  expect(mockCreate).toHaveBeenCalledWith('board-1', {
+    targetType: 'board',
+    targetRef: null,
+    content: 'Review this',
+  });
 });

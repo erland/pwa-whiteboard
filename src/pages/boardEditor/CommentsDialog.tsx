@@ -7,6 +7,9 @@ type Props = {
   boardName?: string;
   enabled: boolean;
   authenticated: boolean;
+  canCreate: boolean;
+  canManage: boolean;
+  viewOnlyMessage: string | null;
   targetLabel: string;
   comments: BoardComment[];
   isLoading: boolean;

@@ -41,6 +41,9 @@ describe('CommentsPanel', () => {
       <CommentsPanel
         enabled
         authenticated
+        canCreate
+        canManage
+        viewOnlyMessage={null}
         boardName="Board A"
         targetLabel="Selected object (shape-1)"
         comments={BASE_COMMENTS}
@@ -75,6 +78,9 @@ describe('CommentsPanel', () => {
       <CommentsPanel
         enabled
         authenticated={false}
+        canCreate={false}
+        canManage={false}
+        viewOnlyMessage="Sign in to post, resolve, and manage comments."
         boardName="Board A"
         targetLabel="Board-level comment"
         comments={[]}
@@ -93,5 +99,34 @@ describe('CommentsPanel', () => {
     );
 
     expect(screen.getByText(/Sign in to post, resolve, and manage comments/)).toBeInTheDocument();
+  });
+
+  test('shows publication view-only guidance when comments are disabled for a publication', () => {
+    render(
+      <CommentsPanel
+        enabled
+        authenticated={false}
+        canCreate={false}
+        canManage={false}
+        viewOnlyMessage="This publication does not allow comments."
+        boardName="Board A"
+        targetLabel="Board-level comment"
+        comments={[]}
+        isLoading={false}
+        isMutating={false}
+        error={null}
+        activeCount={0}
+        resolvedCount={0}
+        onRefresh={jest.fn()}
+        onCreateComment={jest.fn()}
+        onReplyToComment={jest.fn()}
+        onResolveComment={jest.fn()}
+        onReopenComment={jest.fn()}
+        onDeleteComment={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText(/This publication does not allow comments/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Post comment/i })).not.toBeInTheDocument();
   });
 });

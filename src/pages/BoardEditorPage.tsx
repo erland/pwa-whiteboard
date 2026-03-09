@@ -507,6 +507,9 @@ const BoardEditorContent: React.FC<{
       capabilitiesError={capabilities.error}
       commentsEnabled={capabilities.features.supportsComments}
       commentsAuthenticated={auth.authenticated}
+      commentsCanCreate={comments.canCreate}
+      commentsCanManage={comments.canManage}
+      commentsViewOnlyMessage={comments.viewOnlyMessage}
       commentsTargetLabel={comments.target.label}
       comments={comments.comments}
       commentsLoading={comments.isLoading}

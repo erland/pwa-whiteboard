@@ -21,6 +21,9 @@ type Props = {
   onChangeTab: (tab: FacilitationTab) => void;
   commentsEnabled: boolean;
   commentsAuthenticated: boolean;
+  commentsCanCreate: boolean;
+  commentsCanManage: boolean;
+  commentsViewOnlyMessage: string | null;
   commentsTargetLabel: string;
   comments: BoardComment[];
   commentsLoading: boolean;
@@ -83,6 +86,9 @@ export const FacilitationDialog: React.FC<Props> = ({
   onChangeTab,
   commentsEnabled,
   commentsAuthenticated,
+  commentsCanCreate,
+  commentsCanManage,
+  commentsViewOnlyMessage,
   commentsTargetLabel,
   comments,
   commentsLoading,
@@ -264,6 +270,9 @@ export const FacilitationDialog: React.FC<Props> = ({
               boardName={boardName}
               enabled={commentsEnabled}
               authenticated={commentsAuthenticated}
+              canCreate={commentsCanCreate}
+              canManage={commentsCanManage}
+              viewOnlyMessage={commentsViewOnlyMessage}
               targetLabel={commentsTargetLabel}
               comments={comments}
               isLoading={commentsLoading}

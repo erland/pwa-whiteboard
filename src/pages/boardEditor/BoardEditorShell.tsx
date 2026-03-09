@@ -102,6 +102,9 @@ export type BoardEditorShellProps = {
   capabilitiesError: string | null;
   commentsEnabled: boolean;
   commentsAuthenticated: boolean;
+  commentsCanCreate: boolean;
+  commentsCanManage: boolean;
+  commentsViewOnlyMessage: string | null;
   commentsTargetLabel: string;
   comments: BoardComment[];
   commentsLoading: boolean;
@@ -228,6 +231,9 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
   capabilitiesError,
   commentsEnabled,
   commentsAuthenticated,
+  commentsCanCreate,
+  commentsCanManage,
+  commentsViewOnlyMessage,
   commentsTargetLabel,
   comments,
   commentsLoading,
@@ -491,6 +497,9 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
         onChangeTab={onChangeFacilitationTab}
         commentsEnabled={commentsEnabled}
         commentsAuthenticated={commentsAuthenticated}
+        commentsCanCreate={commentsCanCreate}
+        commentsCanManage={commentsCanManage}
+        commentsViewOnlyMessage={commentsViewOnlyMessage}
         commentsTargetLabel={commentsTargetLabel}
         comments={comments}
         commentsLoading={commentsLoading}

@@ -4,6 +4,9 @@ import type { BoardComment } from '../../api/commentsApi';
 type CommentsPanelProps = {
   enabled: boolean;
   authenticated: boolean;
+  canCreate: boolean;
+  canManage: boolean;
+  viewOnlyMessage: string | null;
   boardName?: string;
   targetLabel: string;
   comments: BoardComment[];
@@ -50,13 +53,13 @@ function buildThreadTree(comments: BoardComment[]): Array<BoardComment & { repli
 
 const CommentThread: React.FC<{
   comment: BoardComment & { replies: BoardComment[] };
-  authenticated: boolean;
+  canManage: boolean;
   isMutating: boolean;
   onReplyToComment: (parentCommentId: string, content: string) => Promise<void> | void;
   onResolveComment: (commentId: string) => Promise<void> | void;
   onReopenComment: (commentId: string) => Promise<void> | void;
   onDeleteComment: (commentId: string) => Promise<void> | void;
-}> = ({ comment, authenticated, isMutating, onReplyToComment, onResolveComment, onReopenComment, onDeleteComment }) => {
+}> = ({ comment, canManage, isMutating, onReplyToComment, onResolveComment, onReopenComment, onDeleteComment }) => {
   const [replyOpen, setReplyOpen] = React.useState(false);
   const [replyText, setReplyText] = React.useState('');
 
@@ -85,7 +88,7 @@ const CommentThread: React.FC<{
           </div>
         </div>
         <div className="comment-card-actions">
-          {authenticated && !isDeleted && (
+          {canManage && !isDeleted && (
             <>
               <button type="button" className="tool-button" onClick={() => setReplyOpen((value) => !value)} disabled={isMutating}>
                 {replyOpen ? 'Cancel reply' : 'Reply'}
@@ -109,7 +112,7 @@ const CommentThread: React.FC<{
 
       <div className="comment-card-body">{isDeleted ? <em>Comment deleted.</em> : comment.content}</div>
 
-      {replyOpen && authenticated && !isDeleted && (
+      {replyOpen && canManage && !isDeleted && (
         <div className="comment-reply-form">
           <textarea
             className="text-input"
@@ -147,6 +150,9 @@ const CommentThread: React.FC<{
 export const CommentsPanel: React.FC<CommentsPanelProps> = ({
   enabled,
   authenticated,
+  canCreate,
+  canManage,
+  viewOnlyMessage,
   boardName,
   targetLabel,
   comments,
@@ -202,8 +208,8 @@ export const CommentsPanel: React.FC<CommentsPanelProps> = ({
 
       <div className="share-section">
         <div className="share-label">New comment</div>
-        {!authenticated ? (
-          <div className="share-help">Sign in to post, resolve, and manage comments.</div>
+        {!canCreate ? (
+          <div className="share-help">{viewOnlyMessage ?? 'Sign in to post, resolve, and manage comments.'}</div>
         ) : (
           <>
             <textarea
@@ -236,7 +242,7 @@ export const CommentsPanel: React.FC<CommentsPanelProps> = ({
               <CommentThread
                 key={thread.id}
                 comment={thread}
-                authenticated={authenticated}
+                canManage={canManage}
                 isMutating={isMutating}
                 onReplyToComment={onReplyToComment}
                 onResolveComment={onResolveComment}

@@ -241,7 +241,7 @@ export const BoardEditorPage: React.FC = () => {
     };
   }, [boardId, initialPublicationToken, navigate, serverConfigured]);
 
-  const handleInviteSignIn = () => {
+  const handleStartSignIn = () => {
     try {
       sessionStorage.setItem('pwa-whiteboard.postLoginRedirect', window.location.href);
     } catch {
@@ -270,7 +270,7 @@ export const BoardEditorPage: React.FC = () => {
   if (isInviteFlow && !auth.authenticated && !allowGuestInvite) {
     return (
       <InviteChoiceGate
-        onSignIn={handleInviteSignIn}
+        onSignIn={handleStartSignIn}
         onContinueAsGuest={() => setAllowGuestInvite(true)}
         onCancel={() => navigate('/')}
       />
@@ -481,6 +481,7 @@ const BoardEditorContent: React.FC<{
       isShareOpen={isShareOpen}
       onOpenShare={() => setIsShareOpen(true)}
       onCloseShare={() => setIsShareOpen(false)}
+      onPublicationSignIn={handleStartSignIn}
       isFacilitationOpen={isFacilitationOpen}
       facilitationTab={facilitationTab}
       onOpenComments={() => { setCommentsFocusedObjectId(null); setFacilitationTab('comments'); setIsFacilitationOpen(true); }}

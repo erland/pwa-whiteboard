@@ -15,6 +15,7 @@ import { ReactionOverlay } from './ReactionOverlay';
 import { ShareDialog } from './ShareDialog';
 import { FacilitationDialog, type FacilitationTab } from './FacilitationDialog';
 import { ObjectCommentAnchorsOverlay, type ObjectCommentAnchor } from './commentAnchors/ObjectCommentAnchorsOverlay';
+import { PublicationAccessBanner } from './PublicationAccessBanner';
 import type { ServerFeatureFlags } from '../../domain/serverFeatures';
 import type { BoardComment } from '../../api/commentsApi';
 import type { VotingResults, VotingSession } from '../../api/votingApi';
@@ -29,6 +30,7 @@ export type BoardEditorShellProps = {
   inviteToken: string | null;
   accessMode: BoardAccessMode;
   publicationSession: PublicationSession | null;
+  onPublicationSignIn?: () => void;
   serverConfigured: boolean;
   oidcConfigured: boolean;
   acceptingInvite: boolean;
@@ -174,6 +176,7 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
   inviteToken,
   accessMode,
   publicationSession,
+  onPublicationSignIn,
   serverConfigured,
   oidcConfigured,
   acceptingInvite,
@@ -311,11 +314,13 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
       )}
 
       {accessMode === 'publication' && publicationSession && (
-        <div className="feature-gate-banner" role="status" aria-live="polite">
-          Publication mode: read-only {publicationSession.targetType === 'snapshot'
-            ? `snapshot v${publicationSession.snapshotVersion ?? '—'}`
-            : 'live board'} · Comments {publicationSession.allowComments ? 'allowed by link' : 'read-only'}
-        </div>
+        <PublicationAccessBanner
+          publicationSession={publicationSession}
+          commentsFeatureEnabled={commentsEnabled}
+          commentsAuthenticated={commentsAuthenticated}
+          onOpenComments={commentsEnabled && publicationSession.allowComments ? onOpenComments : undefined}
+          onSignIn={commentsEnabled && publicationSession.allowComments && !commentsAuthenticated ? onPublicationSignIn : undefined}
+        />
       )}
 
       {serverConfigured && (

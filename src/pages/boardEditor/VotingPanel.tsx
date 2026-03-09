@@ -18,6 +18,12 @@ type VotingPanelProps = {
   selectedTargets: VotingTarget[];
   localVotesByTarget: Record<string, number>;
   remainingVotes: number | null;
+  canManage: boolean;
+  canVote: boolean;
+  participantMode: 'member' | 'publication-member' | 'publication-reader' | 'guest';
+  participantToken: string | null;
+  canUsePublicationParticipation: boolean;
+  onResetParticipantToken: () => void;
   isLoading: boolean;
   isMutating: boolean;
   error: string | null;
@@ -55,6 +61,12 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
   selectedTargets,
   localVotesByTarget,
   remainingVotes,
+  canManage,
+  canVote,
+  participantMode,
+  participantToken,
+  canUsePublicationParticipation,
+  onResetParticipantToken,
   isLoading,
   isMutating,
   error,
@@ -128,8 +140,8 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
 
       <div className="share-section">
         <div className="share-label">Create voting session</div>
-        {!authenticated ? (
-          <div className="share-help">Sign in to create and manage voting sessions.</div>
+        {!canManage ? (
+          <div className="share-help">{participantMode === 'publication-reader' ? 'Published readers can participate in eligible sessions but cannot create or manage voting sessions from this view.' : 'Sign in to create and manage voting sessions.'}</div>
         ) : (
           <div className="voting-form-grid">
             <label className="form-field">
@@ -210,16 +222,16 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
             <div className="share-help">Created: {formatTimestamp(selectedSession.createdAt)}</div>
             <div className="share-help">Updated: {formatTimestamp(selectedSession.updatedAt)}</div>
             <div className="capability-chip-list">
-              {authenticated && selectedSession.state === 'draft' && (
+              {canManage && selectedSession.state === 'draft' && (
                 <button type="button" className="tool-button" onClick={() => void onOpenSession(selectedSession.id)} disabled={isMutating}>Open</button>
               )}
-              {authenticated && selectedSession.state === 'open' && (
+              {canManage && selectedSession.state === 'open' && (
                 <button type="button" className="tool-button" onClick={() => void onCloseSession(selectedSession.id)} disabled={isMutating}>Close</button>
               )}
-              {authenticated && selectedSession.state === 'closed' && (
+              {canManage && selectedSession.state === 'closed' && (
                 <button type="button" className="tool-button" onClick={() => void onRevealSession(selectedSession.id)} disabled={isMutating}>Reveal</button>
               )}
-              {authenticated && selectedSession.state !== 'cancelled' && selectedSession.state !== 'revealed' && (
+              {canManage && selectedSession.state !== 'cancelled' && selectedSession.state !== 'revealed' && (
                 <button type="button" className="tool-button" onClick={() => void onCancelSession(selectedSession.id)} disabled={isMutating}>Cancel</button>
               )}
             </div>
@@ -230,53 +242,72 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
       {selectedSession && (
         <div className="share-section">
           <div className="share-label">Participant voting</div>
-          {!authenticated ? (
+          {participantMode === 'guest' ? (
             <div className="share-help">Sign in to cast votes on open sessions.</div>
           ) : selectedSession.state !== 'open' ? (
             <div className="share-help">This session is not open for voting right now.</div>
+          ) : participantMode === 'publication-reader' && !selectedSession.rules.allowPublishedReaderParticipation ? (
+            <div className="share-help">This published session is view-only. Publication readers cannot vote in this session.</div>
           ) : (
             <>
-              <div className="share-help">
-                Remaining votes: <strong>{remainingVotes ?? '—'}</strong>
-              </div>
-              {selectedTargets.length > 0 && (
-                <div className="share-help">Selected objects on canvas: {selectedTargets.map((target) => target.label).join(', ')}</div>
-              )}
-              {availableTargets.length === 0 ? (
-                <div className="share-help">There are no board objects to vote on yet.</div>
-              ) : (
-                <div className="voting-target-list">
-                  {availableTargets.map((target) => {
-                    const voteCount = localVotesByTarget[target.id] ?? 0;
-                    return (
-                      <div key={target.id} className="voting-target-card">
-                        <div>
-                          <strong>{target.label}</strong>
-                          <div className="share-help">{target.objectType} · {target.id}</div>
-                        </div>
-                        <div className="comment-reply-actions">
-                          <button
-                            type="button"
-                            className="tool-button"
-                            onClick={() => void onCastVote(target.id)}
-                            disabled={isMutating || (remainingVotes ?? 0) <= 0}
-                          >
-                            Vote +1
-                          </button>
-                          <button
-                            type="button"
-                            className="tool-button"
-                            onClick={() => void onRemoveVote(target.id)}
-                            disabled={isMutating || voteCount <= 0}
-                          >
-                            Remove
-                          </button>
-                          <span className="comment-status-badge">Your votes {voteCount}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
+              {participantMode === 'publication-reader' && (
+                <div className="publication-voting-note">
+                  <div className="share-help">This publication uses a browser-local participant token so your votes can be associated when you reopen the same link.</div>
+                  <div className="comment-reply-actions">
+                    <span className="comment-status-badge">Stored participant {participantToken ? 'ready' : 'missing'}</span>
+                    <button type="button" className="tool-button" onClick={onResetParticipantToken} disabled={isMutating}>
+                      Reset participant
+                    </button>
+                  </div>
                 </div>
+              )}
+              {!canVote ? (
+                <div className="share-help">Voting is not available for your current access mode.</div>
+              ) : (
+                <>
+                  <div className="share-help">
+                    Remaining votes: <strong>{remainingVotes ?? '—'}</strong>
+                  </div>
+                  {selectedTargets.length > 0 && (
+                    <div className="share-help">Selected objects on canvas: {selectedTargets.map((target) => target.label).join(', ')}</div>
+                  )}
+                  {availableTargets.length === 0 ? (
+                    <div className="share-help">There are no board objects to vote on yet.</div>
+                  ) : (
+                    <div className="voting-target-list">
+                      {availableTargets.map((target) => {
+                        const voteCount = localVotesByTarget[target.id] ?? 0;
+                        return (
+                          <div key={target.id} className="voting-target-card">
+                            <div>
+                              <strong>{target.label}</strong>
+                              <div className="share-help">{target.objectType} · {target.id}</div>
+                            </div>
+                            <div className="comment-reply-actions">
+                              <button
+                                type="button"
+                                className="tool-button"
+                                onClick={() => void onCastVote(target.id)}
+                                disabled={isMutating || (remainingVotes ?? 0) <= 0 || !canUsePublicationParticipation && participantMode === 'publication-reader'}
+                              >
+                                Vote +1
+                              </button>
+                              <button
+                                type="button"
+                                className="tool-button"
+                                onClick={() => void onRemoveVote(target.id)}
+                                disabled={isMutating || voteCount <= 0 || !canUsePublicationParticipation && participantMode === 'publication-reader'}
+                              >
+                                Remove
+                              </button>
+                              <span className="comment-status-badge">Your votes {voteCount}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}

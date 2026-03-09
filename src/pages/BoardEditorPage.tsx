@@ -240,15 +240,14 @@ export const BoardEditorPage: React.FC = () => {
       cancelled = true;
     };
   }, [boardId, initialPublicationToken, navigate, serverConfigured]);
-
-  const handleStartSignIn = () => {
+  const startSignIn = React.useCallback(() => {
     try {
       sessionStorage.setItem('pwa-whiteboard.postLoginRedirect', window.location.href);
     } catch {
       // ignore
     }
     auth.login();
-  };
+  }, [auth]);
 
   const handleRetryInviteAccept = () => {
     setInviteError(null);
@@ -270,7 +269,7 @@ export const BoardEditorPage: React.FC = () => {
   if (isInviteFlow && !auth.authenticated && !allowGuestInvite) {
     return (
       <InviteChoiceGate
-        onSignIn={handleStartSignIn}
+        onSignIn={startSignIn}
         onContinueAsGuest={() => setAllowGuestInvite(true)}
         onCancel={() => navigate('/')}
       />
@@ -299,6 +298,7 @@ export const BoardEditorPage: React.FC = () => {
       acceptingInvite={acceptingInvite}
       inviteError={inviteError}
       inviteAccepted={inviteAccepted}
+      onStartSignIn={startSignIn}
     />
   );
 };
@@ -313,6 +313,7 @@ const BoardEditorContent: React.FC<{
   acceptingInvite: boolean;
   inviteError: string | null;
   inviteAccepted: boolean;
+  onStartSignIn: () => void;
 }> = ({
   boardId,
   inviteToken,
@@ -323,6 +324,7 @@ const BoardEditorContent: React.FC<{
   acceptingInvite,
   inviteError,
   inviteAccepted,
+  onStartSignIn,
 }) => {
   const auth = useAuth();
 
@@ -481,7 +483,7 @@ const BoardEditorContent: React.FC<{
       isShareOpen={isShareOpen}
       onOpenShare={() => setIsShareOpen(true)}
       onCloseShare={() => setIsShareOpen(false)}
-      onPublicationSignIn={handleStartSignIn}
+      onPublicationSignIn={onStartSignIn}
       isFacilitationOpen={isFacilitationOpen}
       facilitationTab={facilitationTab}
       onOpenComments={() => { setCommentsFocusedObjectId(null); setFacilitationTab('comments'); setIsFacilitationOpen(true); }}
@@ -566,6 +568,12 @@ const BoardEditorContent: React.FC<{
       votingSelectedTargets={voting.selectedTargets}
       votingLocalVotesByTarget={voting.localVotesByTarget}
       votingRemainingVotes={voting.remainingVotes}
+      votingCanManage={voting.canManage}
+      votingCanVote={voting.canVote}
+      votingParticipantMode={voting.participantMode}
+      votingParticipantToken={voting.participantToken}
+      votingCanUsePublicationParticipation={voting.canUsePublicationParticipation}
+      resetVotingParticipantToken={voting.resetParticipantToken}
       votingLoading={voting.isLoading}
       votingMutating={voting.isMutating}
       votingError={voting.error}

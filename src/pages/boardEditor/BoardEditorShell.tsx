@@ -134,6 +134,12 @@ export type BoardEditorShellProps = {
   votingSelectedTargets: Array<{ id: string; label: string; objectType: string }>;
   votingLocalVotesByTarget: Record<string, number>;
   votingRemainingVotes: number | null;
+  votingCanManage: boolean;
+  votingCanVote: boolean;
+  votingParticipantMode: 'member' | 'publication-member' | 'publication-reader' | 'guest';
+  votingParticipantToken: string | null;
+  votingCanUsePublicationParticipation: boolean;
+  resetVotingParticipantToken: () => void;
   votingLoading: boolean;
   votingMutating: boolean;
   votingError: string | null;
@@ -268,6 +274,12 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
   votingSelectedTargets,
   votingLocalVotesByTarget,
   votingRemainingVotes,
+  votingCanManage,
+  votingCanVote,
+  votingParticipantMode,
+  votingParticipantToken,
+  votingCanUsePublicationParticipation,
+  resetVotingParticipantToken,
   votingLoading,
   votingMutating,
   votingError,
@@ -546,6 +558,12 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
         votingSelectedTargets={votingSelectedTargets}
         votingLocalVotesByTarget={votingLocalVotesByTarget}
         votingRemainingVotes={votingRemainingVotes}
+        votingCanManage={votingCanManage}
+        votingCanVote={votingCanVote}
+        votingParticipantMode={votingParticipantMode}
+        votingParticipantToken={votingParticipantToken}
+        votingCanUsePublicationParticipation={votingCanUsePublicationParticipation}
+        onResetVotingParticipantToken={resetVotingParticipantToken}
         votingLoading={votingLoading}
         votingMutating={votingMutating}
         votingError={votingError}

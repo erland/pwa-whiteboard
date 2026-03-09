@@ -12,7 +12,7 @@ const SESSIONS = [
     createdByUserId: 'alice',
     rules: {
       allowViewerParticipation: true,
-      allowPublishedReaderParticipation: false,
+      allowPublishedReaderParticipation: true,
       maxVotesPerParticipant: 3,
       anonymousVotes: true,
       showProgressDuringVoting: false,
@@ -44,6 +44,12 @@ describe('VotingPanel', () => {
         selectedTargets={[{ id: 'shape-1', label: 'Idea A', objectType: 'stickyNote' }]}
         localVotesByTarget={{}}
         remainingVotes={3}
+        canManage={true}
+        canVote={true}
+        participantMode="member"
+        participantToken={null}
+        canUsePublicationParticipation={false}
+        onResetParticipantToken={jest.fn()}
         isLoading={false}
         isMutating={false}
         error={null}
@@ -73,4 +79,44 @@ describe('VotingPanel', () => {
     });
     expect(onCastVote).toHaveBeenCalledWith('shape-1');
   });
+});
+
+
+test('shows publication participant messaging and reset control for anonymous publication voting', () => {
+  render(
+    <VotingPanel
+      enabled
+      authenticated={false}
+      boardName="Board A"
+      sessions={SESSIONS}
+      selectedSessionId="vs-1"
+      results={{ session: SESSIONS[0], totalsByTarget: { 'shape-1': 2 }, visibleVotes: [], identitiesHidden: true, progressHidden: true }}
+      availableTargets={[{ id: 'shape-1', label: 'Idea A', objectType: 'stickyNote' }]}
+      selectedTargets={[]}
+      localVotesByTarget={{}}
+      remainingVotes={3}
+      canManage={false}
+      canVote={true}
+      participantMode="publication-reader"
+      participantToken="participant-123"
+      canUsePublicationParticipation={true}
+      onResetParticipantToken={jest.fn()}
+      isLoading={false}
+      isMutating={false}
+      error={null}
+      onRefresh={jest.fn()}
+      onSelectSession={jest.fn()}
+      onCreateSession={jest.fn()}
+      onOpenSession={jest.fn()}
+      onCloseSession={jest.fn()}
+      onRevealSession={jest.fn()}
+      onCancelSession={jest.fn()}
+      onCastVote={jest.fn()}
+      onRemoveVote={jest.fn()}
+    />
+  );
+
+  expect(screen.getByText(/browser-local participant token/i)).toBeInTheDocument();
+  expect(screen.getByText(/published readers can participate/i)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /reset participant/i })).toBeInTheDocument();
 });

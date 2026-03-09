@@ -27,11 +27,11 @@ jest.mock('../../../api/votingApi', () => ({
   }),
 }));
 
-function HookProbe(props: { publicationToken?: string | null } = {}) {
+function HookProbe(props: { publicationToken?: string | null; authenticated?: boolean } = {}) {
   const state = useBoardVoting({
     boardId: 'board-1',
     enabled: true,
-    authenticated: true,
+    authenticated: props.authenticated ?? true,
     selectedObjectIds: ['shape-1'],
     objects: [
       { id: 'shape-1', type: 'stickyNote', x: 0, y: 0, text: 'Idea A' },
@@ -60,15 +60,19 @@ function HookProbe(props: { publicationToken?: string | null } = {}) {
       <div data-testid="sessions-count">{state.sessions.length}</div>
       <div data-testid="selected-target">{state.selectedTargets[0]?.label ?? ''}</div>
       <div data-testid="remaining-votes">{String(state.remainingVotes ?? '')}</div>
+      <div data-testid="participant-mode">{state.participantMode}</div>
+      <div data-testid="participant-token">{state.participantToken ?? ''}</div>
       <button onClick={() => void state.createSession({ scopeType: 'object', scopeRef: 'shape-1', maxVotesPerParticipant: 3 })}>create</button>
       <button onClick={() => void state.castVote('shape-1')}>vote</button>
       <button onClick={() => void state.removeVote('shape-1')}>remove</button>
+      <button onClick={() => state.resetParticipantToken()}>reset participant</button>
     </div>
   );
 }
 
 describe('useBoardVoting', () => {
   beforeEach(() => {
+    window.localStorage.clear();
     mockListSessions.mockReset();
     mockGetResults.mockReset();
     mockCreateSession.mockReset();
@@ -89,7 +93,7 @@ describe('useBoardVoting', () => {
         createdByUserId: 'alice',
         rules: {
           allowViewerParticipation: true,
-          allowPublishedReaderParticipation: false,
+          allowPublishedReaderParticipation: true,
           maxVotesPerParticipant: 3,
           anonymousVotes: true,
           showProgressDuringVoting: false,
@@ -113,7 +117,7 @@ describe('useBoardVoting', () => {
         createdByUserId: 'alice',
         rules: {
           allowViewerParticipation: true,
-          allowPublishedReaderParticipation: false,
+          allowPublishedReaderParticipation: true,
           maxVotesPerParticipant: 3,
           anonymousVotes: true,
           showProgressDuringVoting: false,
@@ -138,10 +142,10 @@ describe('useBoardVoting', () => {
     expect(screen.getByTestId('selected-target')).toHaveTextContent('Idea A');
   });
 
-  test('creates sessions and tracks optimistic vote usage', async () => {
+  test('creates sessions and tracks optimistic vote usage for member access', async () => {
     render(<HookProbe />);
 
-    await waitFor(() => expect(mockListSessions).toHaveBeenCalledWith('board-1'));
+    await waitFor(() => expect(mockListSessions).toHaveBeenCalledWith('board-1', undefined));
     await waitFor(() => expect(screen.getByTestId('remaining-votes')).toHaveTextContent('3'));
 
     await act(async () => {
@@ -160,18 +164,35 @@ describe('useBoardVoting', () => {
     });
     expect(mockCreateSession).toHaveBeenCalledWith('board-1', expect.objectContaining({ scopeType: 'object', scopeRef: 'shape-1' }));
   });
-});
 
+  test('threads publication token into voting reads and uses participant token for anonymous publication voting', async () => {
+    render(<HookProbe publicationToken="pub-token-1" authenticated={false} />);
 
-test('threads publication token into voting reads without enabling vote mutations', async () => {
-  render(<HookProbe publicationToken="pub-token-1" />);
+    await waitFor(() => expect(mockListSessions).toHaveBeenCalledWith('board-1', { publicationToken: 'pub-token-1' }));
+    await waitFor(() => expect(mockGetResults).toHaveBeenCalledWith('board-1', 'vs-1', { publicationToken: 'pub-token-1' }));
+    await waitFor(() => expect(screen.getByTestId('participant-mode')).toHaveTextContent('publication-reader'));
+    const initialToken = screen.getByTestId('participant-token').textContent || '';
+    expect(initialToken).toContain('participant-');
 
-  await waitFor(() => expect(mockListSessions).toHaveBeenCalledWith('board-1', { publicationToken: 'pub-token-1' }));
-  await waitFor(() => expect(mockGetResults).toHaveBeenCalledWith('board-1', 'vs-1', { publicationToken: 'pub-token-1' }));
+    await act(async () => {
+      screen.getByText('vote').click();
+    });
 
-  await act(async () => {
-    screen.getByText('vote').click();
+    expect(mockCastVote).toHaveBeenCalledWith(
+      'board-1',
+      'vs-1',
+      { targetRef: 'shape-1', voteValue: 1 },
+      { publicationToken: 'pub-token-1', participantToken: initialToken }
+    );
+
+    await act(async () => {
+      screen.getByText('remove').click();
+    });
+    expect(mockRemoveVote).toHaveBeenCalledWith('board-1', 'vs-1', 'shape-1', { publicationToken: 'pub-token-1', participantToken: initialToken });
+
+    await act(async () => {
+      screen.getByText('reset participant').click();
+    });
+    expect(screen.getByTestId('participant-token').textContent).not.toBe(initialToken);
   });
-
-  expect(mockCastVote).not.toHaveBeenCalled();
 });

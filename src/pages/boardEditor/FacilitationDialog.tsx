@@ -48,6 +48,12 @@ type Props = {
   votingSelectedTargets: VotingTarget[];
   votingLocalVotesByTarget: Record<string, number>;
   votingRemainingVotes: number | null;
+  votingCanManage: boolean;
+  votingCanVote: boolean;
+  votingParticipantMode: 'member' | 'publication-member' | 'publication-reader' | 'guest';
+  votingParticipantToken: string | null;
+  votingCanUsePublicationParticipation: boolean;
+  onResetVotingParticipantToken: () => void;
   votingLoading: boolean;
   votingMutating: boolean;
   votingError: string | null;
@@ -115,6 +121,12 @@ export const FacilitationDialog: React.FC<Props> = ({
   votingSelectedTargets,
   votingLocalVotesByTarget,
   votingRemainingVotes,
+  votingCanManage,
+  votingCanVote,
+  votingParticipantMode,
+  votingParticipantToken,
+  votingCanUsePublicationParticipation,
+  onResetVotingParticipantToken,
   votingLoading,
   votingMutating,
   votingError,
@@ -307,6 +319,12 @@ export const FacilitationDialog: React.FC<Props> = ({
               selectedTargets={votingSelectedTargets}
               localVotesByTarget={votingLocalVotesByTarget}
               remainingVotes={votingRemainingVotes}
+              canManage={votingCanManage}
+              canVote={votingCanVote}
+              participantMode={votingParticipantMode}
+              participantToken={votingParticipantToken}
+              canUsePublicationParticipation={votingCanUsePublicationParticipation}
+              onResetParticipantToken={onResetVotingParticipantToken}
               isLoading={votingLoading}
               isMutating={votingMutating}
               error={votingError}

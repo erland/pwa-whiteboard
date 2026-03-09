@@ -20,6 +20,12 @@ type Props = {
   selectedTargets: VotingTarget[];
   localVotesByTarget: Record<string, number>;
   remainingVotes: number | null;
+  canManage: boolean;
+  canVote: boolean;
+  participantMode: 'member' | 'publication-member' | 'publication-reader' | 'guest';
+  participantToken: string | null;
+  canUsePublicationParticipation: boolean;
+  onResetParticipantToken: () => void;
   isLoading: boolean;
   isMutating: boolean;
   error: string | null;

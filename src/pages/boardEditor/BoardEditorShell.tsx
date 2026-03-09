@@ -98,6 +98,14 @@ export type BoardEditorShellProps = {
     isReconnecting: boolean;
     hasEverConnected: boolean;
   };
+  presenterUserId: string | null;
+  presenterDisplayName: string | null;
+  followingUserId: string | null;
+  isFollowingPresenter: boolean;
+  startPresenting: () => boolean;
+  stopPresenting: () => boolean;
+  followUser: (userId: string | null) => void;
+  stopFollowing: () => void;
   isReadOnly: boolean;
   handleCursorWorldMove: (pos: { x: number; y: number }) => void;
   features: ServerFeatureFlags;
@@ -239,6 +247,14 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
   copySelectionToClipboard,
   pasteFromClipboard,
   collab,
+  presenterUserId,
+  presenterDisplayName,
+  followingUserId,
+  isFollowingPresenter,
+  startPresenting,
+  stopPresenting,
+  followUser,
+  stopFollowing,
   isReadOnly,
   handleCursorWorldMove,
   features,
@@ -441,11 +457,35 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
             </div>
           )}
 
+          {collab.enabled && collab.status === 'connected' && presenterUserId && presenterUserId !== collab.selfUserId && (
+            <div className="presenter-follow-banner" role="status" aria-live="polite">
+              <div>
+                <strong>{presenterDisplayName || 'A participant'}</strong> is presenting.
+                <span className="presenter-follow-banner__meta">
+                  {isFollowingPresenter ? ' You are following their viewport.' : ' Follow to stay aligned with their view.'}
+                </span>
+              </div>
+              <div className="presenter-follow-banner__actions">
+                {isFollowingPresenter ? (
+                  <button type="button" className="tool-button" onClick={stopFollowing}>Stop following</button>
+                ) : (
+                  <button type="button" className="tool-button tool-button-primary" onClick={() => followUser(presenterUserId)}>Follow presenter</button>
+                )}
+              </div>
+            </div>
+          )}
+
           {collab.enabled && collab.status === 'connected' && (
             <ParticipantActivityStrip
               users={collab.users}
               presenceByUserId={collab.presenceByUserId}
               selfUserId={collab.selfUserId}
+              presenterUserId={presenterUserId}
+              followingUserId={followingUserId}
+              onFollowUser={(userId) => followUser(userId)}
+              onStopFollowing={stopFollowing}
+              onStartPresenting={isReadOnly ? undefined : startPresenting}
+              onStopPresenting={isReadOnly ? undefined : stopPresenting}
             />
           )}
 

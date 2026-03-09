@@ -16,6 +16,7 @@ import { useBoardComments } from './hooks/useBoardComments';
 import { useBoardVoting } from './hooks/useBoardVoting';
 import { useSharedTimer } from './hooks/useSharedTimer';
 import { useBoardReactions } from './hooks/useBoardReactions';
+import { usePresenterFollow } from './hooks/usePresenterFollow';
 import { createBoardAccessContext, type PublicationSession } from './hooks/publicationSession';
 import { createPublicationsApi, type BoardPublication } from '../api/publicationsApi';
 
@@ -375,6 +376,7 @@ const BoardEditorContent: React.FC<{
     collab,
     isReadOnly,
     handleCursorWorldMove,
+    applyViewport,
   } = useBoardEditor(boardId, { accessMode: access.mode });
 
   const boardName = state?.meta?.name ?? (access.isPublicationAccess ? 'Published board' : 'Untitled board');
@@ -407,6 +409,33 @@ const BoardEditorContent: React.FC<{
     lastEphemeralMessage: collab.lastEphemeralMessage,
     sendEphemeral: collab.sendEphemeral,
   });
+
+
+  const presenterFollow = usePresenterFollow({
+    enabled: collab.enabled && collab.status === 'connected',
+    selfUserId: collab.selfUserId,
+    users: collab.users,
+    presenceByUserId: collab.presenceByUserId,
+    lastEphemeralMessage: collab.lastEphemeralMessage,
+    sendEphemeral: collab.sendEphemeral,
+    applyViewport,
+  });
+
+  const handleViewportChangeWithFollow = React.useCallback((patch: any) => {
+    if (presenterFollow.followingUserId) presenterFollow.stopFollowing();
+    handleViewportChange(patch);
+  }, [handleViewportChange, presenterFollow]);
+
+
+  const handleZoomChangeWithFollow: typeof handleZoomChange = React.useCallback((event) => {
+    if (presenterFollow.followingUserId) presenterFollow.stopFollowing();
+    handleZoomChange(event);
+  }, [handleZoomChange, presenterFollow]);
+
+  const handleFitViewWithFollow = React.useCallback(() => {
+    if (presenterFollow.followingUserId) presenterFollow.stopFollowing();
+    handleFitView();
+  }, [handleFitView, presenterFollow]);
 
   const voting = useBoardVoting({
     boardId,
@@ -513,10 +542,10 @@ const BoardEditorContent: React.FC<{
       handleUpdateObject={handleUpdateObject}
       handleTransientObjectPatch={handleTransientObjectPatch}
       handleDeleteSelection={handleDeleteSelection}
-      handleViewportChange={handleViewportChange}
+      handleViewportChange={handleViewportChangeWithFollow}
       zoomPercent={zoomPercent}
-      handleZoomChange={handleZoomChange}
-      handleFitView={handleFitView}
+      handleZoomChange={handleZoomChangeWithFollow}
+      handleFitView={handleFitViewWithFollow}
       handleExportJson={handleExportJson}
       handleExportPng={handleExportPng}
       handleImportClick={handleImportClick}
@@ -532,6 +561,15 @@ const BoardEditorContent: React.FC<{
       copySelectionToClipboard={copySelectionToClipboard}
       pasteFromClipboard={pasteFromClipboard}
       collab={collab}
+
+      presenterUserId={presenterFollow.presenterUserId}
+      presenterDisplayName={presenterFollow.presenter?.displayName ?? null}
+      followingUserId={presenterFollow.followingUserId}
+      isFollowingPresenter={presenterFollow.isFollowingPresenter}
+      startPresenting={presenterFollow.startPresenting}
+      stopPresenting={presenterFollow.stopPresenting}
+      followUser={presenterFollow.followUser}
+      stopFollowing={presenterFollow.stopFollowing}
       isReadOnly={isReadOnly}
       handleCursorWorldMove={handleCursorWorldMove}
       features={capabilities.features}

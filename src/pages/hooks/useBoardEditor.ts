@@ -195,6 +195,10 @@ const handleViewportChange = (patch: any) => {
   }
 };
 
+const applyViewport = (next: { offsetX: number; offsetY: number; zoom: number }) => {
+  setViewport(next);
+};
+
 const handleCursorWorldMove = (pos: { x: number; y: number }) => {
   if (!collab.enabled) return;
   sendPresence({ cursor: { x: pos.x, y: pos.y } });
@@ -249,6 +253,7 @@ const redoSafe = () => {
     collab,
     isReadOnly,
     handleCursorWorldMove,
+    applyViewport,
     canUndo,
     canRedo,
     undo: undoSafe,

@@ -1,6 +1,7 @@
 // src/whiteboard/WhiteboardStore.tsx
 import React, {
   createContext,
+  useCallback,
   useContext,
   useMemo,
   useReducer,
@@ -77,45 +78,47 @@ export const WhiteboardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     state?.history?.futureEvents?.length,
   ]);
 
-  const dispatchEvent = (event: BoardEvent) => {
+  const dispatchEvent = useCallback((event: BoardEvent) => {
     dispatch({ type: 'APPLY_EVENT', event });
-  };
+  }, []);
 
-  const applyRemoteEvent = (event: BoardEvent) => {
+  const applyRemoteEvent = useCallback((event: BoardEvent) => {
     dispatch({ type: 'APPLY_REMOTE_EVENT', event });
-  };
+  }, []);
 
-  const applyTransientObjectPatch = (objectId: ObjectId, patch: Partial<WhiteboardObject>) => {
+  const applyTransientObjectPatch = useCallback((objectId: ObjectId, patch: Partial<WhiteboardObject>) => {
     dispatch({ type: 'APPLY_TRANSIENT_OBJECT_PATCH', objectId, patch });
-  };
+  }, []);
 
-  const copySelectionToClipboard = () => {
+  const copySelectionToClipboard = useCallback(() => {
     if (!state) return;
     const next = copySelectionToClipboardData(state);
     if (!next) return;
     setClipboard(next);
-  };
+  }, [state]);
 
-  const pasteFromClipboard = (args?: { canvasWidth?: number; canvasHeight?: number }) => {
+  const pasteFromClipboard = useCallback((args?: { canvasWidth?: number; canvasHeight?: number }) => {
     if (!state || !clipboard) return;
 
     const result = pasteClipboardAsEvents(state, clipboard, args);
-    for (const event of result.events) dispatchEvent(event);
+    for (const event of result.events) {
+      dispatch({ type: 'APPLY_EVENT', event });
+    }
     setClipboard(result.nextClipboard);
-  };
+  }, [clipboard, state]);
 
-  const clearClipboard = () => {
+  const clearClipboard = useCallback(() => {
     setClipboard(null);
     clearPersistedClipboard();
-  };
+  }, []);
 
-  const resetBoard = (metaOrState: WhiteboardMeta | WhiteboardState) => {
+  const resetBoard = useCallback((metaOrState: WhiteboardMeta | WhiteboardState) => {
     dispatch({ type: 'RESET_BOARD', state: toBoardState(metaOrState) });
-  };
+  }, []);
 
-  const undo = () => dispatch({ type: 'UNDO' });
-  const redo = () => dispatch({ type: 'REDO' });
-  const setViewport = (patch: Partial<Viewport>) => dispatch({ type: 'SET_VIEWPORT', patch });
+  const undo = useCallback(() => dispatch({ type: 'UNDO' }), []);
+  const redo = useCallback(() => dispatch({ type: 'REDO' }), []);
+  const setViewport = useCallback((patch: Partial<Viewport>) => dispatch({ type: 'SET_VIEWPORT', patch }), []);
 
   const value: WhiteboardContextValue = useMemo(
     () => ({

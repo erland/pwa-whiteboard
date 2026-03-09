@@ -189,12 +189,41 @@ export function useCollabConnectionLifecycle({
 }: CollabConnectionLifecycleArgs): void {
   const clientKeyRef = useRef<string | null>(null);
   const applyRemoteEventRef = useRef(applyRemoteEvent);
+  const bootstrapSnapshotOnJoinRef = useRef(bootstrapSnapshotOnJoin);
+  const handleEphemeralMessageRef = useRef(handleEphemeralMessage);
+  const clearFatalErrorRef = useRef(clearFatalError);
+  const setFatalErrorRef = useRef(setFatalError);
+  const clearAllNoticesRef = useRef(clearAllNotices);
+  const showSoftErrorRef = useRef(showSoftError);
   const usersRef = useRef<PresenceUser[]>([]);
 
   useEffect(() => {
     applyRemoteEventRef.current = applyRemoteEvent;
   }, [applyRemoteEvent]);
 
+  useEffect(() => {
+    bootstrapSnapshotOnJoinRef.current = bootstrapSnapshotOnJoin;
+  }, [bootstrapSnapshotOnJoin]);
+
+  useEffect(() => {
+    handleEphemeralMessageRef.current = handleEphemeralMessage;
+  }, [handleEphemeralMessage]);
+
+  useEffect(() => {
+    clearFatalErrorRef.current = clearFatalError;
+  }, [clearFatalError]);
+
+  useEffect(() => {
+    setFatalErrorRef.current = setFatalError;
+  }, [setFatalError]);
+
+  useEffect(() => {
+    clearAllNoticesRef.current = clearAllNotices;
+  }, [clearAllNotices]);
+
+  useEffect(() => {
+    showSoftErrorRef.current = showSoftError;
+  }, [showSoftError]);
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -228,7 +257,7 @@ export function useCollabConnectionLifecycle({
 
     if (cooldownUntil && Date.now() < cooldownUntil) {
       setStatus('error');
-      setFatalError('Too many join attempts; cooling down…');
+      setFatalErrorRef.current('Too many join attempts; cooling down…');
       return;
     }
 
@@ -252,16 +281,16 @@ export function useCollabConnectionLifecycle({
           setStatus(s);
 
           if (s === 'connected') {
-            clearAllNotices();
+            clearAllNoticesRef.current();
             return;
           }
 
           if (s === 'error') {
-            setFatalError(err);
+            setFatalErrorRef.current(err);
             return;
           }
 
-          if (s === 'closed') clearFatalError();
+          if (s === 'closed') clearFatalErrorRef.current();
         },
         onJoined: (msg) => {
           setSelfUserId(msg.userId);
@@ -270,7 +299,7 @@ export function useCollabConnectionLifecycle({
           usersRef.current = joinedState.users;
           setUsers(joinedState.users);
           setPresenceByUserId(joinedState.presenceByUserId);
-          bootstrapSnapshotOnJoin(msg);
+          bootstrapSnapshotOnJoinRef.current(msg);
         },
         onOp: (msg) => {
           if (msg.op) applyRemoteEventRef.current(msg.op);
@@ -282,17 +311,17 @@ export function useCollabConnectionLifecycle({
           setPresenceByUserId(cleanupPresenceMap(presenceState.presenceByUserId, new Set(presenceState.users.map((user) => user.userId)), Date.now()));
         },
         onEphemeral: (msg) => {
-          handleEphemeralMessage(msg);
+          handleEphemeralMessageRef.current(msg);
           setPresenceByUserId((current) => mergeEphemeralPresence(current, msg));
         },
         onErrorMsg: (msg) => {
           const err = `${msg.code}: ${msg.message}`;
           if (msg.fatal) {
             console.error('Collab server fatal error:', err, msg);
-            setFatalError(err);
+            setFatalErrorRef.current(err);
             return;
           }
-          showSoftError({
+          showSoftErrorRef.current({
             code: msg.code,
             message: msg.message || err,
             cooldownMs: msg.code === 'rate_limited' ? 15_000 : undefined,
@@ -325,19 +354,11 @@ export function useCollabConnectionLifecycle({
     cooldownUntil,
     boardEnsured,
     reconnectNonce,
-    applyRemoteEvent,
-    bootstrapSnapshotOnJoin,
     setStatus,
     setSelfUserId,
     setRole,
     setUsers,
     setPresenceByUserId,
-  handleEphemeralMessage,
-    clearFatalError,
-    setFatalError,
-    clearAllNotices,
-    handleEphemeralMessage,
-    showSoftError,
     clientRef,
   ]);
 }

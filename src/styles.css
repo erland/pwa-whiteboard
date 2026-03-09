@@ -1493,6 +1493,13 @@ html {
   color: var(--color-text-soft);
 }
 
+.participant-activity-meta--reaction {
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0.08rem 0.38rem;
+  background: var(--color-panel-strong);
+}
+
 .reaction-toolbar {
   display: inline-flex;
   gap: 0.35rem;

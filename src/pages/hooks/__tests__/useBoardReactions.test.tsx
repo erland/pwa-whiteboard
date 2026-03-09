@@ -36,5 +36,7 @@ describe('useBoardReactions', () => {
     });
 
     expect(result.current.bursts.some((burst: any) => burst.reactionType === '🎉')).toBe(true);
+    expect(result.current.recentReactionByUserId['user-2']?.reactionType).toBe('🎉');
+    expect(result.current.recentReactionByUserId['me']?.reactionType).toBe('👏');
   });
 });

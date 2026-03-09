@@ -20,6 +20,73 @@ function toStringArray(value: unknown): string[] | undefined {
   return Array.isArray(value) && value.every((item) => typeof item === 'string') ? value : undefined;
 }
 
+const PRESENCE_STALE_TTLS = {
+  cursor: 15_000,
+  viewport: 45_000,
+  selection: 20_000,
+  typing: 6_000,
+};
+
+type PresenceActivityMeta = {
+  cursorAt?: number;
+  viewportAt?: number;
+  selectionAt?: number;
+  typingAt?: number;
+};
+
+type PresencePayloadWithMeta = PresencePayload & {
+  __activity?: PresenceActivityMeta;
+};
+
+function readActivityMeta(payload: PresencePayload | undefined): PresenceActivityMeta {
+  const meta = (payload as PresencePayloadWithMeta | undefined)?.__activity;
+  return meta && typeof meta === 'object' ? meta : {};
+}
+
+function applyActivityMeta(payload: PresencePayload, patch: PresenceActivityMeta): PresencePayload {
+  const existing = readActivityMeta(payload);
+  return {
+    ...(payload as PresencePayloadWithMeta),
+    __activity: { ...existing, ...patch },
+  } as PresencePayload;
+}
+
+function cleanupPresencePayload(payload: PresencePayload, now: number): PresencePayload | null {
+  const next: PresencePayloadWithMeta = { ...(payload as PresencePayloadWithMeta) };
+  const meta = readActivityMeta(payload);
+  if (meta.cursorAt && now - meta.cursorAt > PRESENCE_STALE_TTLS.cursor) {
+    delete next.cursor;
+  }
+  if (meta.viewportAt && now - meta.viewportAt > PRESENCE_STALE_TTLS.viewport) {
+    delete next.viewport;
+  }
+  if (meta.selectionAt && now - meta.selectionAt > PRESENCE_STALE_TTLS.selection) {
+    delete next.selectionIds;
+  }
+  if (meta.typingAt && now - meta.typingAt > PRESENCE_STALE_TTLS.typing) {
+    delete next.isTyping;
+  }
+  const nextMeta: PresenceActivityMeta = {};
+  if (next.cursor) nextMeta.cursorAt = meta.cursorAt;
+  if (next.viewport) nextMeta.viewportAt = meta.viewportAt;
+  if (next.selectionIds?.length) nextMeta.selectionAt = meta.selectionAt;
+  if (next.isTyping) nextMeta.typingAt = meta.typingAt;
+  if (Object.keys(nextMeta).length) next.__activity = nextMeta;
+  else delete next.__activity;
+  if (!next.cursor && !next.viewport && !(next.selectionIds?.length) && !next.isTyping) return null;
+  return next as PresencePayload;
+}
+
+function cleanupPresenceMap(current: Record<string, PresencePayload>, activeUserIds: Set<string>, now: number) {
+  const next: Record<string, PresencePayload> = {};
+  for (const [userId, payload] of Object.entries(current)) {
+    if (!activeUserIds.has(userId)) continue;
+    const cleaned = cleanupPresencePayload(payload, now);
+    if (cleaned) next[userId] = cleaned;
+  }
+  return next;
+}
+
 function mergeEphemeralPresence(
   current: Record<string, PresencePayload>,
   msg: WsEphemeralMessage
@@ -28,28 +95,35 @@ function mergeEphemeralPresence(
   if (!payload || !msg.from) return current;
 
   const existing = current[msg.from] ?? {};
+  const now = Date.now();
   switch (msg.eventType) {
     case 'cursor': {
       const x = toNumber(payload.x);
       const y = toNumber(payload.y);
       if (x === null || y === null) return current;
-      return { ...current, [msg.from]: { ...existing, cursor: { x, y } } };
+      return { ...current, [msg.from]: applyActivityMeta({ ...existing, cursor: { x, y } }, { cursorAt: now }) };
     }
     case 'viewport': {
       const panX = toNumber(payload.panX);
       const panY = toNumber(payload.panY);
       const zoom = toNumber(payload.zoom);
       if (panX === null || panY === null || zoom === null) return current;
-      return { ...current, [msg.from]: { ...existing, viewport: { panX, panY, zoom } } };
+      return { ...current, [msg.from]: applyActivityMeta({ ...existing, viewport: { panX, panY, zoom } }, { viewportAt: now }) };
     }
     case 'presence-meta': {
+      const hasSelectionIds = Array.isArray(payload.selectionIds);
+      const selectionIds = hasSelectionIds ? toStringArray(payload.selectionIds) ?? [] : undefined;
+      const next = {
+        ...existing,
+        ...(hasSelectionIds ? { selectionIds } : {}),
+        ...(typeof payload.isTyping === 'boolean' ? { isTyping: payload.isTyping } : {}),
+      };
       return {
         ...current,
-        [msg.from]: {
-          ...existing,
-          ...(toStringArray(payload.selectionIds) ? { selectionIds: toStringArray(payload.selectionIds) } : {}),
-          ...(typeof payload.isTyping === 'boolean' ? { isTyping: payload.isTyping } : {}),
-        },
+        [msg.from]: applyActivityMeta(next, {
+          ...(hasSelectionIds ? { selectionAt: now } : {}),
+          ...(typeof payload.isTyping === 'boolean' && payload.isTyping ? { typingAt: now } : {}),
+        }),
       };
     }
     default:
@@ -115,16 +189,30 @@ export function useCollabConnectionLifecycle({
 }: CollabConnectionLifecycleArgs): void {
   const clientKeyRef = useRef<string | null>(null);
   const applyRemoteEventRef = useRef(applyRemoteEvent);
+  const usersRef = useRef<PresenceUser[]>([]);
 
   useEffect(() => {
     applyRemoteEventRef.current = applyRemoteEvent;
   }, [applyRemoteEvent]);
+
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const timer = window.setInterval(() => {
+      const activeUserIds = new Set(usersRef.current.map((user) => user.userId));
+      setPresenceByUserId((current) => cleanupPresenceMap(current, activeUserIds, Date.now()));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [enabled, setPresenceByUserId]);
 
   useEffect(() => {
     if (!enabled || !wsBaseUrl || !boardId || (!accessToken && !inviteToken)) {
       clientRef.current?.close();
       clientRef.current = null;
       clientKeyRef.current = null;
+      usersRef.current = [];
+      setUsers([]);
+      setPresenceByUserId({});
       setStatus(enabled ? 'idle' : 'disabled');
       return;
     }
@@ -179,6 +267,7 @@ export function useCollabConnectionLifecycle({
           setSelfUserId(msg.userId);
           const joinedState = createJoinedPresenceState(msg);
           setRole(joinedState.role);
+          usersRef.current = joinedState.users;
           setUsers(joinedState.users);
           setPresenceByUserId(joinedState.presenceByUserId);
           bootstrapSnapshotOnJoin(msg);
@@ -188,8 +277,9 @@ export function useCollabConnectionLifecycle({
         },
         onPresence: (msg) => {
           const presenceState = createPresenceMessageState(msg);
+          usersRef.current = presenceState.users;
           setUsers(presenceState.users);
-          setPresenceByUserId(presenceState.presenceByUserId);
+          setPresenceByUserId(cleanupPresenceMap(presenceState.presenceByUserId, new Set(presenceState.users.map((user) => user.userId)), Date.now()));
         },
         onEphemeral: (msg) => {
           handleEphemeralMessage(msg);

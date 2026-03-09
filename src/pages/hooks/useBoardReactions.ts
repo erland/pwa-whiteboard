@@ -10,9 +10,15 @@ export type ReactionBurst = {
   y: number;
 };
 
+export type RecentReaction = {
+  reactionType: string;
+  createdAt: number;
+};
+
 const QUICK_REACTIONS = ['👍', '👏', '🎉', '❤️'];
 const OVERLAY_WIDTH = 960;
 const OVERLAY_HEIGHT = 540;
+const RECENT_REACTION_TTL_MS = 5000;
 
 function normalizeReactionType(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim().slice(0, 8) : null;
@@ -27,6 +33,7 @@ export function useBoardReactions(args: {
 }) {
   const { enabled, canReact, selfUserId, lastEphemeralMessage, sendEphemeral } = args;
   const [bursts, setBursts] = useState<ReactionBurst[]>([]);
+  const [recentReactionByUserId, setRecentReactionByUserId] = useState<Record<string, RecentReaction>>({});
 
   useEffect(() => {
     if (!lastEphemeralMessage || lastEphemeralMessage.eventType !== 'reaction') return;
@@ -47,16 +54,25 @@ export function useBoardReactions(args: {
       y,
     };
     setBursts((current) => [...current.slice(-7), burst]);
+    setRecentReactionByUserId((current) => ({
+      ...current,
+      [lastEphemeralMessage.from]: { reactionType, createdAt: now },
+    }));
   }, [lastEphemeralMessage]);
 
   useEffect(() => {
-    if (!bursts.length) return;
+    if (!bursts.length && !Object.keys(recentReactionByUserId).length) return;
     const timer = window.setTimeout(() => {
-      const cutoff = Date.now() - 2500;
-      setBursts((current) => current.filter((item) => item.createdAt >= cutoff));
+      const now = Date.now();
+      const burstCutoff = now - 2500;
+      const reactionCutoff = now - RECENT_REACTION_TTL_MS;
+      setBursts((current) => current.filter((item) => item.createdAt >= burstCutoff));
+      setRecentReactionByUserId((current) => Object.fromEntries(
+        Object.entries(current).filter(([, value]) => value.createdAt >= reactionCutoff)
+      ));
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [bursts]);
+  }, [bursts, recentReactionByUserId]);
 
   const sendReaction = useCallback(
     (reactionType: string) => {
@@ -65,17 +81,23 @@ export function useBoardReactions(args: {
       if (!normalized) return false;
       const sent = sendEphemeral('reaction', { reactionType: normalized, durationMs: 2200 });
       if (sent) {
+        const now = Date.now();
+        const localUserId = selfUserId || 'me';
         setBursts((current) => [
           ...current.slice(-7),
           {
-            id: `local:${normalized}:${Date.now()}`,
-            userId: selfUserId || 'me',
+            id: `local:${normalized}:${now}`,
+            userId: localUserId,
             reactionType: normalized,
-            createdAt: Date.now(),
+            createdAt: now,
             x: OVERLAY_WIDTH / 2,
             y: OVERLAY_HEIGHT / 2,
           },
         ]);
+        setRecentReactionByUserId((current) => ({
+          ...current,
+          [localUserId]: { reactionType: normalized, createdAt: now },
+        }));
       }
       return sent;
     },
@@ -87,5 +109,6 @@ export function useBoardReactions(args: {
     bursts,
     sendReaction,
     latestReaction: useMemo(() => (bursts.length ? bursts[bursts.length - 1] : null), [bursts]),
+    recentReactionByUserId,
   };
 }

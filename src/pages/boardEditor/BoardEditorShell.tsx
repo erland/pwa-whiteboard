@@ -167,6 +167,7 @@ export type BoardEditorShellProps = {
   reactionOptions: string[];
   onSendReaction: (reactionType: string) => void;
   reactionBursts: import('../hooks/useBoardReactions').ReactionBurst[];
+  recentReactionByUserId: Record<string, import('../hooks/useBoardReactions').RecentReaction>;
   sharedTimerCanControl: boolean;
   sharedTimer: import('../../api/timerApi').SharedTimerState | null;
   sharedTimerLabel: string | null;
@@ -316,6 +317,7 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
   reactionOptions,
   onSendReaction,
   reactionBursts,
+  recentReactionByUserId,
   sharedTimerCanControl,
   sharedTimer,
   sharedTimerLabel,
@@ -482,6 +484,7 @@ export const BoardEditorShell: React.FC<BoardEditorShellProps> = ({
               selfUserId={collab.selfUserId}
               presenterUserId={presenterUserId}
               followingUserId={followingUserId}
+              recentReactionByUserId={recentReactionByUserId}
               onFollowUser={(userId) => followUser(userId)}
               onStopFollowing={stopFollowing}
               onStartPresenting={isReadOnly ? undefined : startPresenting}

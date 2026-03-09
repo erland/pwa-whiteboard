@@ -630,6 +630,7 @@ const BoardEditorContent: React.FC<{
       reactionOptions={reactions.quickReactions}
       onSendReaction={reactions.sendReaction}
       reactionBursts={reactions.bursts}
+      recentReactionByUserId={reactions.recentReactionByUserId}
       sharedTimerConnected={sharedTimer.isConnected}
       sharedTimerCanControl={sharedTimer.canControl}
       sharedTimer={sharedTimer.timer}

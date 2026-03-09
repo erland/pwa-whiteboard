@@ -18,6 +18,7 @@ describe('ParticipantActivityStrip', () => {
         selfUserId="me"
         presenterUserId="u-2"
         followingUserId={null}
+        recentReactionByUserId={{ 'u-2': { reactionType: '🎉', createdAt: Date.now() } }}
         onFollowUser={onFollowUser}
         onStartPresenting={onStartPresenting}
       />
@@ -25,6 +26,7 @@ describe('ParticipantActivityStrip', () => {
 
     expect(screen.getByText('Alice')).toBeInTheDocument();
     expect(screen.getByText('presenting')).toBeInTheDocument();
+    expect(screen.getByText('reacted 🎉')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Follow' }));
     expect(onFollowUser).toHaveBeenCalledWith('u-2');

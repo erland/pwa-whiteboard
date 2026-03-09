@@ -1,5 +1,5 @@
 import React from 'react';
-import type { PresencePayload, PresenceUser } from '../../../shared/protocol';
+import type { PresencePayload, PresenceUser } from '../../collab/protocol';
 import type { Viewport } from '../../domain/types';
 import { worldToCanvas } from '../../whiteboard/geometry';
 

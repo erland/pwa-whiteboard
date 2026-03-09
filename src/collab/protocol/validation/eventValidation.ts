@@ -1,4 +1,4 @@
-import type { BoardEvent } from '../../domain';
+import type { BoardEvent } from '../../../domain';
 import {
   MAX_BOARD_ID_CHARS,
   MAX_CLIENT_OP_ID_CHARS,

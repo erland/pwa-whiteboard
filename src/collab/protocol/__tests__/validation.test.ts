@@ -59,7 +59,10 @@ describe('protocol validation', () => {
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.value.type).toBe('op');
-      expect(res.value.op.boardId).toBe('board-1');
+      expect(res.value.type).toBe('op');
+      if (res.value.type === 'op') {
+        expect(res.value.op.boardId).toBe('board-1');
+      }
     }
   });
 
@@ -73,7 +76,10 @@ describe('protocol validation', () => {
     });
     expect(res.ok).toBe(true);
     if (res.ok) {
-      expect(res.value.role).toBe('editor');
+      expect(res.value.type).toBe('joined');
+      if (res.value.type === 'joined') {
+        expect(res.value.role).toBe('editor');
+      }
     }
   });
 
@@ -146,10 +152,13 @@ test('rejects malformed op payload cleanly', () => {
     } as any);
     expect(res.ok).toBe(true);
     if (res.ok) {
-      expect(res.value.userId).toBe('alice');
-      // default role
-      expect(res.value.role).toBe('editor');
-      expect(res.value.users?.[0].userId).toBe('alice');
+      expect(res.value.type).toBe('joined');
+      if (res.value.type === 'joined') {
+        expect(res.value.userId).toBe('alice');
+        // default role
+        expect(res.value.role).toBe('editor');
+        expect(res.value.users?.[0].userId).toBe('alice');
+      }
     }
   });
 
@@ -165,7 +174,10 @@ test('normalizes lowercase joined roles without changing present-user fallback f
   });
   expect(res.ok).toBe(true);
   if (res.ok) {
-    expect(res.value.role).toBe('viewer');
-    expect(res.value.presentUserIds).toEqual(['alice', 'bob']);
+    expect(res.value.type).toBe('joined');
+    if (res.value.type === 'joined') {
+      expect(res.value.role).toBe('viewer');
+      expect(res.value.presentUserIds).toEqual(['alice', 'bob']);
+    }
   }
 });

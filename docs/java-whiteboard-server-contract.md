@@ -14,7 +14,7 @@ It is intentionally **descriptive, not aspirational**:
 This contract freeze exists to give the client migration a stable baseline before deeper refactoring.
 
 Source of truth used for this freeze:
-- PWA client files under `src/api/*`, `src/collab/*`, `src/pages/hooks/useBoardCollaboration.ts`, and `shared/protocol/*`
+- PWA client files under `src/api/*`, `src/collab/*`, `src/pages/hooks/useBoardCollaboration.ts`, and `src/collab/protocol/*`
 - java-whiteboard-server REST resources under `src/main/java/.../api/*`
 - java-whiteboard-server DTOs under `src/main/java/.../api/dto/*`
 - java-whiteboard-server WebSocket message types under `src/main/java/.../ws/WsMessage.java`
@@ -405,7 +405,7 @@ The shared protocol still allows a ping message, but current client behavior doe
 ## 5.4 Current client simplifications and compatibility shims
 
 The current PWA client deliberately accepts a somewhat broader protocol than the server currently emits.
-This is visible in `shared/protocol/types.ts` and `shared/protocol/validation.ts`.
+This is visible in `src/collab/protocol/types.ts` and `src/collab/protocol/validation.ts`.
 
 Compatibility shims currently in use:
 - accept either `userId` or `yourUserId` in joined payloads

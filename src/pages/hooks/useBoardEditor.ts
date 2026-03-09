@@ -9,7 +9,7 @@ import { useBoardPolicy } from './useBoardPolicy';
 import { useBoardClipboard } from './useBoardClipboard';
 import { useBoardMutations } from './useBoardMutations';
 import { useBoardCollaboration } from './useBoardCollaboration';
-import type { PresencePayload } from '../../../shared/protocol';
+import type { PresencePayload } from '../../collab/protocol';
 import type { BoardAccessMode } from './publicationSession';
 
 export function useBoardEditor(id: string | undefined, options: { accessMode?: BoardAccessMode } = {}) {

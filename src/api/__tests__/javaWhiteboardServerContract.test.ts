@@ -1,4 +1,4 @@
-import { parseAndValidateServerMessage } from '../../../shared/protocol/validation';
+import { parseAndValidateServerMessage } from '../../collab/protocol/validation';
 import type {
   CreateBoardRequest,
   CreateSnapshotRequest,

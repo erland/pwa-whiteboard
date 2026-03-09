@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
-import type { ServerJoinedMessage } from '../../../../shared/protocol';
-import type { BoardRole } from '../../../../shared/protocol';
+import type { ServerJoinedMessage } from '../../../collab/protocol';
+import type { BoardRole } from '../../../collab/protocol';
 import type { WhiteboardState } from '../../../domain/types';
 import { decodeSnapshotJson } from '../../../domain/snapshotCodec';
 import { loadLatestSnapshotOrNull, useSnapshotAutosave } from './useSnapshotSync';

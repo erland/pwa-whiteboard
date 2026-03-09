@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { WhiteboardState } from '../../../domain/types';
-import type { BoardRole } from '../../../../shared/protocol';
+import type { BoardRole } from '../../../collab/protocol';
 import { createSnapshotsApi } from '../../../api/snapshotsApi';
 import { decodeSnapshotJson, encodeSnapshotJson } from '../../../domain/snapshotCodec';
 

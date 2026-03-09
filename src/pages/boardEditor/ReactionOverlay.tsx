@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ReactionBurst } from '../hooks/useBoardReactions';
-import type { PresenceUser } from '../../../shared/protocol';
+import type { PresenceUser } from '../../collab/protocol';
 
 type ReactionOverlayProps = {
   bursts: ReactionBurst[];

@@ -1,4 +1,4 @@
-import type { BoardEvent } from '../domain';
+import type { BoardEvent } from '../../domain';
 
 export type BoardRole = 'owner' | 'editor' | 'viewer';
 

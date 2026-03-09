@@ -6,7 +6,7 @@ import {
   type VotingResults,
   type VotingSession,
 } from '../../api/votingApi';
-import type { WhiteboardObject } from '../../../shared/domain/types';
+import type { WhiteboardObject } from '../../domain/types';
 import type { BoardAccessContext } from './publicationSession';
 import { getOrCreatePersistedPublicationParticipantToken, resetPublicationParticipantToken } from './publicationVotingParticipant';
 

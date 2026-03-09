@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
-import type { PresencePayload } from '../../../../shared/protocol';
+import type { PresencePayload } from '../../../collab/protocol';
 import type { BoardEvent } from '../../../domain/types';
 import type { CollabClient } from '../../../collab/CollabClient';
 

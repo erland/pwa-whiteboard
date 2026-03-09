@@ -1,7 +1,7 @@
 import React from 'react';
 import { WhiteboardCanvas } from '../../whiteboard/WhiteboardCanvas';
 import type { WhiteboardState } from '../../domain/types';
-import type { BoardRole, PresencePayload, PresenceUser } from '../../../shared/protocol';
+import type { BoardRole, PresencePayload, PresenceUser } from '../../collab/protocol';
 import type { CollabStatus } from '../../collab/CollabClient';
 import { BoardEditorHeader } from './BoardEditorHeader';
 import { ToolSelectorPanel } from './ToolSelectorPanel';

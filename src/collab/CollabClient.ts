@@ -6,8 +6,8 @@ import type {
   ServerToClientMessage,
   WhiteboardOp,
   PresenceUser,
-} from '../../shared/protocol';
-import { parseAndValidateServerMessage } from '../../shared/protocol/validation';
+} from './protocol';
+import { parseAndValidateServerMessage } from './protocol/validation';
 import type { JavaWhiteboardServerWsMessage, WsEphemeralMessage } from '../api/javaWhiteboardServerContract';
 
 export type CollabStatus = 'idle' | 'connecting' | 'connected' | 'error' | 'closed';

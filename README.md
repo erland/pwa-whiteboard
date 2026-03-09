@@ -198,10 +198,10 @@ the local repository with one that talks to a backend and syncs events between c
 
 ## Collaboration and sharing (optional)
 
-The app can run fully **local-only** (boards stored in `localStorage`). If you configure Supabase + the worker,
-it can also support **real-time collaboration** and **share links**.
+The app can run fully **local-only** (boards stored in `localStorage`). When configured against a server backend,
+it can also support **real-time collaboration**, **share links**, publications, facilitation tools, and invite-based access.
 
-### Viewer/editor invite links (Option A: hash-only tokens)
+### Viewer/editor invite links
 
 Board owners can create multiple invite links with a role:
 
@@ -216,8 +216,9 @@ Invites can also have an optional **label** to help you manage multiple links (e
 
 ### When collaboration connects
 
-- If you are **signed in** as the owner, collaboration connects automatically on the board page.
+- If you are **signed in** as the owner/member, collaboration connects automatically on the board page.
 - If you open a board with an **invite link**, collaboration connects using that invite (sign-in not required).
+- If you open a **publication link**, the board opens in publication mode and uses the server-backed access rules for comments and voting.
 - Otherwise, the board works in **local-only** mode without showing “Connecting…” overlays.
 
 

@@ -4,7 +4,7 @@ import type {
   PresenceUser,
   ServerJoinedMessage,
   ServerPresenceMessage,
-} from '../../../../shared/protocol';
+} from '../../../collab/protocol';
 
 export type CollabPresenceState = {
   role?: BoardRole;

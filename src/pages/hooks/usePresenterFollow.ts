@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { PresencePayload, PresenceUser } from '../../../shared/protocol';
+import type { PresencePayload, PresenceUser } from '../../collab/protocol';
 import type { WsEphemeralMessage } from '../../api/javaWhiteboardServerContract';
 import type { Viewport } from '../../domain/types';
 

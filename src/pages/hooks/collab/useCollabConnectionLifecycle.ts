@@ -1,6 +1,6 @@
 import { useEffect, useRef, type MutableRefObject, type Dispatch, type SetStateAction } from 'react';
 import type { BoardEvent } from '../../../domain/types';
-import type { BoardRole, PresencePayload, PresenceUser } from '../../../../shared/protocol';
+import type { BoardRole, PresencePayload, PresenceUser } from '../../../collab/protocol';
 import type { WsEphemeralMessage } from '../../../api/javaWhiteboardServerContract';
 import {
   createJoinedPresenceState,

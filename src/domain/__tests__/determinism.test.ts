@@ -1,7 +1,7 @@
 import { applyEvent, createEmptyWhiteboardState } from '../index';
 import type { BoardEvent } from '../types';
 
-describe('shared/domain determinism', () => {
+describe('domain determinism', () => {
   it('applies the same ordered events to produce the same final state', () => {
     const meta = {
       id: 'b-1',
@@ -27,7 +27,6 @@ describe('shared/domain determinism', () => {
             y: 20,
             width: 100,
             height: 80,
-            rotation: 0,
             strokeColor: '#000000',
             strokeWidth: 2,
             fillColor: 'transparent',
@@ -58,7 +57,6 @@ describe('shared/domain determinism', () => {
             y: 5,
             width: 200,
             height: 40,
-            rotation: 0,
             text: 'Hello',
             fontSize: 18,
             textColor: '#111111'

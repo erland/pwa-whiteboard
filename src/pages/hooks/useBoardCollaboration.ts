@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BoardEvent, WhiteboardState } from '../../domain/types';
-import type { BoardRole, PresencePayload, PresenceUser } from '../../../shared/protocol';
+import type { BoardRole, PresencePayload, PresenceUser } from '../../collab/protocol';
 import { type CollabStatus } from '../../collab/CollabClient';
 import { useAuth } from '../../auth/AuthContext';
 import { getApiBaseUrl, getWsBaseUrl } from '../../config/server';

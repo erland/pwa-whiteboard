@@ -1,7 +1,7 @@
 import React from 'react';
 import { isWhiteboardServerConfigured } from '../../config/server';
 import { isOidcConfigured } from '../../auth/oidc';
-import type { BoardRole } from '../../../shared/protocol';
+import type { BoardRole } from '../../collab/protocol';
 
 type CollabInfo = {
   status: 'disabled' | 'idle' | 'connecting' | 'connected' | 'error' | 'closed';

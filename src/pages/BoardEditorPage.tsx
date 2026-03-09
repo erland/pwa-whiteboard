@@ -16,7 +16,7 @@ import { useBoardComments } from './hooks/useBoardComments';
 import { useBoardVoting } from './hooks/useBoardVoting';
 import { useSharedTimer } from './hooks/useSharedTimer';
 import { useBoardReactions } from './hooks/useBoardReactions';
-import type { PublicationSession } from './hooks/publicationSession';
+import { createBoardAccessContext, type PublicationSession } from './hooks/publicationSession';
 import { createPublicationsApi, type BoardPublication } from '../api/publicationsApi';
 
 function getInitialInviteToken(): string | null {
@@ -326,6 +326,11 @@ const BoardEditorContent: React.FC<{
 }) => {
   const auth = useAuth();
 
+  const access = useMemo(
+    () => createBoardAccessContext({ inviteToken, publicationSession }),
+    [inviteToken, publicationSession]
+  );
+
   const {
     state,
     boardTypeDef,
@@ -368,9 +373,9 @@ const BoardEditorContent: React.FC<{
     collab,
     isReadOnly,
     handleCursorWorldMove,
-  } = useBoardEditor(boardId, { accessMode: publicationSession ? 'publication' : inviteToken ? 'invite' : 'member' });
+  } = useBoardEditor(boardId, { accessMode: access.mode });
 
-  const boardName = state?.meta?.name ?? (publicationSession ? 'Published board' : 'Untitled board');
+  const boardName = state?.meta?.name ?? (access.isPublicationAccess ? 'Published board' : 'Untitled board');
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isFacilitationOpen, setIsFacilitationOpen] = useState(false);
   const [facilitationTab, setFacilitationTab] = useState<'overview' | 'comments' | 'voting' | 'timer'>('overview');
@@ -382,6 +387,7 @@ const BoardEditorContent: React.FC<{
     enabled: Boolean(boardId) && serverConfigured && capabilities.features.supportsComments,
     authenticated: auth.authenticated,
     selectedObjectIds: state?.selectedObjectIds ?? [],
+    access,
   });
   const sharedTimer = useSharedTimer({
     enabled: Boolean(boardId) && serverConfigured && capabilities.features.supportsSharedTimer,
@@ -405,6 +411,7 @@ const BoardEditorContent: React.FC<{
     authenticated: auth.authenticated,
     selectedObjectIds: state?.selectedObjectIds ?? [],
     objects: state?.objects ?? [],
+    access,
   });
 
   useEffect(() => {
@@ -435,7 +442,7 @@ const BoardEditorContent: React.FC<{
       boardId={boardId}
       boardName={boardName}
       inviteToken={inviteToken}
-      accessMode={publicationSession ? 'publication' : inviteToken ? 'invite' : 'member'}
+      accessMode={access.mode}
       publicationSession={publicationSession}
       serverConfigured={serverConfigured}
       oidcConfigured={oidcConfigured}

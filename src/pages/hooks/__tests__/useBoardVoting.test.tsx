@@ -1,6 +1,7 @@
 import React, { act } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { useBoardVoting } from '../useBoardVoting';
+import { createBoardAccessContext } from '../publicationSession';
 
 const mockListSessions = jest.fn();
 const mockGetResults = jest.fn();
@@ -26,7 +27,7 @@ jest.mock('../../../api/votingApi', () => ({
   }),
 }));
 
-function HookProbe() {
+function HookProbe(props: { publicationToken?: string | null } = {}) {
   const state = useBoardVoting({
     boardId: 'board-1',
     enabled: true,
@@ -36,6 +37,22 @@ function HookProbe() {
       { id: 'shape-1', type: 'stickyNote', x: 0, y: 0, text: 'Idea A' },
       { id: 'shape-2', type: 'rectangle', x: 10, y: 10 },
     ],
+    access: createBoardAccessContext({
+      publicationSession: props.publicationToken
+        ? {
+            token: props.publicationToken,
+            id: 'pub-1',
+            boardId: 'board-1',
+            targetType: 'board',
+            snapshotVersion: null,
+            allowComments: false,
+            state: 'active',
+            createdAt: '2026-03-08T10:00:00Z',
+            updatedAt: '2026-03-08T10:00:00Z',
+            expiresAt: null,
+          }
+        : null,
+    }),
   });
 
   return (
@@ -143,4 +160,18 @@ describe('useBoardVoting', () => {
     });
     expect(mockCreateSession).toHaveBeenCalledWith('board-1', expect.objectContaining({ scopeType: 'object', scopeRef: 'shape-1' }));
   });
+});
+
+
+test('threads publication token into voting reads without enabling vote mutations', async () => {
+  render(<HookProbe publicationToken="pub-token-1" />);
+
+  await waitFor(() => expect(mockListSessions).toHaveBeenCalledWith('board-1', { publicationToken: 'pub-token-1' }));
+  await waitFor(() => expect(mockGetResults).toHaveBeenCalledWith('board-1', 'vs-1', { publicationToken: 'pub-token-1' }));
+
+  await act(async () => {
+    screen.getByText('vote').click();
+  });
+
+  expect(mockCastVote).not.toHaveBeenCalled();
 });

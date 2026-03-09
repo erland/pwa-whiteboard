@@ -7,6 +7,7 @@ import {
   type VotingSession,
 } from '../../api/votingApi';
 import type { WhiteboardObject } from '../../../shared/domain/types';
+import type { BoardAccessContext } from './publicationSession';
 
 type VotingTarget = {
   id: string;
@@ -20,6 +21,7 @@ type UseBoardVotingArgs = {
   authenticated: boolean;
   selectedObjectIds: string[];
   objects: WhiteboardObject[];
+  access: BoardAccessContext;
 };
 
 export type BoardVotingState = {
@@ -92,7 +94,7 @@ function pickInitialSessionId(sessions: VotingSession[]): string | null {
   return preferred?.id ?? null;
 }
 
-export function useBoardVoting({ boardId, enabled, authenticated, selectedObjectIds, objects }: UseBoardVotingArgs): BoardVotingState {
+export function useBoardVoting({ boardId, enabled, authenticated, selectedObjectIds, objects, access }: UseBoardVotingArgs): BoardVotingState {
   const [sessions, setSessions] = React.useState<VotingSession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = React.useState<string | null>(null);
   const [results, setResults] = React.useState<VotingResults | null>(null);
@@ -124,7 +126,10 @@ export function useBoardVoting({ boardId, enabled, authenticated, selectedObject
     setIsLoading(true);
     try {
       const api = createVotingApi();
-      const nextSessions = await api.listSessions(boardId);
+      const nextSessions = await api.listSessions(
+        boardId,
+        access.publicationToken ? { publicationToken: access.publicationToken } : undefined
+      );
       setSessions(nextSessions);
       setSelectedSessionId((current) => {
         if (current && nextSessions.some((session) => session.id === current)) return current;
@@ -136,7 +141,7 @@ export function useBoardVoting({ boardId, enabled, authenticated, selectedObject
     } finally {
       setIsLoading(false);
     }
-  }, [boardId, enabled]);
+  }, [access.publicationToken, boardId, enabled]);
 
   React.useEffect(() => {
     void refresh();
@@ -151,7 +156,11 @@ export function useBoardVoting({ boardId, enabled, authenticated, selectedObject
     let cancelled = false;
     setIsLoading(true);
     createVotingApi()
-      .getResults(boardId, selectedSessionId)
+      .getResults(
+        boardId,
+        selectedSessionId,
+        access.publicationToken ? { publicationToken: access.publicationToken } : undefined
+      )
       .then((nextResults) => {
         if (cancelled) return;
         setResults(nextResults);
@@ -169,7 +178,7 @@ export function useBoardVoting({ boardId, enabled, authenticated, selectedObject
     return () => {
       cancelled = true;
     };
-  }, [boardId, enabled, selectedSessionId]);
+  }, [access.publicationToken, boardId, enabled, selectedSessionId]);
 
   const runMutation = React.useCallback(async (work: () => Promise<void>) => {
     setIsMutating(true);
@@ -185,7 +194,7 @@ export function useBoardVoting({ boardId, enabled, authenticated, selectedObject
   }, [refresh]);
 
   const createSession = React.useCallback(async (input: CreateVotingSessionInput) => {
-    if (!enabled || !authenticated || !boardId) return;
+    if (!enabled || !authenticated || !boardId || access.isPublicationAccess) return;
     setIsMutating(true);
     try {
       const created = await createVotingApi().createSession(boardId, input);
@@ -197,42 +206,42 @@ export function useBoardVoting({ boardId, enabled, authenticated, selectedObject
     } finally {
       setIsMutating(false);
     }
-  }, [authenticated, boardId, enabled, refresh]);
+  }, [access.isPublicationAccess, authenticated, boardId, enabled, refresh]);
 
   const openSession = React.useCallback(async (sessionId: string) => {
-    if (!enabled || !authenticated || !boardId) return;
+    if (!enabled || !authenticated || !boardId || access.isPublicationAccess) return;
     await runMutation(async () => {
       await createVotingApi().openSession(boardId, sessionId);
       setSelectedSessionId(sessionId);
     });
-  }, [authenticated, boardId, enabled, runMutation]);
+  }, [access.isPublicationAccess, authenticated, boardId, enabled, runMutation]);
 
   const closeSession = React.useCallback(async (sessionId: string) => {
-    if (!enabled || !authenticated || !boardId) return;
+    if (!enabled || !authenticated || !boardId || access.isPublicationAccess) return;
     await runMutation(async () => {
       await createVotingApi().closeSession(boardId, sessionId);
       setSelectedSessionId(sessionId);
     });
-  }, [authenticated, boardId, enabled, runMutation]);
+  }, [access.isPublicationAccess, authenticated, boardId, enabled, runMutation]);
 
   const revealSession = React.useCallback(async (sessionId: string) => {
-    if (!enabled || !authenticated || !boardId) return;
+    if (!enabled || !authenticated || !boardId || access.isPublicationAccess) return;
     await runMutation(async () => {
       await createVotingApi().revealSession(boardId, sessionId);
       setSelectedSessionId(sessionId);
     });
-  }, [authenticated, boardId, enabled, runMutation]);
+  }, [access.isPublicationAccess, authenticated, boardId, enabled, runMutation]);
 
   const cancelSession = React.useCallback(async (sessionId: string) => {
-    if (!enabled || !authenticated || !boardId) return;
+    if (!enabled || !authenticated || !boardId || access.isPublicationAccess) return;
     await runMutation(async () => {
       await createVotingApi().cancelSession(boardId, sessionId);
       setSelectedSessionId(sessionId);
     });
-  }, [authenticated, boardId, enabled, runMutation]);
+  }, [access.isPublicationAccess, authenticated, boardId, enabled, runMutation]);
 
   const castVote = React.useCallback(async (targetRef: string) => {
-    if (!enabled || !authenticated || !boardId || !selectedSession) return;
+    if (!enabled || !authenticated || !boardId || !selectedSession || access.isPublicationAccess) return;
     await runMutation(async () => {
       const created = await createVotingApi().castVote(boardId, selectedSession.id, { targetRef, voteValue: 1 });
       setLocalVotesBySession((current) => {
@@ -241,10 +250,10 @@ export function useBoardVoting({ boardId, enabled, authenticated, selectedObject
         return { ...current, [selectedSession.id]: sessionVotes };
       });
     });
-  }, [authenticated, boardId, enabled, runMutation, selectedSession]);
+  }, [access.isPublicationAccess, authenticated, boardId, enabled, runMutation, selectedSession]);
 
   const removeVote = React.useCallback(async (targetRef: string) => {
-    if (!enabled || !authenticated || !boardId || !selectedSession) return;
+    if (!enabled || !authenticated || !boardId || !selectedSession || access.isPublicationAccess) return;
     await runMutation(async () => {
       await createVotingApi().removeVote(boardId, selectedSession.id, targetRef);
       setLocalVotesBySession((current) => {
@@ -253,12 +262,12 @@ export function useBoardVoting({ boardId, enabled, authenticated, selectedObject
         return { ...current, [selectedSession.id]: sessionVotes };
       });
     });
-  }, [authenticated, boardId, enabled, runMutation, selectedSession]);
+  }, [access.isPublicationAccess, authenticated, boardId, enabled, runMutation, selectedSession]);
 
   const localVotesByTarget = selectedSessionId ? (localVotesBySession[selectedSessionId] ?? {}) : {};
   const usedVotes = Object.values(localVotesByTarget).reduce((sum, value) => sum + value, 0);
   const remainingVotes = selectedSession ? Math.max(selectedSession.rules.maxVotesPerParticipant - usedVotes, 0) : null;
-  const canVote = Boolean(enabled && authenticated && selectedSession && selectedSession.state === 'open');
+  const canVote = Boolean(enabled && authenticated && selectedSession && selectedSession.state === 'open' && !access.isPublicationAccess);
 
   return {
     sessions,
@@ -272,7 +281,7 @@ export function useBoardVoting({ boardId, enabled, authenticated, selectedObject
     error,
     localVotesByTarget,
     remainingVotes,
-    canManage: enabled && authenticated,
+    canManage: enabled && authenticated && !access.isPublicationAccess,
     canVote,
     refresh,
     selectSession: setSelectedSessionId,

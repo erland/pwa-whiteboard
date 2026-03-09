@@ -1,6 +1,7 @@
 import React, { act } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { useBoardComments } from '../useBoardComments';
+import { createBoardAccessContext } from '../publicationSession';
 
 const mockList = jest.fn();
 const mockCreate = jest.fn();
@@ -18,12 +19,28 @@ jest.mock('../../../api/commentsApi', () => ({
   }),
 }));
 
-function HookProbe(props: { selectedObjectIds: string[]; authenticated?: boolean; enabled?: boolean }) {
+function HookProbe(props: { selectedObjectIds: string[]; authenticated?: boolean; enabled?: boolean; publicationToken?: string | null }) {
   const state = useBoardComments({
     boardId: 'board-1',
     enabled: props.enabled ?? true,
     authenticated: props.authenticated ?? true,
     selectedObjectIds: props.selectedObjectIds,
+    access: createBoardAccessContext({
+      publicationSession: props.publicationToken
+        ? {
+            token: props.publicationToken,
+            id: 'pub-1',
+            boardId: 'board-1',
+            targetType: 'board',
+            snapshotVersion: null,
+            allowComments: false,
+            state: 'active',
+            createdAt: '2026-03-08T10:00:00Z',
+            updatedAt: '2026-03-08T10:00:00Z',
+            expiresAt: null,
+          }
+        : null,
+    }),
   });
 
   return (
@@ -95,4 +112,17 @@ describe('useBoardComments', () => {
       content: 'Reply here',
     });
   });
+});
+
+
+test('threads publication token into comment listing without enabling mutations', async () => {
+  render(<HookProbe selectedObjectIds={[]} authenticated={true} publicationToken="pub-token-1" />);
+
+  await waitFor(() => expect(mockList).toHaveBeenCalledWith('board-1', { publicationToken: 'pub-token-1' }));
+
+  await act(async () => {
+    screen.getByText('create').click();
+  });
+
+  expect(mockCreate).not.toHaveBeenCalled();
 });

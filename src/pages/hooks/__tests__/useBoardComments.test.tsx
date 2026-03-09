@@ -92,7 +92,7 @@ describe('useBoardComments', () => {
   test('creates board-level and reply comments through the typed comments API', async () => {
     render(<HookProbe selectedObjectIds={[]} />);
 
-    await waitFor(() => expect(mockList).toHaveBeenCalledWith('board-1'));
+    await waitFor(() => expect(mockList).toHaveBeenCalledWith('board-1', undefined));
 
     await act(async () => {
       screen.getByText('create').click();
@@ -113,79 +113,76 @@ describe('useBoardComments', () => {
       content: 'Reply here',
     });
   });
-});
 
+  test('threads publication token into comment listing for publication sessions', async () => {
+    render(<HookProbe selectedObjectIds={[]} authenticated={false} publicationToken="pub-token-1" publicationAllowComments={true} />);
 
-test('threads publication token into comment listing for publication sessions', async () => {
-  render(<HookProbe selectedObjectIds={[]} authenticated={false} publicationToken="pub-token-1" publicationAllowComments={true} />);
+    await waitFor(() => expect(mockList).toHaveBeenCalledWith('board-1', { publicationToken: 'pub-token-1' }));
 
-  await waitFor(() => expect(mockList).toHaveBeenCalledWith('board-1', { publicationToken: 'pub-token-1' }));
+    await act(async () => {
+      screen.getByText('create').click();
+    });
 
-  await act(async () => {
-    screen.getByText('create').click();
+    expect(mockCreate).not.toHaveBeenCalled();
   });
 
-  expect(mockCreate).not.toHaveBeenCalled();
-});
+  test('does not fetch comments for publications that disallow comment access', async () => {
+    render(<HookProbe selectedObjectIds={[]} authenticated={false} publicationToken="pub-token-2" publicationAllowComments={false} />);
 
-
-test('does not fetch comments for publications that disallow comment access', async () => {
-  render(<HookProbe selectedObjectIds={[]} authenticated={false} publicationToken="pub-token-2" publicationAllowComments={false} />);
-
-  await waitFor(() => expect(screen.getByTestId('comments-count')).toHaveTextContent('0'));
-  expect(mockList).not.toHaveBeenCalled();
-});
-
-test('allows authenticated comment creation in publication sessions when publication comments are enabled', async () => {
-  render(<HookProbe selectedObjectIds={[]} authenticated={true} publicationToken="pub-token-3" publicationAllowComments={true} />);
-
-  await waitFor(() => expect(mockList).toHaveBeenCalledWith('board-1', { publicationToken: 'pub-token-3' }));
-
-  await act(async () => {
-    screen.getByText('create').click();
+    await waitFor(() => expect(screen.getByTestId('comments-count')).toHaveTextContent('0'));
+    expect(mockList).not.toHaveBeenCalled();
   });
 
-  expect(mockCreate).toHaveBeenCalledWith('board-1', {
-    targetType: 'board',
-    targetRef: null,
-    content: 'Review this',
+  test('allows authenticated comment creation in publication sessions when publication comments are enabled', async () => {
+    render(<HookProbe selectedObjectIds={[]} authenticated={true} publicationToken="pub-token-3" publicationAllowComments={true} />);
+
+    await waitFor(() => expect(mockList).toHaveBeenCalledWith('board-1', { publicationToken: 'pub-token-3' }));
+
+    await act(async () => {
+      screen.getByText('create').click();
+    });
+
+    expect(mockCreate).toHaveBeenCalledWith('board-1', {
+      targetType: 'board',
+      targetRef: null,
+      content: 'Review this',
+    });
   });
-});
 
+  test('builds object-level comment anchors for object review markers', async () => {
+    mockList.mockResolvedValueOnce([
+      {
+        id: 'comment-1',
+        boardId: 'board-1',
+        parentCommentId: null,
+        targetType: 'object',
+        targetRef: 'shape-1',
+        authorUserId: 'alice',
+        content: 'Needs review',
+        state: 'active',
+        createdAt: '2026-03-08T10:00:00Z',
+        updatedAt: '2026-03-08T10:00:00Z',
+        resolvedAt: null,
+        deletedAt: null,
+      },
+      {
+        id: 'comment-2',
+        boardId: 'board-1',
+        parentCommentId: 'comment-1',
+        targetType: 'comment',
+        targetRef: 'comment-1',
+        authorUserId: 'bob',
+        content: 'Following up',
+        state: 'active',
+        createdAt: '2026-03-08T10:05:00Z',
+        updatedAt: '2026-03-08T10:05:00Z',
+        resolvedAt: null,
+        deletedAt: null,
+      },
+    ]);
 
-test('builds object-level comment anchors for object review markers', async () => {
-  mockList.mockResolvedValueOnce([
-    {
-      id: 'comment-1',
-      boardId: 'board-1',
-      parentCommentId: null,
-      targetType: 'object',
-      targetRef: 'shape-1',
-      authorUserId: 'alice',
-      content: 'Needs review',
-      state: 'active',
-      createdAt: '2026-03-08T10:00:00Z',
-      updatedAt: '2026-03-08T10:00:00Z',
-      resolvedAt: null,
-      deletedAt: null,
-    },
-    {
-      id: 'comment-2',
-      boardId: 'board-1',
-      parentCommentId: 'comment-1',
-      targetType: 'comment',
-      targetRef: 'comment-1',
-      authorUserId: 'bob',
-      content: 'Following up',
-      state: 'active',
-      createdAt: '2026-03-08T10:05:00Z',
-      updatedAt: '2026-03-08T10:05:00Z',
-      resolvedAt: null,
-      deletedAt: null,
-    },
-  ]);
+    render(<HookProbe selectedObjectIds={['shape-1']} />);
 
-  render(<HookProbe selectedObjectIds={['shape-1']} />);
-
-  await waitFor(() => expect(screen.getByTestId('anchor-count')).toHaveTextContent('1'));
+    await waitFor(() => expect(screen.getByTestId('anchor-count')).toHaveTextContent('1'));
+  });
 });

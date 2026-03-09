@@ -130,12 +130,12 @@ test('hides progress totals until the server allows them', () => {
       enabled
       authenticated
       boardName="Board A"
-      sessions={SESSIONS}
+      sessions={[{ ...SESSIONS[0], rules: { ...SESSIONS[0].rules, allowVoteUpdates: false } }]}
       selectedSessionId="vs-1"
-      results={{ session: SESSIONS[0], totalsByTarget: { 'shape-1': 2 }, visibleVotes: [], identitiesHidden: true, progressHidden: true }}
+      results={{ session: { ...SESSIONS[0], rules: { ...SESSIONS[0].rules, allowVoteUpdates: false } }, totalsByTarget: { 'shape-1': 2 }, visibleVotes: [], identitiesHidden: true, progressHidden: true }}
       availableTargets={[{ id: 'shape-1', label: 'Idea A', objectType: 'stickyNote' }]}
       selectedTargets={[]}
-      localVotesByTarget={{ shape-1: 1 }}
+      localVotesByTarget={{ 'shape-1': 1 }}
       remainingVotes={2}
       canManage={true}
       canVote={true}
@@ -160,7 +160,7 @@ test('hides progress totals until the server allows them', () => {
   );
 
   expect(screen.getByText(/Result totals are currently hidden by the server/i)).toBeInTheDocument();
-  expect(screen.queryByText(/^2$/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Visible vote records/i)).not.toBeInTheDocument();
   expect(screen.getByText(/Vote updates are disabled/i)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /remove/i })).toBeDisabled();
 });

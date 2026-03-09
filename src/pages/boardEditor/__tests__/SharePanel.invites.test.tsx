@@ -95,8 +95,9 @@ describe('SharePanel invites', () => {
     );
 
     await waitFor(() => expect(invitesApi.listBoardInvites).toHaveBeenCalledWith('b-1'));
-    expect(screen.getByText(/Viewer invite/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Viewer invite/i).length).toBeGreaterThan(0);
 
+    fireEvent.click(screen.getByRole('button', { name: /New invite link/i }));
     fireEvent.change(screen.getByDisplayValue('viewer'), { target: { value: 'editor' } });
     fireEvent.change(screen.getByLabelText(/Invite expiry/i), { target: { value: '2026-03-08T13:30' } });
     fireEvent.change(screen.getByLabelText(/Invite max uses/i), { target: { value: '3' } });

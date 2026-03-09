@@ -121,6 +121,8 @@ export const SharePanel: React.FC<SharePanelProps> = ({
   const [publicationUrlsById, setPublicationUrlsById] = React.useState<Record<string, string>>({});
   const [lastCreatedPublicationCopied, setLastCreatedPublicationCopied] = React.useState(false);
   const [lastResolvedPublicationId, setLastResolvedPublicationId] = React.useState<string | null>(null);
+  const [isCreateInviteDialogOpen, setIsCreateInviteDialogOpen] = React.useState(false);
+  const [isCreatePublicationDialogOpen, setIsCreatePublicationDialogOpen] = React.useState(false);
 
   const inviteToken = getInviteTokenFromUrl();
   const publicationToken = getPublicationTokenFromUrl();
@@ -285,6 +287,7 @@ export const SharePanel: React.FC<SharePanelProps> = ({
       setManagedInvites((current) => [created, ...current.filter((entry) => entry.id !== created.id)]);
       setInviteExpiresAt('');
       setInviteMaxUses('');
+      setIsCreateInviteDialogOpen(false);
     } catch (e) {
       setInviteAdminError(String((e as any)?.message ?? e));
     } finally {
@@ -368,6 +371,7 @@ export const SharePanel: React.FC<SharePanelProps> = ({
       setPublicationSnapshotVersion('');
       setPublicationAllowComments(false);
       setPublicationExpiresAt('');
+      setIsCreatePublicationDialogOpen(false);
     } catch (e: any) {
       setPublicationError(String(e?.message ?? e));
     } finally {
@@ -417,6 +421,21 @@ export const SharePanel: React.FC<SharePanelProps> = ({
       setActivePublicationId(null);
     }
   };
+
+
+  React.useEffect(() => {
+    if (!isCreateInviteDialogOpen && !isCreatePublicationDialogOpen) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setIsCreateInviteDialogOpen(false);
+      setIsCreatePublicationDialogOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isCreateInviteDialogOpen, isCreatePublicationDialogOpen]);
+
+  const visiblePublications = publications.filter((publication) => publication.state !== 'revoked');
+  const visibleInvites = managedInvites.filter((invite) => !invite.revokedAt);
 
   return (
     <div className="share-panel">
@@ -483,7 +502,7 @@ export const SharePanel: React.FC<SharePanelProps> = ({
 
           {publicationToken && (
             <div className="share-help">
-              You opened this board using a publication link{lastResolvedPublicationId ? ` (${lastResolvedPublicationId})` : ''}.
+              You opened this board using a publication link.
             </div>
           )}
 
@@ -492,59 +511,16 @@ export const SharePanel: React.FC<SharePanelProps> = ({
           ) : isReadOnly ? (
             <div className="share-help">Publication management is unavailable while the board is open read-only.</div>
           ) : (
-            <div className="share-publication-grid">
-              <label style={{ display: 'grid', gap: 6 }}>
-                <span className="form-help">Target</span>
-                <select
-                  aria-label="Publication target"
-                  value={publicationTargetType}
-                  onChange={(e) => setPublicationTargetType(e.currentTarget.value as BoardPublicationTargetType)}
-                  disabled={isCreatingPublication}
-                >
-                  <option value="board">Live board</option>
-                  <option value="snapshot">Specific snapshot</option>
-                </select>
-              </label>
-
-              {publicationTargetType === 'snapshot' && (
-                <label style={{ display: 'grid', gap: 6 }}>
-                  <span className="form-help">Snapshot version</span>
-                  <input
-                    type="number"
-                    min={1}
-                    inputMode="numeric"
-                    aria-label="Snapshot version"
-                    value={publicationSnapshotVersion}
-                    onChange={(e) => setPublicationSnapshotVersion(e.currentTarget.value)}
-                    placeholder="e.g. 12"
-                    disabled={isCreatingPublication}
-                  />
-                </label>
-              )}
-
-              <label style={{ display: 'grid', gap: 6 }}>
-                <span className="form-help">Expires at (optional)</span>
-                <input
-                  type="datetime-local"
-                  aria-label="Publication expiry"
-                  value={publicationExpiresAt}
-                  onChange={(e) => setPublicationExpiresAt(e.currentTarget.value)}
-                  disabled={isCreatingPublication}
-                />
-              </label>
-
-              <label className="share-checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={publicationAllowComments}
-                  onChange={(e) => setPublicationAllowComments(e.currentTarget.checked)}
-                  disabled={isCreatingPublication}
-                />
-                <span>Allow comments for published readers</span>
-              </label>
-
-              <button type="button" className="tool-button" onClick={handleCreatePublication} disabled={isCreatingPublication}>
-                {isCreatingPublication ? 'Creating…' : 'Create publication link'}
+            <div className="share-create-inline">
+              <div>
+                <div className="share-help">Create a compact publication link without pushing the publication list off-screen.</div>
+                <div className="share-create-summary">
+                  <span className="capability-chip" data-enabled="true">{publicationTargetType === 'snapshot' ? 'Snapshot target' : 'Live board'}</span>
+                  <span className="capability-chip" data-enabled={publicationAllowComments ? 'true' : 'false'}>{publicationAllowComments ? 'Comments on' : 'Read-only'}</span>
+                </div>
+              </div>
+              <button type="button" className="tool-button" onClick={() => setIsCreatePublicationDialogOpen(true)} disabled={isCreatingPublication}>
+                New publication link…
               </button>
             </div>
           )}
@@ -565,53 +541,62 @@ export const SharePanel: React.FC<SharePanelProps> = ({
             <div className="share-publication-list">
               {isLoadingPublications ? (
                 <div className="share-help">Loading publication links…</div>
-              ) : publications.length === 0 ? (
+              ) : visiblePublications.length === 0 ? (
                 <div className="share-help">No publication links created yet.</div>
               ) : (
-                publications.map((publication) => {
-                  const isBusy = activePublicationId === publication.id;
-                  const shareUrl = publicationUrlsById[publication.id]
-                    ?? (lastResolvedPublicationId === publication.id && publicationToken ? buildPublicationUrl(publicationToken) : null);
-                  return (
-                    <div key={publication.id} className="share-publication-card" data-state={publication.state}>
-                      <div className="comment-card-header">
-                        <div>
-                          <strong>{publication.targetType === 'snapshot' ? `Snapshot v${publication.snapshotVersion ?? '—'}` : 'Live board'}</strong>
-                          <div className="share-help">
-                            State: {publication.state} · Comments: {publication.allowComments ? 'allowed' : 'read-only'}
-                          </div>
-                        </div>
-                        <span className="capability-chip" data-enabled={publication.state === 'active' ? 'true' : 'false'}>
-                          {publication.state}
-                        </span>
-                      </div>
-
-                      <div className="share-publication-meta">
-                        <span>Created {formatDateTime(publication.createdAt)}</span>
-                        <span>Updated {formatDateTime(publication.updatedAt)}</span>
-                        <span>Expires {formatDateTime(publication.expiresAt)}</span>
-                      </div>
-
-                      {shareUrl && (
-                        <input type="text" readOnly value={shareUrl} aria-label={`Publication link ${publication.id}`} />
-                      )}
-
-                      <div className="comment-card-actions">
-                        <button type="button" className="tool-button" onClick={() => void handleRotatePublicationToken(publication.id)} disabled={isBusy}>
-                          {isBusy ? 'Working…' : 'Rotate token'}
-                        </button>
-                        <button
-                          type="button"
-                          className="tool-button"
-                          onClick={() => void handleRevokePublication(publication.id)}
-                          disabled={isBusy || publication.state !== 'active'}
-                        >
-                          Revoke
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
+                <div className="share-table-wrap">
+                  <table className="share-table" aria-label="Publication links">
+                    <thead>
+                      <tr>
+                        <th>Link</th>
+                        <th>State</th>
+                        <th>Comments</th>
+                        <th>Expires</th>
+                        <th>Updated</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visiblePublications.map((publication) => {
+                        const isBusy = activePublicationId === publication.id;
+                        const shareUrl = publicationUrlsById[publication.id]
+                          ?? (lastResolvedPublicationId === publication.id && publicationToken ? buildPublicationUrl(publicationToken) : null);
+                        return (
+                          <tr key={publication.id} data-state={publication.state}>
+                            <td>
+                              <div className="share-table-primary">{publication.targetType === 'snapshot' ? `Snapshot v${publication.snapshotVersion ?? '—'}` : 'Live board'}</div>
+                              <div className="share-table-secondary">{publication.targetType === 'snapshot' ? 'Pinned snapshot review link' : 'Live board review link'}</div>
+                            </td>
+                            <td>{publication.state}</td>
+                            <td>{publication.allowComments ? 'Allowed' : 'Read-only'}</td>
+                            <td>{formatDateTime(publication.expiresAt)}</td>
+                            <td>{formatDateTime(publication.updatedAt)}</td>
+                            <td>
+                              <div className="share-table-actions">
+                                {shareUrl && (
+                                  <button type="button" className="tool-button" onClick={() => void handleCopyPublicationLink(shareUrl)}>
+                                    Copy publication link
+                                  </button>
+                                )}
+                                <button type="button" className="tool-button" onClick={() => void handleRotatePublicationToken(publication.id)} disabled={isBusy}>
+                                  {isBusy ? 'Working…' : 'Rotate token'}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="tool-button"
+                                  onClick={() => void handleRevokePublication(publication.id)}
+                                  disabled={isBusy || publication.state !== 'active'}
+                                >
+                                  Revoke
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           )}
@@ -684,13 +669,178 @@ export const SharePanel: React.FC<SharePanelProps> = ({
           <div className="share-help">Invite management is unavailable while the board is open read-only.</div>
         ) : (
           <>
-            <div style={{ display: 'grid', gap: 10 }}>
-              <div className="share-help">
-                Member invite links are only shown once at creation time. Existing invites can still be reviewed and revoked below.
-                (Board: <code>{boardId}</code>
-                {boardName ? ` — ${boardName}` : ''})
+            <div className="share-create-inline">
+              <div>
+                <div className="share-help">
+                  Member invite links are only shown once at creation time. Existing invites can still be reviewed and revoked below.
+                  (Board: <code>{boardId}</code>
+                  {boardName ? ` — ${boardName}` : ''})
+                </div>
+                <div className="share-create-summary">
+                  <span className="capability-chip" data-enabled={createRole === 'editor' ? 'true' : 'false'}>{createRole === 'editor' ? 'Editor invite' : 'Viewer invite'}</span>
+                  <span className="capability-chip" data-enabled={inviteMaxUses.trim() ? 'true' : 'false'}>{inviteMaxUses.trim() ? `Max uses ${inviteMaxUses.trim()}` : 'Unlimited uses'}</span>
+                </div>
               </div>
+              <button type="button" className="tool-button" onClick={() => setIsCreateInviteDialogOpen(true)} disabled={creating}>
+                New invite link…
+              </button>
+            </div>
 
+            {inviteAdminError && <div className="share-help">Invite error: {inviteAdminError}</div>}
+
+            {lastCreatedInviteUrl && (
+              <div className="share-created-link-box">
+                <div className="share-help">Latest invite link (copy it now):</div>
+                <input type="text" readOnly value={lastCreatedInviteUrl} aria-label="Latest invite link" />
+                <button type="button" className="tool-button" onClick={handleCopyLastCreatedInvite}>
+                  {lastCreatedInviteCopied ? 'Copied!' : 'Copy link'}
+                </button>
+              </div>
+            )}
+
+            <div className="share-publication-list">
+              {isLoadingInvites ? (
+                <div className="share-help">Loading invites…</div>
+              ) : visibleInvites.length === 0 ? (
+                <div className="share-help">No invite links created yet.</div>
+              ) : (
+                <div className="share-table-wrap">
+                  <table className="share-table" aria-label="Invite links">
+                    <thead>
+                      <tr>
+                        <th>Type</th>
+                        <th>State</th>
+                        <th>Uses</th>
+                        <th>Expires</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleInvites.map((invite) => {
+                        const isBusy = activeInviteId === invite.id;
+                        const inviteState = invite.revokedAt
+                          ? 'revoked'
+                          : invite.expiresAt && Date.parse(invite.expiresAt) <= Date.now()
+                            ? 'expired'
+                            : 'active';
+                        const usageLabel = invite.maxUses == null
+                          ? `${invite.uses} use${invite.uses === 1 ? '' : 's'}`
+                          : `${invite.uses}/${invite.maxUses} uses`;
+                        return (
+                          <tr key={invite.id} data-state={inviteState}>
+                            <td>
+                              <div className="share-table-primary">{invite.permission === 'editor' ? 'Editor invite' : 'Viewer invite'}</div>
+                              <div className="share-table-secondary">Board access</div>
+                            </td>
+                            <td>{inviteState}</td>
+                            <td>{usageLabel}</td>
+                            <td>{formatDateTime(invite.expiresAt)}</td>
+                            <td>{formatDateTime(invite.createdAt)}</td>
+                            <td>
+                              <div className="share-table-actions">
+                                <button
+                                  type="button"
+                                  className="tool-button"
+                                  onClick={() => void handleRevokeInvite(invite.id)}
+                                  disabled={isBusy || inviteState !== 'active'}
+                                >
+                                  {isBusy ? 'Working…' : 'Revoke'}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+
+      {isCreatePublicationDialogOpen && authenticated && !isReadOnly && (
+        <div className="modal-backdrop" onMouseDown={() => setIsCreatePublicationDialogOpen(false)}>
+          <div className="modal share-create-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <h4 style={{ margin: 0 }}>Create publication link</h4>
+              <div className="share-help">Choose whether this link should point to the live board or a snapshot.</div>
+            </div>
+            <div className="modal-body share-create-modal-body">
+              <div className="share-publication-grid">
+                <label style={{ display: 'grid', gap: 6 }}>
+                  <span className="form-help">Target</span>
+                  <select
+                    aria-label="Publication target"
+                    value={publicationTargetType}
+                    onChange={(e) => setPublicationTargetType(e.currentTarget.value as BoardPublicationTargetType)}
+                    disabled={isCreatingPublication}
+                  >
+                    <option value="board">Live board</option>
+                    <option value="snapshot">Specific snapshot</option>
+                  </select>
+                </label>
+
+                {publicationTargetType === 'snapshot' && (
+                  <label style={{ display: 'grid', gap: 6 }}>
+                    <span className="form-help">Snapshot version</span>
+                    <input
+                      type="number"
+                      min={1}
+                      inputMode="numeric"
+                      aria-label="Snapshot version"
+                      value={publicationSnapshotVersion}
+                      onChange={(e) => setPublicationSnapshotVersion(e.currentTarget.value)}
+                      placeholder="e.g. 12"
+                      disabled={isCreatingPublication}
+                    />
+                  </label>
+                )}
+
+                <label style={{ display: 'grid', gap: 6 }}>
+                  <span className="form-help">Expires at (optional)</span>
+                  <input
+                    type="datetime-local"
+                    aria-label="Publication expiry"
+                    value={publicationExpiresAt}
+                    onChange={(e) => setPublicationExpiresAt(e.currentTarget.value)}
+                    disabled={isCreatingPublication}
+                  />
+                </label>
+
+                <label className="share-checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={publicationAllowComments}
+                    onChange={(e) => setPublicationAllowComments(e.currentTarget.checked)}
+                    disabled={isCreatingPublication}
+                  />
+                  <span>Allow comments for published readers</span>
+                </label>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="tool-button" onClick={() => setIsCreatePublicationDialogOpen(false)} disabled={isCreatingPublication}>
+                Cancel
+              </button>
+              <button type="button" className="tool-button tool-button--primary" onClick={handleCreatePublication} disabled={isCreatingPublication}>
+                {isCreatingPublication ? 'Creating…' : 'Create publication link'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isCreateInviteDialogOpen && authenticated && !isReadOnly && (
+        <div className="modal-backdrop" onMouseDown={() => setIsCreateInviteDialogOpen(false)}>
+          <div className="modal share-create-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <h4 style={{ margin: 0 }}>Create invite link</h4>
+              <div className="share-help">Create a member invite without pushing the invite list lower in the dialog.</div>
+            </div>
+            <div className="modal-body share-create-modal-body">
               <div className="share-publication-grid">
                 <label style={{ display: 'grid', gap: 6, maxWidth: 260 }}>
                   <span className="form-help">Permission</span>
@@ -724,78 +874,19 @@ export const SharePanel: React.FC<SharePanelProps> = ({
                     disabled={creating}
                   />
                 </label>
-
-                <button type="button" className="tool-button" onClick={handleCreateInvite} disabled={creating}>
-                  {creating ? 'Creating…' : 'Create invite link'}
-                </button>
               </div>
-
-              {inviteAdminError && <div className="share-help">Invite error: {inviteAdminError}</div>}
-
-              {lastCreatedInviteUrl && (
-                <div className="share-created-link-box">
-                  <div className="share-help">Latest invite link (copy it now):</div>
-                  <input type="text" readOnly value={lastCreatedInviteUrl} aria-label="Latest invite link" />
-                  <button type="button" className="tool-button" onClick={handleCopyLastCreatedInvite}>
-                    {lastCreatedInviteCopied ? 'Copied!' : 'Copy link'}
-                  </button>
-                </div>
-              )}
             </div>
-
-            <div className="share-publication-list">
-              {isLoadingInvites ? (
-                <div className="share-help">Loading invites…</div>
-              ) : managedInvites.length === 0 ? (
-                <div className="share-help">No invite links created yet.</div>
-              ) : (
-                managedInvites.map((invite) => {
-                  const isBusy = activeInviteId === invite.id;
-                  const inviteState = invite.revokedAt
-                    ? 'revoked'
-                    : invite.expiresAt && Date.parse(invite.expiresAt) <= Date.now()
-                      ? 'expired'
-                      : 'active';
-                  const usageLabel = invite.maxUses == null
-                    ? `${invite.uses} use${invite.uses === 1 ? '' : 's'}`
-                    : `${invite.uses}/${invite.maxUses} uses`;
-                  return (
-                    <div key={invite.id} className="share-publication-card" data-state={inviteState}>
-                      <div className="comment-card-header">
-                        <div>
-                          <strong>{invite.permission === 'editor' ? 'Editor invite' : 'Viewer invite'}</strong>
-                          <div className="share-help">
-                            State: {inviteState} · {usageLabel}
-                          </div>
-                        </div>
-                        <span className="capability-chip" data-enabled={inviteState === 'active' ? 'true' : 'false'}>
-                          {inviteState}
-                        </span>
-                      </div>
-
-                      <div className="share-publication-meta">
-                        <span>Created {formatDateTime(invite.createdAt)}</span>
-                        <span>Expires {formatDateTime(invite.expiresAt)}</span>
-                        <span>Revoked {formatDateTime(invite.revokedAt)}</span>
-                      </div>
-
-                      <div className="comment-card-actions">
-                        <button
-                          type="button"
-                          className="tool-button"
-                          onClick={() => void handleRevokeInvite(invite.id)}
-                          disabled={isBusy || inviteState !== 'active'}
-                        >
-                          {isBusy ? 'Working…' : 'Revoke'}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
+            <div className="modal-footer">
+              <button type="button" className="tool-button" onClick={() => setIsCreateInviteDialogOpen(false)} disabled={creating}>
+                Cancel
+              </button>
+              <button type="button" className="tool-button tool-button--primary" onClick={handleCreateInvite} disabled={creating}>
+                {creating ? 'Creating…' : 'Create invite link'}
+              </button>
             </div>
-          </>
-        )}
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );

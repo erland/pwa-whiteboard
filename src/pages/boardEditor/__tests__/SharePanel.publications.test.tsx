@@ -13,6 +13,15 @@ const authState = {
   refreshFromStorage: jest.fn(),
 };
 
+
+const invitesApi = {
+  validateInvite: jest.fn(async () => ({ valid: true, permission: 'viewer', boardId: 'b-1' })),
+  acceptInvite: jest.fn(async () => {}),
+  createBoardInvite: jest.fn(async () => { throw new Error('not used'); }),
+  listBoardInvites: jest.fn(async () => []),
+  revokeBoardInvite: jest.fn(async () => {}),
+};
+
 const publicationsApi = {
   list: jest.fn(async () => []),
   create: jest.fn(async () => ({
@@ -71,6 +80,14 @@ jest.mock('../../../api/publicationsApi', () => ({
   createPublicationsApi: () => publicationsApi,
 }));
 
+jest.mock('../../../api/invitesApi', () => ({
+  validateInvite: (...args: any[]) => (invitesApi.validateInvite as any)(...args),
+  acceptInvite: (...args: any[]) => (invitesApi.acceptInvite as any)(...args),
+  createBoardInvite: (...args: any[]) => (invitesApi.createBoardInvite as any)(...args),
+  listBoardInvites: (...args: any[]) => (invitesApi.listBoardInvites as any)(...args),
+  revokeBoardInvite: (...args: any[]) => (invitesApi.revokeBoardInvite as any)(...args),
+}));
+
 describe('SharePanel publications', () => {
   beforeEach(() => {
     publicationsApi.list.mockClear();
@@ -81,6 +98,7 @@ describe('SharePanel publications', () => {
   });
 
   test('creates publication links when server capabilities advertise publications', async () => {
+    invitesApi.listBoardInvites.mockClear();
     render(
       <SharePanel
         boardId="b-1"
@@ -100,6 +118,7 @@ describe('SharePanel publications', () => {
 
     await waitFor(() => expect(publicationsApi.list).toHaveBeenCalledWith('b-1'));
 
+    fireEvent.click(screen.getByRole('button', { name: /New publication link/i }));
     fireEvent.change(screen.getByLabelText(/Publication target/i), { target: { value: 'snapshot' } });
     fireEvent.change(screen.getByLabelText(/Snapshot version/i), { target: { value: '7' } });
     fireEvent.click(screen.getByLabelText(/Allow comments for published readers/i));

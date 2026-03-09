@@ -66,12 +66,13 @@ describe('VotingPanel', () => {
       />
     );
 
-    expect(screen.getAllByText('vs-1').length).toBeGreaterThan(0);
+    expect(screen.getByText(/Open session 1/i)).toBeInTheDocument();
     expect(screen.getByText(/Remaining votes/)).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole('button', { name: /new session/i }));
     fireEvent.change(screen.getByDisplayValue('3'), { target: { value: '5' } });
     await act(async () => {
-      fireEvent.click(screen.getByText('Create session'));
+      fireEvent.click(screen.getByRole('button', { name: /^create session$/i }));
     });
     expect(onCreateSession).toHaveBeenCalledWith(expect.objectContaining({ maxVotesPerParticipant: 5 }));
 
@@ -220,4 +221,94 @@ test('shows visible vote identities only when the server exposes them', () => {
   expect(screen.getByText(/Results have been revealed/i)).toBeInTheDocument();
   expect(screen.getByText(/Visible vote records/i)).toBeInTheDocument();
   expect(screen.getByText(/Idea A · bob/i)).toBeInTheDocument();
+});
+
+
+test('opens create-session settings in a popup dialog so the session list can stay visible', () => {
+  render(
+    <VotingPanel
+      enabled
+      authenticated
+      boardName="Board A"
+      sessions={SESSIONS}
+      selectedSessionId="vs-1"
+      results={{ session: SESSIONS[0], totalsByTarget: { 'shape-1': 2 }, visibleVotes: [], identitiesHidden: true, progressHidden: true }}
+      availableTargets={[{ id: 'shape-1', label: 'Idea A', objectType: 'stickyNote' }]}
+      selectedTargets={[]}
+      localVotesByTarget={{}}
+      remainingVotes={3}
+      canManage={true}
+      canVote={true}
+      canRemoveVotes={true}
+      participantMode="member"
+      participantToken={null}
+      canUsePublicationParticipation={false}
+      onResetParticipantToken={jest.fn()}
+      isLoading={false}
+      isMutating={false}
+      error={null}
+      onRefresh={jest.fn()}
+      onSelectSession={jest.fn()}
+      onCreateSession={jest.fn()}
+      onOpenSession={jest.fn()}
+      onCloseSession={jest.fn()}
+      onRevealSession={jest.fn()}
+      onCancelSession={jest.fn()}
+      onCastVote={jest.fn()}
+      onRemoveVote={jest.fn()}
+    />
+  );
+
+  expect(screen.queryByRole('dialog', { name: /create voting session/i })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /new session/i }));
+  expect(screen.getByRole('dialog', { name: /create voting session/i })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+  expect(screen.queryByRole('dialog', { name: /create voting session/i })).not.toBeInTheDocument();
+});
+
+
+test('hides cancelled sessions by default and can reveal them on demand', () => {
+  const cancelledSession = {
+    ...SESSIONS[0],
+    id: 'vs-2',
+    state: 'cancelled' as const,
+  };
+
+  render(
+    <VotingPanel
+      enabled
+      authenticated
+      boardName="Board A"
+      sessions={[SESSIONS[0], cancelledSession]}
+      selectedSessionId="vs-1"
+      results={{ session: SESSIONS[0], totalsByTarget: {}, visibleVotes: [], identitiesHidden: true, progressHidden: true }}
+      availableTargets={[]}
+      selectedTargets={[]}
+      localVotesByTarget={{}}
+      remainingVotes={3}
+      canManage={true}
+      canVote={true}
+      canRemoveVotes={true}
+      participantMode="member"
+      participantToken={null}
+      canUsePublicationParticipation={false}
+      onResetParticipantToken={jest.fn()}
+      isLoading={false}
+      isMutating={false}
+      error={null}
+      onRefresh={jest.fn()}
+      onSelectSession={jest.fn()}
+      onCreateSession={jest.fn()}
+      onOpenSession={jest.fn()}
+      onCloseSession={jest.fn()}
+      onRevealSession={jest.fn()}
+      onCancelSession={jest.fn()}
+      onCastVote={jest.fn()}
+      onRemoveVote={jest.fn()}
+    />
+  );
+
+  expect(screen.queryByText(/Cancelled session 2/i)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /show cancelled/i }));
+  expect(screen.getByText(/Cancelled session 2/i)).toBeInTheDocument();
 });

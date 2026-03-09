@@ -65,7 +65,7 @@ export function useSharedTimer({ enabled, connected, canControl, lastEphemeralMe
     if (!lastEphemeralMessage || lastEphemeralMessage.eventType !== 'timer-state') return;
     if (!isTimerStatePayload(lastEphemeralMessage.payload)) return;
     const nextTimer = mapTimerStatePayload(lastEphemeralMessage.payload);
-    setTimer(nextTimer);
+    setTimer(nextTimer.state === 'cancelled' ? null : nextTimer);
     setIsMutating(false);
     setError(null);
   }, [enabled, lastEphemeralMessage]);
@@ -123,7 +123,10 @@ export function useSharedTimer({ enabled, connected, canControl, lastEphemeralMe
       label: timer.label,
       scope: { type: timer.scope.type, ref: timer.scope.ref ?? undefined },
     }),
-    cancelTimer: () => timer && sendControl({ action: 'cancel', timerId: timer.timerId }),
+    cancelTimer: () => {
+      if (!timer) return;
+      sendControl({ action: 'cancel', timerId: timer.timerId });
+    },
     completeTimer: () => timer && sendControl({ action: 'complete', timerId: timer.timerId }),
   };
 }

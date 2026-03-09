@@ -51,6 +51,11 @@ function scopeLabel(session: VotingSession): string {
   return session.scopeType;
 }
 
+function sessionDisplayName(session: VotingSession, index: number): string {
+  const stateLabel = session.state.charAt(0).toUpperCase() + session.state.slice(1);
+  return `${stateLabel} session ${index + 1}`;
+}
+
 export const VotingPanel: React.FC<VotingPanelProps> = ({
   enabled,
   authenticated,
@@ -91,6 +96,21 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
   const [anonymousVotes, setAnonymousVotes] = React.useState(true);
   const [showProgressDuringVoting, setShowProgressDuringVoting] = React.useState(false);
   const [allowVoteUpdates, setAllowVoteUpdates] = React.useState(true);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = React.useState(false);
+  const [detailsSessionId, setDetailsSessionId] = React.useState<string | null>(null);
+  const [showCancelledSessions, setShowCancelledSessions] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isCreateDialogOpen && !detailsSessionId) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsCreateDialogOpen(false);
+        setDetailsSessionId(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [detailsSessionId, isCreateDialogOpen]);
 
   const submitCreateSession = async () => {
     const parsedMaxVotes = Number.parseInt(maxVotes.trim(), 10);
@@ -108,6 +128,7 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
       allowVoteUpdates,
       durationSeconds: parsedDuration,
     });
+    setIsCreateDialogOpen(false);
   };
 
   const resultEntries = React.useMemo(
@@ -123,6 +144,23 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
   const identitiesAreHidden = Boolean(results?.identitiesHidden);
   const showResultTotals = Boolean(results && !progressIsHidden);
   const showVisibleVotes = Boolean(results && !progressIsHidden && !identitiesAreHidden && visibleVoteEntries.length > 0);
+  const liveSessionCount = sessions.filter((session) => session.state === 'open').length;
+  const selectedSessionIndex = selectedSession ? sessions.findIndex((session) => session.id === selectedSession.id) : -1;
+  const selectedSessionName = selectedSession && selectedSessionIndex >= 0
+    ? sessionDisplayName(selectedSession, selectedSessionIndex)
+    : selectedSession
+      ? `${selectedSession.state.charAt(0).toUpperCase() + selectedSession.state.slice(1)} session`
+      : null;
+  const visibleSessions = React.useMemo(
+    () => showCancelledSessions ? sessions : sessions.filter((session) => session.state !== 'cancelled'),
+    [sessions, showCancelledSessions]
+  );
+  const cancelledSessionCount = sessions.length - visibleSessions.length;
+  const detailsSession = detailsSessionId ? sessions.find((session) => session.id === detailsSessionId) ?? null : null;
+  const detailsSessionIndex = detailsSession ? sessions.findIndex((session) => session.id === detailsSession.id) : -1;
+  const detailsSessionName = detailsSession && detailsSessionIndex >= 0
+    ? sessionDisplayName(detailsSession, detailsSessionIndex)
+    : null;
   const votingPhaseMessage = selectedSession
     ? selectedSession.state === 'revealed'
       ? 'Results have been revealed. This is the final server-published outcome for the session.'
@@ -157,7 +195,7 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
         <div className="share-help">Board: <code>{boardName || 'Untitled board'}</code></div>
         <div className="capability-chip-list">
           <span className="capability-chip" data-enabled={sessions.length > 0 ? 'true' : 'false'}>Sessions {sessions.length}</span>
-          <span className="capability-chip" data-enabled={Boolean(selectedSession && selectedSession.state === 'open')}>Open {sessions.filter((session) => session.state === 'open').length}</span>
+          <span className="capability-chip" data-enabled={Boolean(selectedSession && selectedSession.state === 'open')}>Open {liveSessionCount}</span>
           <button type="button" className="tool-button" onClick={() => void onRefresh()} disabled={isLoading || isMutating}>
             {isLoading ? 'Refreshing…' : 'Refresh'}
           </button>
@@ -169,40 +207,20 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
         {!canManage ? (
           <div className="share-help">{participantMode === 'publication-reader' ? 'Published readers can participate in eligible sessions but cannot create or manage voting sessions from this view.' : 'Sign in to create and manage voting sessions.'}</div>
         ) : (
-          <div className="voting-form-grid">
-            <label className="form-field">
-              <span>Scope</span>
-              <select className="text-input" value={scopeType} onChange={(e) => setScopeType(e.currentTarget.value as 'board' | 'object')}>
-                <option value="board">Board</option>
-                <option value="object" disabled={selectedTargets.length === 0}>Selected object</option>
-              </select>
-            </label>
-            <label className="form-field">
-              <span>Max votes per participant</span>
-              <input className="text-input" type="number" min={1} value={maxVotes} onChange={(e) => setMaxVotes(e.currentTarget.value)} />
-            </label>
-            <label className="form-field">
-              <span>Duration seconds</span>
-              <input className="text-input" type="number" min={1} placeholder="Optional" value={durationSeconds} onChange={(e) => setDurationSeconds(e.currentTarget.value)} />
-            </label>
-            <label className="checkbox-field"><input type="checkbox" checked={allowViewerParticipation} onChange={(e) => setAllowViewerParticipation(e.currentTarget.checked)} /> Allow viewers</label>
-            <label className="checkbox-field"><input type="checkbox" checked={allowPublishedReaderParticipation} onChange={(e) => setAllowPublishedReaderParticipation(e.currentTarget.checked)} /> Allow publication readers</label>
-            <label className="checkbox-field"><input type="checkbox" checked={anonymousVotes} onChange={(e) => setAnonymousVotes(e.currentTarget.checked)} /> Anonymous votes</label>
-            <label className="checkbox-field"><input type="checkbox" checked={showProgressDuringVoting} onChange={(e) => setShowProgressDuringVoting(e.currentTarget.checked)} /> Show progress during voting</label>
-            <label className="checkbox-field"><input type="checkbox" checked={allowVoteUpdates} onChange={(e) => setAllowVoteUpdates(e.currentTarget.checked)} /> Allow vote updates</label>
-            {scopeType === 'object' && (
-              <div className="share-help">Object scope target: {selectedTargets[0]?.label ?? 'Select one object on the canvas first.'}</div>
-            )}
-            <div className="comment-reply-actions">
-              <button
-                type="button"
-                className="tool-button"
-                onClick={submitCreateSession}
-                disabled={isMutating || (scopeType === 'object' && selectedTargets.length === 0)}
-              >
-                {isMutating ? 'Saving…' : 'Create session'}
+          <div className="voting-create-inline">
+            <div className="share-help">
+              Open a compact setup dialog to create a new voting session without pushing the session list off-screen.
+            </div>
+            <div className="capability-chip-list">
+              <span className="comment-status-badge">Default max votes {maxVotes}</span>
+              <span className="comment-status-badge">Open sessions {liveSessionCount}</span>
+              <button type="button" className="tool-button" onClick={() => setIsCreateDialogOpen(true)} disabled={isMutating}>
+                New session…
               </button>
             </div>
+            {scopeType === 'object' && selectedTargets.length > 0 && (
+              <div className="share-help">Current object target: {selectedTargets[0]?.label}</div>
+            )}
           </div>
         )}
       </div>
@@ -210,63 +228,57 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
       {error && <div className="error-text">{error}</div>}
 
       <div className="share-section">
-        <div className="share-label">Sessions</div>
-        {sessions.length === 0 ? (
-          <div className="share-help">No voting sessions yet.</div>
-        ) : (
-          <div className="voting-session-list">
-            {sessions.map((session) => (
+        <div className="share-publication-header">
+          <div className="share-label">Sessions</div>
+          <div className="comment-reply-actions">
+            {cancelledSessionCount > 0 && (
               <button
                 type="button"
-                key={session.id}
-                className="voting-session-card"
-                data-selected={session.id === selectedSessionId ? 'true' : 'false'}
-                onClick={() => onSelectSession(session.id)}
+                className="tool-button"
+                onClick={() => setShowCancelledSessions((current) => !current)}
+                aria-pressed={showCancelledSessions}
               >
-                <div className="share-publication-header">
-                  <strong>{session.id}</strong>
-                  <span className="comment-status-badge">{session.state}</span>
-                </div>
-                <div className="share-help">Scope: {scopeLabel(session)}</div>
-                <div className="share-help">Max votes: {session.rules.maxVotesPerParticipant}</div>
-                <div className="share-help">Updated: {formatTimestamp(session.updatedAt || session.createdAt)}</div>
+                {showCancelledSessions ? 'Hide cancelled' : `Show cancelled (${cancelledSessionCount})`}
               </button>
-            ))}
+            )}
+          </div>
+        </div>
+        {visibleSessions.length === 0 ? (
+          <div className="share-help">No voting sessions yet.</div>
+        ) : (
+          <div className="voting-session-table" role="table" aria-label="Voting sessions">
+            <div className="voting-session-table__header" role="row">
+              <span>Name</span>
+              <span>State</span>
+              <span>Scope</span>
+              <span>Votes</span>
+              <span>Updated</span>
+              <span>Actions</span>
+            </div>
+            {visibleSessions.map((session) => {
+              const sessionIndex = sessions.findIndex((candidate) => candidate.id === session.id);
+              const isSelected = session.id === selectedSessionId;
+              return (
+                <div key={session.id} className="voting-session-row" data-selected={isSelected ? 'true' : 'false'} role="row">
+                  <button type="button" className="voting-session-row__name" onClick={() => onSelectSession(session.id)}>
+                    <strong>{sessionDisplayName(session, sessionIndex >= 0 ? sessionIndex : 0)}</strong>
+                  </button>
+                  <span><span className="comment-status-badge">{session.state}</span></span>
+                  <span>{scopeLabel(session)}</span>
+                  <span>{session.rules.maxVotesPerParticipant}</span>
+                  <span>{formatTimestamp(session.updatedAt || session.createdAt)}</span>
+                  <div className="voting-session-row__actions">
+                    {!isSelected && (
+                      <button type="button" className="tool-button" onClick={() => onSelectSession(session.id)}>Select</button>
+                    )}
+                    <button type="button" className="tool-button" onClick={() => setDetailsSessionId(session.id)}>Details…</button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
-
-      {selectedSession && (
-        <div className="share-section">
-          <div className="share-label">Selected session</div>
-          <div className="share-publication-card" data-state={selectedSession.state}>
-            <div className="share-publication-header">
-              <strong>{selectedSession.id}</strong>
-              <span className="comment-status-badge">{selectedSession.state}</span>
-            </div>
-            <div className="share-help">Scope: {scopeLabel(selectedSession)}</div>
-            <div className="share-help">Created: {formatTimestamp(selectedSession.createdAt)}</div>
-            <div className="share-help">Updated: {formatTimestamp(selectedSession.updatedAt)}</div>
-            <div className="share-help">Progress during voting: {selectedSession.rules.showProgressDuringVoting ? 'Visible' : 'Hidden until close/reveal for non-facilitators'}</div>
-            <div className="share-help">Vote identities: {selectedSession.rules.anonymousVotes ? 'Hidden during voting and only revealed to facilitators after close' : 'Visible when progress is visible'}</div>
-            <div className="share-help">Vote updates: {selectedSession.rules.allowVoteUpdates ? 'Allowed' : 'Locked after a vote is cast'}</div>
-            <div className="capability-chip-list">
-              {canManage && selectedSession.state === 'draft' && (
-                <button type="button" className="tool-button" onClick={() => void onOpenSession(selectedSession.id)} disabled={isMutating}>Open</button>
-              )}
-              {canManage && selectedSession.state === 'open' && (
-                <button type="button" className="tool-button" onClick={() => void onCloseSession(selectedSession.id)} disabled={isMutating}>Close</button>
-              )}
-              {canManage && selectedSession.state === 'closed' && (
-                <button type="button" className="tool-button" onClick={() => void onRevealSession(selectedSession.id)} disabled={isMutating}>Reveal</button>
-              )}
-              {canManage && selectedSession.state !== 'cancelled' && selectedSession.state !== 'revealed' && (
-                <button type="button" className="tool-button" onClick={() => void onCancelSession(selectedSession.id)} disabled={isMutating}>Cancel</button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {selectedSession && (
         <div className="share-section">
@@ -384,6 +396,115 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {detailsSession && detailsSessionName && (
+        <div
+          className="modal-backdrop voting-create-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setDetailsSessionId(null);
+          }}
+        >
+          <div className="modal voting-create-modal" role="dialog" aria-modal="true" aria-label="Voting session details">
+            <div className="modal-header">
+              <h4>{detailsSessionName}</h4>
+            </div>
+            <div className="modal-body voting-create-modal-body">
+              <div className="share-publication-card voting-session-detail-card" data-state={detailsSession.state}>
+                <div className="share-publication-header">
+                  <strong>{detailsSessionName}</strong>
+                  <span className="comment-status-badge">{detailsSession.state}</span>
+                </div>
+                <div className="share-help">Scope: {scopeLabel(detailsSession)}</div>
+                <div className="share-help">Created: {formatTimestamp(detailsSession.createdAt)}</div>
+                <div className="share-help">Updated: {formatTimestamp(detailsSession.updatedAt)}</div>
+                <div className="share-help">Progress during voting: {detailsSession.rules.showProgressDuringVoting ? 'Visible' : 'Hidden until close/reveal for non-facilitators'}</div>
+                <div className="share-help">Vote identities: {detailsSession.rules.anonymousVotes ? 'Hidden during voting and only revealed to facilitators after close' : 'Visible when progress is visible'}</div>
+                <div className="share-help">Vote updates: {detailsSession.rules.allowVoteUpdates ? 'Allowed' : 'Locked after a vote is cast'}</div>
+                {detailsSession.state === 'cancelled' && (
+                  <div className="share-help">Cancelled sessions are hidden from the main list by default. Permanent deletion is not supported by the current server API.</div>
+                )}
+                {detailsSession.rules.durationSeconds ? (
+                  <div className="share-help">Duration: {detailsSession.rules.durationSeconds} seconds</div>
+                ) : null}
+              </div>
+            </div>
+            <div className="modal-footer">
+              {!selectedSession || selectedSession.id !== detailsSession.id ? (
+                <button type="button" className="tool-button" onClick={() => { onSelectSession(detailsSession.id); setDetailsSessionId(null); }} disabled={isMutating}>Select session</button>
+              ) : null}
+              {canManage && detailsSession.state === 'draft' && (
+                <button type="button" className="tool-button" onClick={() => void onOpenSession(detailsSession.id)} disabled={isMutating}>Start voting</button>
+              )}
+              {canManage && detailsSession.state === 'open' && (
+                <button type="button" className="tool-button" onClick={() => void onCloseSession(detailsSession.id)} disabled={isMutating}>End voting</button>
+              )}
+              {canManage && detailsSession.state === 'closed' && (
+                <button type="button" className="tool-button" onClick={() => void onRevealSession(detailsSession.id)} disabled={isMutating}>Reveal</button>
+              )}
+              {canManage && detailsSession.state !== 'cancelled' && detailsSession.state !== 'revealed' && (
+                <button type="button" className="tool-button" onClick={() => void onCancelSession(detailsSession.id)} disabled={isMutating}>Cancel</button>
+              )}
+              <button type="button" className="tool-button" onClick={() => setDetailsSessionId(null)} disabled={isMutating}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {canManage && isCreateDialogOpen && (
+        <div
+          className="modal-backdrop voting-create-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setIsCreateDialogOpen(false);
+          }}
+        >
+          <div className="modal voting-create-modal" role="dialog" aria-modal="true" aria-label="Create voting session">
+            <div className="modal-header">
+              <h4>Create voting session</h4>
+            </div>
+            <div className="modal-body voting-create-modal-body">
+              <div className="share-help">Configure the session here so the voting tab can keep the sessions list visible underneath.</div>
+              <div className="voting-form-grid">
+                <label className="form-field">
+                  <span>Scope</span>
+                  <select className="text-input" value={scopeType} onChange={(e) => setScopeType(e.currentTarget.value as 'board' | 'object')}>
+                    <option value="board">Board</option>
+                    <option value="object" disabled={selectedTargets.length === 0}>Selected object</option>
+                  </select>
+                </label>
+                <label className="form-field">
+                  <span>Max votes per participant</span>
+                  <input className="text-input" type="number" min={1} value={maxVotes} onChange={(e) => setMaxVotes(e.currentTarget.value)} />
+                </label>
+                <label className="form-field">
+                  <span>Duration seconds</span>
+                  <input className="text-input" type="number" min={1} placeholder="Optional" value={durationSeconds} onChange={(e) => setDurationSeconds(e.currentTarget.value)} />
+                </label>
+                <label className="checkbox-field"><input type="checkbox" checked={allowViewerParticipation} onChange={(e) => setAllowViewerParticipation(e.currentTarget.checked)} /> Allow viewers</label>
+                <label className="checkbox-field"><input type="checkbox" checked={allowPublishedReaderParticipation} onChange={(e) => setAllowPublishedReaderParticipation(e.currentTarget.checked)} /> Allow publication readers</label>
+                <label className="checkbox-field"><input type="checkbox" checked={anonymousVotes} onChange={(e) => setAnonymousVotes(e.currentTarget.checked)} /> Anonymous votes</label>
+                <label className="checkbox-field"><input type="checkbox" checked={showProgressDuringVoting} onChange={(e) => setShowProgressDuringVoting(e.currentTarget.checked)} /> Show progress during voting</label>
+                <label className="checkbox-field"><input type="checkbox" checked={allowVoteUpdates} onChange={(e) => setAllowVoteUpdates(e.currentTarget.checked)} /> Allow vote updates</label>
+                {scopeType === 'object' && (
+                  <div className="share-help">Object scope target: {selectedTargets[0]?.label ?? 'Select one object on the canvas first.'}</div>
+                )}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="tool-button" onClick={() => setIsCreateDialogOpen(false)} disabled={isMutating}>Cancel</button>
+              <button
+                type="button"
+                className="tool-button"
+                onClick={() => void submitCreateSession()}
+                disabled={isMutating || (scopeType === 'object' && selectedTargets.length === 0)}
+              >
+                {isMutating ? 'Saving…' : 'Create session'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </section>
